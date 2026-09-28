@@ -2,9 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // ---------------------------------------------------------------- Jahresvergleich
@@ -153,13 +157,27 @@ type Ausgabe struct {
 	ID           string  `json:"id"`
 	Datum        string  `json:"datum"` // JJJJ-MM-TT
 	Beschreibung string  `json:"beschreibung"`
+	Kategorie    string  `json:"kategorie"`
 	Betrag       float64 `json:"betrag"`
+	// Beleg: Pfad einer hochgeladenen Quittung/Rechnung, relativ zum Datenordner.
+	Beleg string `json:"beleg,omitempty"`
 }
+
+// AusgabenKategorien sind Vorschläge für die Kategorie-Auswahl. Es ist keine
+// feste Liste: eine abweichende Eingabe wird unverändert übernommen, damit
+// niemand durch eine Kategorie blockiert wird, die gerade nicht passt.
+var AusgabenKategorien = []string{"Instandhaltung", "Anschaffung", "Verwaltung", "Versicherung & Gebühren", "Sonstiges"}
+
+const kategorieStandard = "Sonstiges"
 
 func cleanAusgabe(in Ausgabe) (Ausgabe, error) {
 	in.Beschreibung = trim(in.Beschreibung, 120)
 	if in.Beschreibung == "" {
 		return in, bad("Bitte eine Beschreibung eintragen")
+	}
+	in.Kategorie = trim(in.Kategorie, 40)
+	if in.Kategorie == "" {
+		in.Kategorie = kategorieStandard
 	}
 	if _, err := parseDate(in.Datum); err != nil {
 		return in, bad("Bitte ein gültiges Datum angeben")
@@ -221,6 +239,7 @@ func (a *App) handleAusgabeUpdate(w http.ResponseWriter, r *http.Request) {
 	for i := range j.Ausgaben {
 		if j.Ausgaben[i].ID == id {
 			in.ID = id
+			in.Beleg = j.Ausgaben[i].Beleg // wird nur über die eigenen Beleg-Endpunkte geändert
 			j.Ausgaben[i] = in
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
@@ -245,6 +264,9 @@ func (a *App) handleAusgabeDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	for i := range j.Ausgaben {
 		if j.Ausgaben[i].ID == id {
+			if j.Ausgaben[i].Beleg != "" {
+				_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(j.Ausgaben[i].Beleg)))
+			}
 			j.Ausgaben = append(j.Ausgaben[:i], j.Ausgaben[i+1:]...)
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
@@ -257,6 +279,129 @@ func (a *App) handleAusgabeDelete(w http.ResponseWriter, r *http.Request) {
 	writeErr(w, notFound("Ausgabe nicht gefunden"))
 }
 
+// ---------------------------------------------------------------- Beleg-Anhang
+
+// belegExtensions sind die erlaubten Dateitypen für Belege (Fotos und PDF-Scans).
+var belegExtensions = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".pdf": true}
+
+const maxBelegSize = 12 << 20 // 12 MB
+
+// handleBelegUpload speichert einen Beleg (Foto oder PDF) zu einer Ausgabe.
+func (a *App) handleBelegUpload(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	year := a.yearParam(r)
+	r.Body = http.MaxBytesReader(w, r.Body, maxBelegSize)
+	if err := r.ParseMultipartForm(maxBelegSize); err != nil {
+		writeErr(w, bad("Die Datei ist zu groß oder konnte nicht gelesen werden (höchstens 12 MB)"))
+		return
+	}
+	file, hdr, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, bad("Bitte eine Datei auswählen"))
+		return
+	}
+	defer file.Close()
+	ext := strings.ToLower(filepath.Ext(hdr.Filename))
+	if !belegExtensions[ext] {
+		writeErr(w, bad("Bitte ein Foto (JPG, PNG, WebP) oder eine PDF-Datei auswählen"))
+		return
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		writeErr(w, bad("Datei konnte nicht gelesen werden"))
+		return
+	}
+
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	j := a.st.d.Jahre[yearKey(year)]
+	if j == nil {
+		writeErr(w, notFound("Jahr nicht gefunden"))
+		return
+	}
+	idx := -1
+	for i := range j.Ausgaben {
+		if j.Ausgaben[i].ID == id {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		writeErr(w, notFound("Ausgabe nicht gefunden"))
+		return
+	}
+	dir := filepath.Join(a.st.dir, "Belege", yearKey(year))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if old := j.Ausgaben[idx].Beleg; old != "" {
+		_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(old)))
+	}
+	name := safeName(id, 20) + ext
+	if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+		writeErr(w, err)
+		return
+	}
+	j.Ausgaben[idx].Beleg = filepath.ToSlash(filepath.Join("Belege", yearKey(year), name))
+	if err := a.st.saveLocked(); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, j.Ausgaben[idx])
+}
+
+func (a *App) handleBelegDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	year := a.yearParam(r)
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	j := a.st.d.Jahre[yearKey(year)]
+	if j == nil {
+		writeErr(w, notFound("Jahr nicht gefunden"))
+		return
+	}
+	for i := range j.Ausgaben {
+		if j.Ausgaben[i].ID == id {
+			if j.Ausgaben[i].Beleg != "" {
+				_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(j.Ausgaben[i].Beleg)))
+				j.Ausgaben[i].Beleg = ""
+			}
+			if err := a.st.saveLocked(); err != nil {
+				writeErr(w, err)
+				return
+			}
+			writeJSON(w, 200, j.Ausgaben[i])
+			return
+		}
+	}
+	writeErr(w, notFound("Ausgabe nicht gefunden"))
+}
+
+// handleBelegServe liefert die Beleg-Datei einer Ausgabe aus.
+func (a *App) handleBelegServe(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	year := a.yearParam(r)
+	a.st.mu.Lock()
+	var path string
+	j := a.st.d.Jahre[yearKey(year)]
+	if j != nil {
+		for _, x := range j.Ausgaben {
+			if x.ID == id {
+				path = x.Beleg
+			}
+		}
+	}
+	dir := a.st.dir
+	a.st.mu.Unlock()
+	if path == "" {
+		writeErr(w, notFound("Für diese Ausgabe ist kein Beleg hinterlegt"))
+		return
+	}
+	full := filepath.Join(dir, filepath.FromSlash(path))
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeFile(w, r, full)
+}
+
 // ---------------------------------------------------------------- Kassenbericht
 
 // Versorger sind die Werte der Hauptzähler bzw. der Rechnungen des Versorgers
@@ -266,6 +411,12 @@ type Versorger struct {
 	WasserEUR *float64 `json:"wasserEUR"`
 	StromKWh  *float64 `json:"stromKWh"`
 	StromEUR  *float64 `json:"stromEUR"`
+}
+
+// kategorieSumme ist die Summe der sonstigen Ausgaben einer Kategorie.
+type kategorieSumme struct {
+	Kategorie string  `json:"kategorie"`
+	Summe     float64 `json:"summe"`
 }
 
 type kassenbericht struct {
@@ -289,13 +440,17 @@ type kassenbericht struct {
 	GuthabenAusgezahlt float64 `json:"guthabenAusgezahlt"` // an Pächter ausgezahlte Guthaben
 
 	// Sonstige Ausgaben der Vereinskasse (Kontoführung, Anschaffungen, Reparaturen, ...)
-	Ausgaben      []Ausgabe `json:"ausgaben"`
-	AusgabenSumme float64   `json:"ausgabenSumme"`
+	Ausgaben          []Ausgabe        `json:"ausgaben"`
+	AusgabenSumme     float64          `json:"ausgabenSumme"`
+	AusgabenKategorie []kategorieSumme `json:"ausgabenKategorie"`
 
-	// Saldo = EinnahmenBezahlt - GuthabenAusgezahlt - AusgabenSumme. Kein vollständiger
-	// Kontostand (ein Anfangsbestand fließt nicht ein), sondern eine Kontrollrechnung:
-	// was ist dieses Jahr für die Vereinskasse tatsächlich geflossen.
-	Saldo float64 `json:"saldo"`
+	// Saldo = EinnahmenBezahlt - GuthabenAusgezahlt - AusgabenSumme: die Kassenbewegung
+	// dieses Jahres. Anfangsbestand ist der Kassenbestand zu Jahresbeginn (von Hand
+	// gepflegt bzw. beim Jahreswechsel aus dem Vorjahr übernommen), Kassenbestand ist
+	// Anfangsbestand + Saldo – der tatsächliche Kontostand am heutigen Tag.
+	Saldo          float64 `json:"saldo"`
+	Anfangsbestand float64 `json:"anfangsbestand"`
+	Kassenbestand  float64 `json:"kassenbestand"`
 }
 
 // kassenberichtLocked summiert alle Posten eines Jahres. Grundlage der Beträge je
@@ -307,11 +462,24 @@ func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
 		if j.Versorger != nil {
 			k.Versorger = *j.Versorger
 		}
+		if j.Anfangsbestand != nil {
+			k.Anfangsbestand = *j.Anfangsbestand
+		}
 		k.Ausgaben = append([]Ausgabe(nil), j.Ausgaben...)
 	}
 	sort.SliceStable(k.Ausgaben, func(i, j int) bool { return k.Ausgaben[i].Datum < k.Ausgaben[j].Datum })
+	kat := map[string]float64{}
+	var katNamen []string
 	for _, x := range k.Ausgaben {
 		k.AusgabenSumme += x.Betrag
+		if _, ok := kat[x.Kategorie]; !ok {
+			katNamen = append(katNamen, x.Kategorie)
+		}
+		kat[x.Kategorie] += x.Betrag
+	}
+	sort.Strings(katNamen)
+	for _, name := range katNamen {
+		k.AusgabenKategorie = append(k.AusgabenKategorie, kategorieSumme{Kategorie: name, Summe: round2(kat[name])})
 	}
 
 	add := func(a Ablesung, r Result) {
@@ -370,10 +538,12 @@ func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
 	}
 	k.Paechter = k.Ausgestellt + k.Berechnet + len(k.Unvollstaendig)
 	k.Saldo = k.EinnahmenBezahlt - k.GuthabenAusgezahlt - k.AusgabenSumme
+	k.Kassenbestand = k.Anfangsbestand + k.Saldo
 	for _, x := range []*float64{&k.WasserVerbrauch, &k.StromVerbrauch, &k.Summen.KostenWasser, &k.Summen.KostenEnergie,
 		&k.Summen.NachzahlungStunden, &k.Summen.Zwischensumme1, &k.Summen.PachtGarten, &k.Summen.PachtVerein, &k.Summen.PachtFrei,
 		&k.Summen.Mitgliedsbeitrag, &k.Summen.Umlage, &k.Summen.Zwischensumme2, &k.Summen.Verguetung, &k.Summen.Gesamt,
-		&k.Versicherung, &k.Grundsteuer, &k.Auslagen, &k.Abschlag, &k.EinnahmenBezahlt, &k.GuthabenAusgezahlt, &k.AusgabenSumme, &k.Saldo} {
+		&k.Versicherung, &k.Grundsteuer, &k.Auslagen, &k.Abschlag, &k.EinnahmenBezahlt, &k.GuthabenAusgezahlt, &k.AusgabenSumme, &k.Saldo,
+		&k.Kassenbestand} {
 		*x = round2(*x)
 	}
 	return k
@@ -418,6 +588,36 @@ func (a *App) handleVersorger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	j.Versorger = &in
+	if err := a.st.saveLocked(); err != nil {
+		writeErr(w, err)
+		return
+	}
+	v, _ := a.st.viewLocked(year)
+	writeJSON(w, 200, a.st.kassenberichtLocked(v))
+}
+
+// handleAnfangsbestand setzt den Kassenbestand zu Jahresbeginn von Hand.
+func (a *App) handleAnfangsbestand(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Betrag *float64 `json:"betrag"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if !validNumPtr(in.Betrag) {
+		writeErr(w, bad("Bitte eine Zahl ab 0 eingeben"))
+		return
+	}
+	year := a.yearParam(r)
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	j := a.st.d.Jahre[yearKey(year)]
+	if j == nil {
+		writeErr(w, notFound("Jahr nicht gefunden"))
+		return
+	}
+	j.Anfangsbestand = in.Betrag
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return
@@ -495,19 +695,26 @@ func kassenberichtRows(k kassenbericht, verein string) [][]xCell {
 		[]xCell{{"Strom (kWh)", stNormal}, {k.StromVerbrauch, stNum}, {opt(k.Versorger.StromKWh), stNum}, {diff(k.StromVerbrauch, k.Versorger.StromKWh), stNum}},
 		[]xCell{{"Strom (€)", stNormal}, {s.KostenEnergie, stEUR}, {opt(k.Versorger.StromEUR), stEUR}, {diff(s.KostenEnergie, k.Versorger.StromEUR), stEUR}},
 		[]xCell{},
-		[]xCell{{"Sonstige Ausgaben der Vereinskasse", stHeader}, {"Datum", stHeader}, {"Betrag (€)", stHeader}},
+		[]xCell{{"Sonstige Ausgaben der Vereinskasse", stHeader}, {"Datum", stHeader}, {"Kategorie", stHeader}, {"Betrag (€)", stHeader}},
 	)
 	for _, x := range k.Ausgaben {
-		rows = append(rows, []xCell{{x.Beschreibung, stNormal}, {germanDate(x.Datum), stNormal}, {x.Betrag, stEUR}})
+		rows = append(rows, []xCell{{x.Beschreibung, stNormal}, {germanDate(x.Datum), stNormal}, {x.Kategorie, stNormal}, {x.Betrag, stEUR}})
+	}
+	rows = append(rows, []xCell{{"Summe sonstige Ausgaben", stBold}, {}, {}, {k.AusgabenSumme, stEURb}})
+	if len(k.AusgabenKategorie) > 1 {
+		rows = append(rows, []xCell{}, []xCell{{"davon nach Kategorie", stHeader}, {"Betrag (€)", stHeader}})
+		for _, kat := range k.AusgabenKategorie {
+			rows = append(rows, []xCell{{kat.Kategorie, stNormal}, {kat.Summe, stEUR}})
+		}
 	}
 	rows = append(rows,
-		[]xCell{{"Summe sonstige Ausgaben", stBold}, {}, {k.AusgabenSumme, stEURb}},
 		[]xCell{},
-		[]xCell{{"Tatsächlich geflossenes Geld (nach heutigem Zahlungsstand)", stHeader}, {"Betrag (€)", stHeader}},
-		[]xCell{{"Von Pächtern eingegangene Zahlungen", stNormal}, {}, {k.EinnahmenBezahlt, stEUR}},
-		[]xCell{{"An Pächter ausgezahlte Guthaben", stNormal}, {}, {-k.GuthabenAusgezahlt, stEUR}},
-		[]xCell{{"Sonstige Ausgaben", stNormal}, {}, {-k.AusgabenSumme, stEUR}},
-		[]xCell{{"Saldo (ohne Anfangsbestand der Kasse)", stBold}, {}, {k.Saldo, stEURb}},
+		[]xCell{{"Kassenbestand", stHeader}, {"Betrag (€)", stHeader}},
+		[]xCell{{"Anfangsbestand", stNormal}, {k.Anfangsbestand, stEUR}},
+		[]xCell{{"+ Von Pächtern eingegangene Zahlungen", stNormal}, {k.EinnahmenBezahlt, stEUR}},
+		[]xCell{{"− An Pächter ausgezahlte Guthaben", stNormal}, {-k.GuthabenAusgezahlt, stEUR}},
+		[]xCell{{"− Sonstige Ausgaben", stNormal}, {-k.AusgabenSumme, stEUR}},
+		[]xCell{{"Kassenbestand (Kontostand heute)", stBold}, {k.Kassenbestand, stEURb}},
 	)
 	if len(k.Unvollstaendig) > 0 {
 		rows = append(rows, []xCell{}, []xCell{{"Nicht in der Abrechnung enthalten (unvollständig)", stHeader}})

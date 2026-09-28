@@ -701,7 +701,13 @@ func (a *App) handleNextYear(w http.ResponseWriter, r *http.Request) {
 	old.Paechter = clone(d.Paechter)
 	old.Abgeschlossen = true
 
-	nj := &Jahr{Ablesungen: map[string]Ablesung{}}
+	// Der Kassenbestand am Ende des abgeschlossenen Jahres wird automatisch zum
+	// Anfangsbestand des Folgejahres. Von Hand im Kassenbericht anpassbar, falls
+	// sich danach noch etwas ändert (z. B. eine spät eingehende Zahlung).
+	closingView, _ := a.st.viewLocked(cur)
+	anfangsbestand := a.st.kassenberichtLocked(closingView).Kassenbestand
+
+	nj := &Jahr{Ablesungen: map[string]Ablesung{}, Anfangsbestand: &anfangsbestand}
 	for _, p := range d.Paechter {
 		o := old.Ablesungen[p.ID]
 		nj.Ablesungen[p.ID] = Ablesung{
@@ -1082,10 +1088,14 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/admin/backup", a.admin(a.handleBackup))
 	mux.HandleFunc("GET /api/admin/kassenbericht", a.admin(a.handleKassenbericht))
 	mux.HandleFunc("PUT /api/admin/versorger", a.admin(a.handleVersorger))
+	mux.HandleFunc("PUT /api/admin/anfangsbestand", a.admin(a.handleAnfangsbestand))
 	mux.HandleFunc("GET /api/admin/export-kassenbericht", a.admin(a.handleKassenberichtExport))
 	mux.HandleFunc("POST /api/admin/ausgaben", a.admin(a.handleAusgabeCreate))
 	mux.HandleFunc("PUT /api/admin/ausgaben/{id}", a.admin(a.handleAusgabeUpdate))
 	mux.HandleFunc("DELETE /api/admin/ausgaben/{id}", a.admin(a.handleAusgabeDelete))
+	mux.HandleFunc("POST /api/admin/ausgaben/{id}/beleg", a.admin(a.handleBelegUpload))
+	mux.HandleFunc("DELETE /api/admin/ausgaben/{id}/beleg", a.admin(a.handleBelegDelete))
+	mux.HandleFunc("GET /api/admin/beleg/{id}", a.admin(a.handleBelegServe))
 	mux.Handle("/", static)
 	return a.guard(mux)
 }

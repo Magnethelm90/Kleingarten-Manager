@@ -81,6 +81,10 @@ type Jahr struct {
 	Versorger *Versorger `json:"versorger,omitempty"`
 	// Ausgaben: sonstige Buchungen der Vereinskasse (Kontoführung, Anschaffungen, ...)
 	Ausgaben []Ausgabe `json:"ausgaben,omitempty"`
+	// Anfangsbestand der Vereinskasse zu Jahresbeginn, für den Kassenbericht.
+	// Wird beim Jahreswechsel automatisch aus dem Kassenbestand des Vorjahres
+	// vorbelegt, kann aber jederzeit von Hand angepasst werden.
+	Anfangsbestand *float64 `json:"anfangsbestand,omitempty"`
 }
 
 // AdminAuth speichert das Admin-Passwort nur als Hash.

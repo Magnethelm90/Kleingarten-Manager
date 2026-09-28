@@ -21,8 +21,10 @@ Internet gesendet, es gibt keine Konten, Schlüssel oder Cloud-Anbindung.
   (z. B. Tippfehler beim Zählerstand), erscheint ein Hinweis – die Eingabe wird dadurch nicht blockiert
 - **Kassenbericht** (Admin-Bereich): fasst die Abrechnung aller Pächter zusammen, vergleicht Wasser- und Stromverbrauch
   mit der Rechnung des Versorgers, verwaltet sonstige Ausgaben der Vereinskasse (Kontoführung, Anschaffungen,
-  Reparaturen – jede Ausgabe einzeln) und zeigt den Saldo aus tatsächlich eingegangenen Zahlungen und Ausgaben; als
-  Excel-Datei für die Kassenprüfung exportierbar
+  Reparaturen – jede Ausgabe einzeln, mit Kategorie und optionalem Beleg-Foto/PDF) und führt mit einem Anfangsbestand
+  einen echten Kassenbestand (wird beim Jahreswechsel automatisch fortgeschrieben); als Excel-Datei für die
+  Kassenprüfung exportierbar
+- Beim Öffnen ein Hinweis, wenn noch Rechnungen offen oder überfällig sind
 - **Jahreswechsel**, Import der Mitglieder aus Excel/CSV, Excel-Export, automatische Sicherungen
 
 ## Abrechnungsregeln (Beispielwerte, im Admin-Bereich änderbar)

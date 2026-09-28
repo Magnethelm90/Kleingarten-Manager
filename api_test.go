@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -846,4 +847,158 @@ func TestKassenberichtFuerAbgeschlossenesJahr(t *testing.T) {
 		t.Fatalf("Export für abgeschlossenes Jahr: %d", rec.Code)
 	}
 	_ = app
+}
+
+func TestAusgabenKategorien(t *testing.T) {
+	app, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+
+	// ohne Kategorie: Standardkategorie wird gesetzt
+	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Rasenmäher", Betrag: 50}, cookie))
+	if a1.Kategorie != kategorieStandard {
+		t.Fatalf("Standardkategorie: %+v", a1)
+	}
+	do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-04-01", Beschreibung: "Kettensäge Reparatur", Kategorie: "Instandhaltung", Betrag: 20}, cookie)
+	do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-04-15", Beschreibung: "Rasenmäher Wartung", Kategorie: "Instandhaltung", Betrag: 15}, cookie)
+
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	byKat := map[string]float64{}
+	for _, kat := range k.AusgabenKategorie {
+		byKat[kat.Kategorie] = kat.Summe
+	}
+	if byKat["Instandhaltung"] != 35 || byKat[kategorieStandard] != 50 {
+		t.Fatalf("Kategorien-Summen: %+v", byKat)
+	}
+	_ = app
+}
+
+func TestAnfangsbestandUndJahreswechsel(t *testing.T) {
+	app, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+
+	// Anfangsbestand von Hand setzen
+	k := decode[kassenbericht](t, do(h, "PUT", "/api/admin/anfangsbestand?year=2025", map[string]any{"betrag": 500}, cookie))
+	if k.Anfangsbestand != 500 || k.Kassenbestand != 500 {
+		t.Fatalf("Anfangsbestand: %+v", k)
+	}
+
+	// ohne Anmeldung verboten
+	if rec := do(h, "PUT", "/api/admin/anfangsbestand?year=2025", map[string]any{"betrag": 999}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Anfangsbestand ohne Anmeldung: %d", rec.Code)
+	}
+
+	// Pächter mit bezahlter Rechnung, dazu eine Ausgabe über 50 €
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Kasse", "gartengroesse": 100}, cookie))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(0), StromVJ: fp(0), StromAkt: fp(0), Stunden: fp(12)})
+	do(h, "POST", "/api/invoices/issue?year=2025", issueReq{})
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	rechnung := st.Archive[0]
+	do(h, "PUT", "/api/payment/"+rechnung.ID, map[string]any{"bezahltAm": "2025-05-01"})
+	do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-06-01", Beschreibung: "Reparatur", Betrag: 50}, cookie)
+
+	k = decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	wantKassenbestand := round2(500 + k.EinnahmenBezahlt - k.GuthabenAusgezahlt - 50)
+	if k.Kassenbestand != wantKassenbestand {
+		t.Fatalf("Kassenbestand: %v erwartet %v (einnahmen=%v guthaben=%v)", k.Kassenbestand, wantKassenbestand, k.EinnahmenBezahlt, k.GuthabenAusgezahlt)
+	}
+
+	// Jahreswechsel: der Kassenbestand von 2025 wird zum Anfangsbestand von 2026
+	if rec := do(h, "POST", "/api/admin/jahreswechsel", nil, cookie); rec.Code != 200 {
+		t.Fatalf("Jahreswechsel: %d %s", rec.Code, rec.Body.String())
+	}
+	k2026 := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2026", nil, cookie))
+	if k2026.Anfangsbestand != k.Kassenbestand {
+		t.Fatalf("Anfangsbestand 2026: %v erwartet %v", k2026.Anfangsbestand, k.Kassenbestand)
+	}
+	if k2026.Kassenbestand != k2026.Anfangsbestand {
+		t.Fatalf("Kassenbestand 2026 ohne weitere Buchungen sollte gleich Anfangsbestand sein: %+v", k2026)
+	}
+	_ = app
+}
+
+// doMultipart schickt eine Datei als multipart/form-data an das Testprogramm.
+func doMultipart(h http.Handler, path, filename string, content []byte, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", filename)
+	if err != nil {
+		panic(err)
+	}
+	if _, err := fw.Write(content); err != nil {
+		panic(err)
+	}
+	if err := mw.Close(); err != nil {
+		panic(err)
+	}
+	req := httptest.NewRequest("POST", path, &buf)
+	req.Host = "127.0.0.1:8765"
+	req.Header.Set("X-GA-Request", "1")
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestBelegAnhang(t *testing.T) {
+	app, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Rasenmäher", Betrag: 50}, cookie))
+
+	// falscher Dateityp wird abgelehnt
+	if rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung.exe", []byte("xx"), cookie); rec.Code != http.StatusBadRequest {
+		t.Fatalf("falscher Dateityp: %d", rec.Code)
+	}
+	// ohne Anmeldung verboten
+	if rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung.pdf", []byte("%PDF-1.4 Inhalt")); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Upload ohne Anmeldung: %d", rec.Code)
+	}
+
+	rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung.pdf", []byte("%PDF-1.4 Inhalt"), cookie)
+	if rec.Code != 200 {
+		t.Fatalf("Beleg hochladen: %d %s", rec.Code, rec.Body.String())
+	}
+	updated := decode[Ausgabe](t, rec)
+	if updated.Beleg == "" {
+		t.Fatal("Beleg-Pfad fehlt nach Upload")
+	}
+	if _, err := os.Stat(filepath.Join(app.st.dir, updated.Beleg)); err != nil {
+		t.Fatalf("Beleg-Datei fehlt auf der Platte: %v", err)
+	}
+
+	// Beleg abrufen
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025", nil, cookie); rec.Code != 200 || rec.Body.String() != "%PDF-1.4 Inhalt" {
+		t.Fatalf("Beleg abrufen: %d %q", rec.Code, rec.Body.String())
+	}
+
+	// Ausgabe bearbeiten (ohne Beleg-Feld): Beleg bleibt erhalten
+	do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"?year=2025", Ausgabe{Datum: "2025-03-02", Beschreibung: "Rasenmäher (neu)", Betrag: 55}, cookie)
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if k.Ausgaben[0].Beleg == "" {
+		t.Fatalf("Beleg nach Bearbeiten verloren: %+v", k.Ausgaben[0])
+	}
+
+	// Beleg löschen
+	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", nil, cookie); rec.Code != 200 {
+		t.Fatalf("Beleg löschen: %d", rec.Code)
+	}
+	if _, err := os.Stat(filepath.Join(app.st.dir, updated.Beleg)); err == nil {
+		t.Fatal("Beleg-Datei sollte nach dem Löschen weg sein")
+	}
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025", nil, cookie); rec.Code != http.StatusNotFound {
+		t.Fatalf("Beleg nach Löschen sollte fehlen: %d", rec.Code)
+	}
+
+	// Ausgabe löschen: verbleibender Beleg wird mit entfernt
+	rec2 := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung2.jpg", []byte("bild"), cookie)
+	updated2 := decode[Ausgabe](t, rec2)
+	do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"?year=2025", nil, cookie)
+	if _, err := os.Stat(filepath.Join(app.st.dir, updated2.Beleg)); err == nil {
+		t.Fatal("Beleg-Datei sollte nach dem Löschen der Ausgabe weg sein")
+	}
 }

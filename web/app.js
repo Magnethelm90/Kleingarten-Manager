@@ -2,7 +2,7 @@
 /* Gartenabrechnung – Oberfläche. Alle Texte aus Daten werden nur über textContent/DOM-Knoten
    eingefügt (kein innerHTML), damit Namen o. Ä. nie als Code ausgeführt werden können. */
 
-const S = { state: null, year: null, tab: 'eingabe', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null };
+const S = { state: null, year: null, tab: 'eingabe', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, remindDismissed: false };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
 
@@ -154,6 +154,7 @@ function render() {
       h('button', { class: 'quit', onclick: quitApp, title: 'Programm beenden' }, 'Beenden'),
     ),
     h('main', null,
+      openRechnungenBanner(st),
       st.readOnly && S.tab !== 'admin' && S.tab !== 'zahlungen'
         ? h('div', { class: 'banner info' }, `Das Jahr ${st.year} ist abgeschlossen. Du kannst es ansehen und Rechnungen neu ausdrucken, aber nichts mehr ändern.`)
         : null,
@@ -161,6 +162,21 @@ function render() {
       h('div', { class: 'footer' }, `Gartenabrechnung ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir)),
     ),
   );
+}
+
+// Erinnerung an offene Rechnungen des laufenden Jahres, direkt nach dem Öffnen sichtbar.
+// Bleibt bis zum nächsten Programmstart ausgeblendet, sobald sie einmal weggeklickt wurde.
+function openRechnungenBanner(st) {
+  if (S.remindDismissed || S.tab === 'zahlungen' || st.year !== st.currentYear) return null;
+  const all = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt >= 0);
+  const open = all.filter(payIsOpen);
+  if (!open.length) return null;
+  const today = todayIso();
+  const overdue = open.filter((e) => e.faellig && e.faellig < today);
+  return h('div', { class: 'banner warn' },
+    `${open.length} Rechnung${open.length === 1 ? '' : 'en'} ${st.year} noch offen${overdue.length ? `, davon ${overdue.length} überfällig` : ''}.`, ' ',
+    h('button', { class: 'btn small', onclick: () => { S.tab = 'zahlungen'; render(); } }, 'Zu den Zahlungen'), ' ',
+    h('button', { class: 'btn small', onclick: () => { S.remindDismissed = true; render(); } }, 'Ausblenden'));
 }
 
 async function quitApp() {
@@ -929,17 +945,32 @@ async function loadKasse(year) {
 
 async function refreshKasse() { S.kasse = null; await loadKasse(S.kasseYear); }
 
+const AUSGABEN_KATEGORIEN = ['Instandhaltung', 'Anschaffung', 'Verwaltung', 'Versicherung & Gebühren', 'Sonstiges'];
+
 function ausgabeDialog(a) {
   const isNew = !a;
   const datum = h('input', { type: 'date', value: (a && a.datum) || todayIso() });
   const besch = h('input', { type: 'text', maxlength: 120, value: (a && a.beschreibung) || '', autocomplete: 'off' });
+  const kategorie = h('input', { type: 'text', list: 'kategorien-liste', maxlength: 40, value: (a && a.kategorie) || '', placeholder: AUSGABEN_KATEGORIEN[AUSGABEN_KATEGORIEN.length - 1], autocomplete: 'off' });
+  const katList = h('datalist', { id: 'kategorien-liste' }, AUSGABEN_KATEGORIEN.map((x) => h('option', { value: x })));
   const betrag = h('input', { type: 'text', inputmode: 'decimal', value: a ? numIn(a.betrag) : '', autocomplete: 'off' });
+  const fileInput = h('input', { type: 'file', accept: '.jpg,.jpeg,.png,.webp,.pdf' });
   const fld = (label, input) => h('div', { class: 'field' }, h('label', null, label), input);
   const body = h('div', { class: 'form' },
     fld('Datum', datum), fld('Beschreibung (z. B. Rasenmäher, Kontoführungsgebühren)', besch),
-    h('div', { class: 'field' }, h('label', null, 'Betrag'), h('div', { class: 'inputunit' }, betrag, h('span', null, '€'))));
+    fld('Kategorie', h('div', null, kategorie, katList)),
+    h('div', { class: 'field' }, h('label', null, 'Betrag'), h('div', { class: 'inputunit' }, betrag, h('span', null, '€'))),
+    h('div', { class: 'field wide' }, h('label', null, 'Beleg (Foto oder PDF, optional)'),
+      a && a.beleg ? h('p', { class: 'hint', style: 'margin:0 0 6px' }, 'Aktuell hinterlegt: ',
+        h('a', { href: `/api/admin/beleg/${a.id}?year=${S.kasseYear}`, target: '_blank' }, 'Beleg ansehen')) : null,
+      fileInput));
   return modal(isNew ? 'Ausgabe erfassen' : `Ausgabe bearbeiten – ${a.beschreibung}`, body, [
     { label: 'Abbrechen', value: false },
+    !isNew && a.beleg ? { label: 'Beleg entfernen', cls: 'danger', value: 'delbeleg', action: async () => {
+      const ok = await confirmBox('Den hinterlegten Beleg wirklich entfernen?', 'Entfernen', true);
+      if (!ok) return false;
+      try { await api('DELETE', `/api/admin/ausgaben/${a.id}/beleg?year=${S.kasseYear}`); } catch (e) { handleErr(e); return false; }
+    } } : null,
     isNew ? null : { label: 'Löschen', cls: 'danger', value: 'del', action: async () => {
       const ok = await confirmBox(`Ausgabe „${a.beschreibung}“ (${eur(a.betrag)}) wirklich löschen?`, 'Löschen', true);
       if (!ok) return false;
@@ -950,10 +981,14 @@ function ausgabeDialog(a) {
       if (!datum.value) { toast('Bitte ein Datum angeben.', 'err'); return false; }
       if (!besch.value.trim()) { toast('Bitte eine Beschreibung eintragen.', 'err'); return false; }
       if (b === null || Number.isNaN(b) || b <= 0) { toast('Bitte einen Betrag größer 0 eintragen.', 'err'); return false; }
-      const data = { datum: datum.value, beschreibung: besch.value.trim(), betrag: b };
+      const data = { datum: datum.value, beschreibung: besch.value.trim(), kategorie: kategorie.value.trim(), betrag: b };
       try {
-        if (isNew) await api('POST', `/api/admin/ausgaben?year=${S.kasseYear}`, data);
-        else await api('PUT', `/api/admin/ausgaben/${a.id}?year=${S.kasseYear}`, data);
+        const saved = isNew ? await api('POST', `/api/admin/ausgaben?year=${S.kasseYear}`, data) : await api('PUT', `/api/admin/ausgaben/${a.id}?year=${S.kasseYear}`, data);
+        if (fileInput.files.length) {
+          const fd = new FormData();
+          fd.append('file', fileInput.files[0]);
+          await api('POST', `/api/admin/ausgaben/${saved.id}/beleg?year=${S.kasseYear}`, fd, true);
+        }
       } catch (e) { handleErr(e); return false; }
     } },
   ].filter(Boolean));
@@ -971,17 +1006,32 @@ function adminKassenbericht() {
   const k = S.kasse;
   const card = (t, big, small, cls) => h('div', { class: 'card stat ' + (cls || '') }, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small));
   const cards = h('div', { class: 'cards' },
+    card('Kassenbestand', eur(k.kassenbestand), `Anfangsbestand ${eur(k.anfangsbestand)} + Zahlungen − Ausgaben`, k.kassenbestand >= 0 ? 'ok' : 'err'),
     card('Von Pächtern eingegangen', eur(k.einnahmenBezahlt), 'tatsächlich gezahlt, nach heutigem Stand', 'ok'),
     k.guthabenAusgezahlt ? card('An Pächter ausgezahlt', eur(k.guthabenAusgezahlt), 'Guthaben') : null,
-    card('Sonstige Ausgaben', eur(k.ausgabenSumme), `${k.ausgaben.length} Buchung(en)`, k.ausgabenSumme ? 'warn' : 'ok'),
-    card('Saldo', eur(k.saldo), 'Zahlungen abzüglich Guthaben und sonstiger Ausgaben – ohne Anfangsbestand der Kasse', k.saldo >= 0 ? 'ok' : 'err'));
+    card('Sonstige Ausgaben', eur(k.ausgabenSumme), `${k.ausgaben.length} Buchung(en)`, k.ausgabenSumme ? 'warn' : 'ok'));
+
+  const anfInput = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.anfangsbestand), style: 'width:140px', autocomplete: 'off' });
+  const saveAnfang = async () => {
+    const v = parseNum(anfInput.value);
+    if (v === null || Number.isNaN(v) || v < 0) { toast('Bitte eine Zahl ab 0 eingeben.', 'err'); return; }
+    try { S.kasse = await api('PUT', `/api/admin/anfangsbestand?year=${S.kasseYear}`, { betrag: v }); toast('Gespeichert', 'ok'); render(); } catch (e) { handleErr(e); }
+  };
 
   const tbody = h('tbody');
   for (const x of k.ausgaben) {
-    tbody.append(h('tr', null, h('td', null, deDate(x.datum)), h('td', null, x.beschreibung), h('td', { class: 'r' }, eur(x.betrag)),
+    tbody.append(h('tr', null, h('td', null, deDate(x.datum)), h('td', null, x.beschreibung), h('td', null, x.kategorie),
+      h('td', { class: 'r' }, eur(x.betrag)),
+      h('td', null, x.beleg ? h('a', { href: `/api/admin/beleg/${x.id}?year=${S.kasseYear}`, target: '_blank', title: 'Beleg ansehen' }, '📎') : null),
       h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await ausgabeDialog(x); if (r !== false && r !== undefined) await refreshKasse(); } }, 'Bearbeiten'))));
   }
-  if (!k.ausgaben.length) tbody.append(h('tr', null, h('td', { colspan: 4, class: 'empty' }, 'Noch keine sonstigen Ausgaben erfasst.')));
+  if (!k.ausgaben.length) tbody.append(h('tr', null, h('td', { colspan: 6, class: 'empty' }, 'Noch keine sonstigen Ausgaben erfasst.')));
+
+  const katTable = (k.ausgabenKategorie || []).length > 1
+    ? h('div', { class: 'tablewrap', style: 'max-width:360px;margin-top:10px' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, ['Kategorie', 'Summe'].map((t) => h('th', null, t)))),
+        h('tbody', null, k.ausgabenKategorie.map((kat) => h('tr', null, h('td', null, kat.kategorie), h('td', { class: 'r' }, eur(kat.summe)))))))
+    : null;
 
   const vW3 = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.wasserM3), autocomplete: 'off' });
   const vWE = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.wasserEUR), autocomplete: 'off' });
@@ -1013,12 +1063,18 @@ function adminKassenbericht() {
     h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), yearSel),
     h('p', { class: 'hint' }, `Übersicht für ${S.kasseYear}: ${k.paechter} Pächter (${k.ausgestellt} aus ausgestellten Rechnungen, ${k.berechnet} berechnet, aber noch nicht ausgestellt${k.unvollstaendig.length ? `, ${k.unvollstaendig.length} unvollständig` : ''}). Die Beträge »sonstige Ausgaben« sind Vereinskosten neben der Pächterabrechnung, z. B. Kontoführungsgebühren, Anwaltskosten oder Anschaffungen.`),
     k.unvollstaendig.length ? h('div', { class: 'banner warn' }, `Nicht enthalten (Angaben fehlen): ${k.unvollstaendig.join(', ')}`) : null,
+    h('div', { class: 'card', style: 'margin-bottom:14px' },
+      h('div', { class: 'toolbar' },
+        h('label', null, 'Anfangsbestand der Kasse'), h('div', { class: 'inputunit' }, anfInput, h('span', null, '€')),
+        h('button', { class: 'btn small primary', onclick: saveAnfang }, 'Speichern'),
+        h('span', { class: 'hint' }, 'wird beim Jahreswechsel automatisch aus dem Kassenbestand des Vorjahres übernommen, ist hier aber jederzeit änderbar'))),
     cards,
     h('h3', null, 'Sonstige Ausgaben der Vereinskasse'),
     h('div', { class: 'card' },
       h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: async () => { const r = await ausgabeDialog(null); if (r !== false && r !== undefined) await refreshKasse(); } }, '+ Ausgabe erfassen')),
       h('div', { class: 'tablewrap', style: 'max-height:360px' }, h('table', { class: 'data' },
-        h('thead', null, h('tr', null, ['Datum', 'Beschreibung', 'Betrag', ''].map((t) => h('th', null, t)))), tbody))),
+        h('thead', null, h('tr', null, ['Datum', 'Beschreibung', 'Kategorie', 'Betrag', 'Beleg', ''].map((t) => h('th', null, t)))), tbody)),
+      katTable),
     h('h3', null, 'Vergleich mit dem Versorger'),
     h('div', { class: 'card' },
       h('p', { class: 'hint' }, 'Trage hier die Werte der Hauptzähler bzw. der Versorgerrechnung ein, um sie mit der Summe der Pächterabrechnung zu vergleichen. Eine größere Abweichung kann auf einen Zählerfehler, Schwund oder eine falsche Ablesung hindeuten.'),
