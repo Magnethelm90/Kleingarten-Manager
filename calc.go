@@ -28,22 +28,39 @@ const (
 	StatusUnvollstNum = "Zählerstände oder Stunden fehlen"
 )
 
+// verbrauch bildet die Differenz zwischen Vorjahres- und aktuellem Zählerstand.
+// Bei einem unterjährigen Zählerwechsel (w) wird stattdessen der Verbrauch bis
+// zum Tausch (Endstand alter Zähler − Vorjahresstand) und danach (aktueller
+// Stand − Anfangsstand neuer Zähler) zusammengerechnet. negativ meldet, ob
+// irgendein Teilstück einen negativen (unplausiblen) Verbrauch ergäbe.
+func verbrauch(vj, akt *float64, w *ZaehlerWechsel) (v *float64, negativ bool) {
+	if vj == nil || akt == nil {
+		return nil, false
+	}
+	if w != nil && w.AltEnde != nil && w.NeuStart != nil {
+		x := (*w.AltEnde - *vj) + (*akt - *w.NeuStart)
+		return &x, *w.AltEnde < *vj || *akt < *w.NeuStart
+	}
+	x := *akt - *vj
+	return &x, *akt < *vj
+}
+
 // calculate berechnet eine Rechnung. Die Regeln entsprechen der Excel-Vorlage
 // und der bisherigen Word-Rechnung des Vereins.
 func calculate(s Settings, p Paechter, a Ablesung) Result {
 	var r Result
 
 	// Wasser
-	if a.WasserVJ != nil && a.WasserAkt != nil {
-		v := *a.WasserAkt - *a.WasserVJ
-		r.WasserVerbrauch = &v
-		r.KostenWasser = round2(s.WasserGrundpreis + v*s.WasserPreis)
+	wv, wNeg := verbrauch(a.WasserVJ, a.WasserAkt, a.WasserWechsel)
+	r.WasserVerbrauch = wv
+	if wv != nil {
+		r.KostenWasser = round2(s.WasserGrundpreis + *wv*s.WasserPreis)
 	}
 	// Energie
-	if a.StromVJ != nil && a.StromAkt != nil {
-		v := *a.StromAkt - *a.StromVJ
-		r.EnergieVerbrauch = &v
-		r.KostenEnergie = round2(s.EnergieGrundpreis + v*s.EnergiePreis)
+	sv, sNeg := verbrauch(a.StromVJ, a.StromAkt, a.StromWechsel)
+	r.EnergieVerbrauch = sv
+	if sv != nil {
+		r.KostenEnergie = round2(s.EnergieGrundpreis + *sv*s.EnergiePreis)
 	}
 	// Arbeitsstunden
 	if a.Stunden != nil {
@@ -79,7 +96,7 @@ func calculate(s Settings, p Paechter, a Ablesung) Result {
 	switch {
 	case a.WasserVJ == nil || a.WasserAkt == nil || a.StromVJ == nil || a.StromAkt == nil || a.Stunden == nil:
 		r.Status = StatusFehlt
-	case *a.WasserAkt < *a.WasserVJ || *a.StromAkt < *a.StromVJ:
+	case wNeg || sNeg:
 		r.Status = StatusZaehler
 	case p.Gartengroesse <= 0:
 		r.Status = StatusGroesse

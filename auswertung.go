@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ---------------------------------------------------------------- Jahresvergleich
@@ -161,6 +162,9 @@ type Ausgabe struct {
 	Betrag       float64 `json:"betrag"`
 	// Beleg: Pfad einer hochgeladenen Quittung/Rechnung, relativ zum Datenordner.
 	Beleg string `json:"beleg,omitempty"`
+	// Geprueft: vom Kassenprüfer abgehakt (z. B. bei der jährlichen Kassenprüfung).
+	Geprueft   bool   `json:"geprueft"`
+	GeprueftAm string `json:"geprueftAm,omitempty"` // JJJJ-MM-TT
 }
 
 // AusgabenKategorien sind Vorschläge für die Kategorie-Auswahl. Es ist keine
@@ -239,7 +243,8 @@ func (a *App) handleAusgabeUpdate(w http.ResponseWriter, r *http.Request) {
 	for i := range j.Ausgaben {
 		if j.Ausgaben[i].ID == id {
 			in.ID = id
-			in.Beleg = j.Ausgaben[i].Beleg // wird nur über die eigenen Beleg-Endpunkte geändert
+			in.Beleg = j.Ausgaben[i].Beleg                                                // wird nur über die eigenen Beleg-Endpunkte geändert
+			in.Geprueft, in.GeprueftAm = j.Ausgaben[i].Geprueft, j.Ausgaben[i].GeprueftAm // nur über den eigenen Endpunkt
 			j.Ausgaben[i] = in
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
@@ -273,6 +278,43 @@ func (a *App) handleAusgabeDelete(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeJSON(w, 200, map[string]bool{"ok": true})
+			return
+		}
+	}
+	writeErr(w, notFound("Ausgabe nicht gefunden"))
+}
+
+// handleAusgabeGeprueft setzt oder entfernt den Kassenprüfer-Haken einer Ausgabe.
+func (a *App) handleAusgabeGeprueft(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var in struct {
+		Geprueft bool `json:"geprueft"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	year := a.yearParam(r)
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	j := a.st.d.Jahre[yearKey(year)]
+	if j == nil {
+		writeErr(w, notFound("Jahr nicht gefunden"))
+		return
+	}
+	for i := range j.Ausgaben {
+		if j.Ausgaben[i].ID == id {
+			j.Ausgaben[i].Geprueft = in.Geprueft
+			if in.Geprueft {
+				j.Ausgaben[i].GeprueftAm = time.Now().Format("2006-01-02")
+			} else {
+				j.Ausgaben[i].GeprueftAm = ""
+			}
+			if err := a.st.saveLocked(); err != nil {
+				writeErr(w, err)
+				return
+			}
+			writeJSON(w, 200, j.Ausgaben[i])
 			return
 		}
 	}
@@ -640,7 +682,7 @@ func (a *App) handleKassenberichtExport(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, notFound("Jahr nicht gefunden"))
 		return
 	}
-	data, err := writeXLSX("Kassenbericht "+strconv.Itoa(year), []float64{44, 16, 16, 16}, kassenberichtRows(k, vereinsname))
+	data, err := writeXLSX("Kassenbericht "+strconv.Itoa(year), []float64{44, 16, 16, 16, 14}, kassenberichtRows(k, vereinsname))
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -695,10 +737,14 @@ func kassenberichtRows(k kassenbericht, verein string) [][]xCell {
 		[]xCell{{"Strom (kWh)", stNormal}, {k.StromVerbrauch, stNum}, {opt(k.Versorger.StromKWh), stNum}, {diff(k.StromVerbrauch, k.Versorger.StromKWh), stNum}},
 		[]xCell{{"Strom (€)", stNormal}, {s.KostenEnergie, stEUR}, {opt(k.Versorger.StromEUR), stEUR}, {diff(s.KostenEnergie, k.Versorger.StromEUR), stEUR}},
 		[]xCell{},
-		[]xCell{{"Sonstige Ausgaben der Vereinskasse", stHeader}, {"Datum", stHeader}, {"Kategorie", stHeader}, {"Betrag (€)", stHeader}},
+		[]xCell{{"Sonstige Ausgaben der Vereinskasse", stHeader}, {"Datum", stHeader}, {"Kategorie", stHeader}, {"Betrag (€)", stHeader}, {"Geprüft", stHeader}},
 	)
 	for _, x := range k.Ausgaben {
-		rows = append(rows, []xCell{{x.Beschreibung, stNormal}, {germanDate(x.Datum), stNormal}, {x.Kategorie, stNormal}, {x.Betrag, stEUR}})
+		geprueft := ""
+		if x.Geprueft {
+			geprueft = "✓ " + germanDate(x.GeprueftAm)
+		}
+		rows = append(rows, []xCell{{x.Beschreibung, stNormal}, {germanDate(x.Datum), stNormal}, {x.Kategorie, stNormal}, {x.Betrag, stEUR}, {geprueft, stNormal}})
 	}
 	rows = append(rows, []xCell{{"Summe sonstige Ausgaben", stBold}, {}, {}, {k.AusgabenSumme, stEURb}})
 	if len(k.AusgabenKategorie) > 1 {
@@ -723,4 +769,42 @@ func kassenberichtRows(k kassenbericht, verein string) [][]xCell {
 		}
 	}
 	return rows
+}
+
+// ---------------------------------------------------------------- Mehrjahresvergleich
+
+// kassenberichtJahr ist die Kurzfassung eines Kassenberichts für den Vergleich
+// über mehrere Jahre (Verein insgesamt, nicht je Pächter).
+type kassenberichtJahr struct {
+	Jahr             int     `json:"jahr"`
+	Rechnungssumme   float64 `json:"rechnungssumme"`   // Summe aller Pächterrechnungen (in Rechnung gestellt)
+	EinnahmenBezahlt float64 `json:"einnahmenBezahlt"` // tatsächlich eingegangen
+	AusgabenSumme    float64 `json:"ausgabenSumme"`
+	Anfangsbestand   float64 `json:"anfangsbestand"`
+	Kassenbestand    float64 `json:"kassenbestand"`
+}
+
+// kassenberichtVerlaufLocked liefert die Kurzfassung aller Jahre, neuestes zuerst.
+// Der Aufrufer hält s.mu.
+func (s *Store) kassenberichtVerlaufLocked() []kassenberichtJahr {
+	var out []kassenberichtJahr
+	for _, y := range s.years() {
+		v, ok := s.viewLocked(y)
+		if !ok {
+			continue
+		}
+		k := s.kassenberichtLocked(v)
+		out = append(out, kassenberichtJahr{
+			Jahr: y, Rechnungssumme: k.Summen.Gesamt, EinnahmenBezahlt: k.EinnahmenBezahlt,
+			AusgabenSumme: k.AusgabenSumme, Anfangsbestand: k.Anfangsbestand, Kassenbestand: k.Kassenbestand,
+		})
+	}
+	return out
+}
+
+func (a *App) handleKassenberichtVerlauf(w http.ResponseWriter, r *http.Request) {
+	a.st.mu.Lock()
+	out := a.st.kassenberichtVerlaufLocked()
+	a.st.mu.Unlock()
+	writeJSON(w, 200, out)
 }

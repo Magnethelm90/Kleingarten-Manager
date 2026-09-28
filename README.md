@@ -16,14 +16,21 @@ Internet gesendet, es gibt keine Konten, Schlüssel oder Cloud-Anbindung.
 - **Rechnungen:** PDF pro Pächter oder alle auf einmal, ausgestellte Rechnungen werden mit den damaligen Werten
   festgeschrieben und archiviert (spätere Änderungen verändern sie nicht)
 - **Zahlungen:** bezahlt abhaken (mit Datum), Teilzahlungen, Liste der offenen Posten, Excel-Export
+- **GiroCode auf der Rechnung:** QR-Code zum Bezahlen, die Banking-App füllt IBAN, Betrag und Verwendungszweck
+  automatisch aus
+- **Zählerwechsel:** wird ein Zähler unterjährig getauscht, wird der Verbrauch aus dem Endstand des alten und
+  dem Anfangsstand des neuen Zählers richtig zusammengerechnet, die neue Zählernummer wandert automatisch in
+  die Stammdaten
 - **Jahresverlauf:** Wasser-, Stromverbrauch, Arbeitsstunden und Gesamtbetrag der Vorjahre pro Pächter auf einen Blick
 - **Hinweise bei ungewöhnlichem Verbrauch:** fällt der eingetragene Wasser- oder Stromverbrauch deutlich aus dem Rahmen
   (z. B. Tippfehler beim Zählerstand), erscheint ein Hinweis – die Eingabe wird dadurch nicht blockiert
-- **Kassenbericht** (Admin-Bereich): fasst die Abrechnung aller Pächter zusammen, vergleicht Wasser- und Stromverbrauch
-  mit der Rechnung des Versorgers, verwaltet sonstige Ausgaben der Vereinskasse (Kontoführung, Anschaffungen,
-  Reparaturen – jede Ausgabe einzeln, mit Kategorie und optionalem Beleg-Foto/PDF) und führt mit einem Anfangsbestand
-  einen echten Kassenbestand (wird beim Jahreswechsel automatisch fortgeschrieben); als Excel-Datei für die
-  Kassenprüfung exportierbar
+- **Notizfeld je Pächter:** interner Vermerk (z. B. „Tochter kümmert sich, Tel. …“), steht nirgends auf der Rechnung
+- **Kassenbericht** (Admin-Bereich, eigene Jahresauswahl): fasst die Abrechnung aller Pächter zusammen, vergleicht
+  Wasser- und Stromverbrauch mit der Rechnung des Versorgers, verwaltet sonstige Ausgaben der Vereinskasse
+  (Kontoführung, Anschaffungen, Reparaturen – jede Ausgabe einzeln, mit Kategorie, optionalem Beleg-Foto/PDF und
+  Kassenprüfer-Haken) und führt mit einem Anfangsbestand einen echten Kassenbestand (wird beim Jahreswechsel
+  automatisch fortgeschrieben); dazu ein Verlauf über die Jahre für den Verein insgesamt; als Excel-Datei für
+  die Kassenprüfung exportierbar
 - Beim Öffnen ein Hinweis, wenn noch Rechnungen offen oder überfällig sind
 - **Jahreswechsel**, Import der Mitglieder aus Excel/CSV, Excel-Export, automatische Sicherungen
 
@@ -90,6 +97,7 @@ Sicherheitslücken bitte nicht öffentlich melden, sondern direkt an den Autor.
 ## Verwendete Bestandteile
 
 - [go-pdf/fpdf](https://github.com/go-pdf/fpdf) (MIT) für die PDF-Erzeugung
+- [skip2/go-qrcode](https://github.com/skip2/go-qrcode) (MIT) für den GiroCode auf der Rechnung
 - Liberation Sans (SIL Open Font License, siehe `fonts/LICENSE-Liberation.txt`) als eingebettete Schrift
 
 Copyright © Derek

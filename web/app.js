@@ -2,7 +2,7 @@
 /* Gartenabrechnung – Oberfläche. Alle Texte aus Daten werden nur über textContent/DOM-Knoten
    eingefügt (kein innerHTML), damit Namen o. Ä. nie als Code ausgeführt werden können. */
 
-const S = { state: null, year: null, tab: 'eingabe', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, remindDismissed: false };
+const S = { state: null, year: null, tab: 'eingabe', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
 
@@ -263,6 +263,58 @@ async function saveRow(tr, p) {
   } catch (e) { handleErr(e); }
 }
 
+const WECHSEL_WASSER = { wKey: 'wasserWechsel', field: 'wz', label: 'Wasser', unit: 'm³' };
+const WECHSEL_STROM = { wKey: 'stromWechsel', field: 'sz', label: 'Strom', unit: 'kWh' };
+
+async function saveWechsel(tr, p, art, wechsel) {
+  const cur = S.state.ablesungen[p.id] || {};
+  const body = { ...cur, [art.wKey]: wechsel };
+  const res = await api('PUT', `/api/ablesung/${p.id}?year=${S.year}`, body);
+  S.state.ablesungen[p.id] = body;
+  S.state.results[p.id] = res;
+  S.state.hinweise = S.state.hinweise || {};
+  if (res.hinweise && res.hinweise.length) S.state.hinweise[p.id] = res.hinweise; else delete S.state.hinweise[p.id];
+  updateCalc(tr, res);
+  if (wechsel && wechsel.neueNr) {
+    p[art.field === 'wz' ? 'wasserzaehlerNr' : 'stromzaehlerNr'] = wechsel.neueNr;
+    const el = tr.querySelector(`[data-f="${art.field}"]`);
+    if (el) el.value = wechsel.neueNr;
+  }
+  const btn = tr.querySelector(`.wechselbtn-${art.field}`);
+  if (btn) btn.classList.toggle('primary', !!wechsel);
+  showSaved();
+  if ((S.state.issued || {})[p.id]) refreshIssued(tr);
+}
+
+function wechselDialog(tr, p, art) {
+  const cur = S.state.ablesungen[p.id] || {};
+  const w = cur[art.wKey] || {};
+  const altEnde = h('input', { type: 'text', inputmode: 'decimal', value: numIn(w.altEnde), autocomplete: 'off' });
+  const neueNr = h('input', { type: 'text', maxlength: 40, value: w.neueNr || '', autocomplete: 'off' });
+  const neuStart = h('input', { type: 'text', inputmode: 'decimal', value: numIn(w.neuStart != null ? w.neuStart : 0), autocomplete: 'off' });
+  const fld = (label, input, unit) => h('div', { class: 'field' }, h('label', null, label),
+    unit ? h('div', { class: 'inputunit' }, input, h('span', null, unit)) : input);
+  const hatWechsel = w.altEnde != null || w.neuStart != null || (w.neueNr && w.neueNr.trim());
+  const body = h('div', { class: 'form' },
+    h('div', { class: 'field wide' }, h('p', { class: 'hint', style: 'margin:0' },
+      `Wurde der ${art.label}zähler unterjährig getauscht? Endstand des alten und Anfangsstand des neuen Zählers eintragen – der Verbrauch wird dann aus beiden Zählern zusammengerechnet. Leer lassen, wenn es keinen Wechsel gab.`)),
+    fld('Endstand alter Zähler', altEnde, art.unit), fld('Neue Zähler-Nr.', neueNr), fld('Anfangsstand neuer Zähler', neuStart, art.unit));
+  return modal(`Zählerwechsel ${art.label} – ${p.name}`, body, [
+    { label: 'Abbrechen', value: false },
+    hatWechsel ? { label: 'Wechsel entfernen', cls: 'danger', value: 'del', action: async () => {
+      try { await saveWechsel(tr, p, art, null); } catch (e) { handleErr(e); return false; }
+    } } : null,
+    { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+      const ae = parseNum(altEnde.value), ns = parseNum(neuStart.value);
+      const leer = ae === null && ns === null && !neueNr.value.trim();
+      if (!leer && (Number.isNaN(ae) || (ae !== null && ae < 0) || Number.isNaN(ns) || (ns !== null && ns < 0))) {
+        toast('Bitte gültige Zahlen ab 0 eingeben.', 'err'); return false;
+      }
+      try { await saveWechsel(tr, p, art, leer ? null : { altEnde: ae, neueNr: neueNr.value.trim(), neuStart: ns }); } catch (e) { handleErr(e); return false; }
+    } },
+  ].filter(Boolean));
+}
+
 async function detailsDialog(tr, p) {
   const cur = S.state.ablesungen[p.id] || {};
   const num = (val, id) => h('input', { type: 'text', inputmode: 'decimal', id, value: numIn(val || null), autocomplete: 'off' });
@@ -321,11 +373,13 @@ function eingabeRow(p, ro) {
   tr.append(
     h('td', { class: 'sticky s1' }, p.mitgliedsnr),
     h('td', { class: 'name sticky s2', title: p.name }, p.name),
-    h('td', null, txt('wz', p.wasserzaehlerNr)),
+    h('td', null, txt('wz', p.wasserzaehlerNr), ro ? null : h('button', { class: 'btn small wechselbtn-wz' + (a.wasserWechsel ? ' primary' : ''),
+      title: 'Unterjähriger Zählerwechsel', onclick: () => wechselDialog(tr, p, WECHSEL_WASSER) }, '⇄')),
     h('td', null, inp('wasserVJ', a.wasserVJ)),
     h('td', null, inp('wasserAkt', a.wasserAkt)),
     h('td', { class: 'calc c-wv' }),
-    h('td', null, txt('sz', p.stromzaehlerNr)),
+    h('td', null, txt('sz', p.stromzaehlerNr), ro ? null : h('button', { class: 'btn small wechselbtn-sz' + (a.stromWechsel ? ' primary' : ''),
+      title: 'Unterjähriger Zählerwechsel', onclick: () => wechselDialog(tr, p, WECHSEL_STROM) }, '⇄')),
     h('td', null, inp('stromVJ', a.stromVJ)),
     h('td', null, inp('stromAkt', a.stromAkt)),
     h('td', { class: 'calc c-sv' }),
@@ -412,14 +466,19 @@ function viewSchnell() {
     const info = (k, v) => v ? h('span', { class: 'chip' }, h('i', null, k + ' '), v) : null;
     card.append(
       h('div', { class: 'qhead' },
-        h('div', null, h('h3', null, `${p.mitgliedsnr} – ${p.name}`), h('div', { class: 'hint' }, [p.strasse, p.plzOrt].filter(Boolean).join(', '))),
+        h('div', null, h('h3', null, `${p.mitgliedsnr} – ${p.name}`), h('div', { class: 'hint' }, [p.strasse, p.plzOrt].filter(Boolean).join(', ')),
+          p.notiz ? h('div', { class: 'hint', style: 'margin-top:2px' }, '📝 ', p.notiz) : null),
         h('div', { class: 'chips' }, info('Garten', p.gartennr), info('Größe', p.gartengroesse ? `${nfFlex.format(p.gartengroesse)} m²` : ''),
           info('Umlage', eur(p.umlageAbweichend != null ? p.umlageAbweichend : st.settings.umlageStandard)))),
       h('div', { class: 'qgrid' },
-        h('fieldset', null, h('legend', null, 'Wasser'), fld('Zähler-Nr.', txt('wz', p.wasserzaehlerNr)),
+        h('fieldset', null, h('legend', null, 'Wasser'),
+          fld('Zähler-Nr.', h('div', null, txt('wz', p.wasserzaehlerNr), ro ? null : h('button', { class: 'btn small wechselbtn-wz' + (a.wasserWechsel ? ' primary' : ''),
+            title: 'Unterjähriger Zählerwechsel', onclick: () => wechselDialog(card, p, WECHSEL_WASSER) }, '⇄'))),
           fld('Stand Vorjahr', inp('wasserVJ', a.wasserVJ), 'm³'), fld('Stand aktuell', inp('wasserAkt', a.wasserAkt), 'm³'),
           h('div', { class: 'field' }, h('label', null, 'Verbrauch'), h('div', { class: 'calc c-wv qv' }))),
-        h('fieldset', null, h('legend', null, 'Strom'), fld('Zähler-Nr.', txt('sz', p.stromzaehlerNr)),
+        h('fieldset', null, h('legend', null, 'Strom'),
+          fld('Zähler-Nr.', h('div', null, txt('sz', p.stromzaehlerNr), ro ? null : h('button', { class: 'btn small wechselbtn-sz' + (a.stromWechsel ? ' primary' : ''),
+            title: 'Unterjähriger Zählerwechsel', onclick: () => wechselDialog(card, p, WECHSEL_STROM) }, '⇄'))),
           fld('Stand Vorjahr', inp('stromVJ', a.stromVJ), 'kWh'), fld('Stand aktuell', inp('stromAkt', a.stromAkt), 'kWh'),
           h('div', { class: 'field' }, h('label', null, 'Verbrauch'), h('div', { class: 'calc c-sv qv' }))),
         h('fieldset', null, h('legend', null, 'Sonstiges'), fld('Arbeitsstunden', inp('stunden', a.stunden, 'small'), 'h'),
@@ -783,7 +842,7 @@ function viewLogin() {
 function paechterDialog(p) {
   const isNew = !p;
   const cur = p || { mitgliedsnr: '', gartennr: '', anrede: 'Herr', name: '', strasse: '', plzOrt: S.state.settings.ort, versand: 'Emailsendung',
-    gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '' };
+    gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '', notiz: '' };
   const t = (val, ph) => h('input', { type: 'text', value: val || '', placeholder: ph || '', maxlength: 100, autocomplete: 'off' });
   const f = {
     mitgliedsnr: t(cur.mitgliedsnr, 'z. B. 35-95'), gartennr: t(cur.gartennr, 'z. B. 35'),
@@ -793,6 +852,7 @@ function paechterDialog(p) {
     gartengroesse: t(numIn(cur.gartengroesse || null)),
     umlage: t(numIn(cur.umlageAbweichend), `leer = Standard (${eur(S.state.settings.umlageStandard)})`),
     wz: t(cur.wasserzaehlerNr), sz: t(cur.stromzaehlerNr),
+    notiz: h('textarea', { rows: 2, maxlength: 300, style: 'width:100%' }, cur.notiz || ''),
   };
   f.gartengroesse.setAttribute('inputmode', 'decimal');
   f.umlage.setAttribute('inputmode', 'decimal');
@@ -802,7 +862,8 @@ function paechterDialog(p) {
     fld('Name *', f.name), fld('Straße und Hausnummer', f.strasse), fld('PLZ und Ort', f.plzOrt),
     fld('Versandart', f.versand, 'Steht oben rechts auf der Rechnung'),
     fld('Gartengröße in m² *', f.gartengroesse), fld('Umlage abweichend in €', f.umlage, 'Nur ausfüllen, wenn dieser Pächter nicht die Standard-Umlage zahlt'),
-    fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz));
+    fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz),
+    fld('Notiz (nur intern, steht nicht auf der Rechnung)', f.notiz, null, true));
   return modal(isNew ? 'Pächter anlegen' : `Pächter bearbeiten – ${cur.name}`, body, [
     { label: 'Abbrechen', value: false },
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
@@ -810,7 +871,7 @@ function paechterDialog(p) {
       if (Number.isNaN(gg) || Number.isNaN(um) || (gg !== null && gg < 0) || (um !== null && um < 0)) { toast('Gartengröße und Umlage müssen Zahlen ab 0 sein.', 'err'); return false; }
       const data = { mitgliedsnr: f.mitgliedsnr.value, gartennr: f.gartennr.value, anrede: f.anrede.value, name: f.name.value,
         strasse: f.strasse.value, plzOrt: f.plzOrt.value, versand: f.versand.value, gartengroesse: gg ?? 0, umlageAbweichend: um,
-        wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value };
+        wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value, notiz: f.notiz.value.trim() };
       try {
         if (isNew) await api('POST', '/api/admin/paechter', data);
         else await api('PUT', `/api/admin/paechter/${cur.id}`, data);
@@ -830,7 +891,8 @@ function adminPaechter() {
     const shown = list.filter((p) => !q || [p.mitgliedsnr, p.name, p.gartennr, p.strasse].some((x) => (x || '').toLowerCase().includes(q)));
     for (const p of shown) {
       tbody.append(h('tr', null,
-        h('td', null, p.mitgliedsnr), h('td', null, p.gartennr), h('td', { class: 'name', title: p.name }, p.name),
+        h('td', null, p.mitgliedsnr), h('td', null, p.gartennr),
+        h('td', { class: 'name', title: p.name }, p.name, p.notiz ? h('span', { title: p.notiz, style: 'margin-left:4px;cursor:help' }, '📝') : null),
         h('td', null, [p.strasse, p.plzOrt].filter(Boolean).join(', ')),
         h('td', { class: 'num' }, nfFlex.format(p.gartengroesse) + ' m²'),
         h('td', { class: 'num' }, p.umlageAbweichend == null ? 'Standard' : eur(p.umlageAbweichend)),
@@ -943,7 +1005,15 @@ async function loadKasse(year) {
   render();
 }
 
-async function refreshKasse() { S.kasse = null; await loadKasse(S.kasseYear); }
+async function refreshKasse() { S.kasse = null; S.kasseVerlauf = null; await loadKasse(S.kasseYear); }
+
+async function loadKasseVerlauf() {
+  if (S.kasseVerlaufLoading) return;
+  S.kasseVerlaufLoading = true;
+  try { S.kasseVerlauf = await api('GET', '/api/admin/kassenbericht-verlauf'); } catch (e) { handleErr(e); }
+  S.kasseVerlaufLoading = false;
+  render();
+}
 
 const AUSGABEN_KATEGORIEN = ['Instandhaltung', 'Anschaffung', 'Verwaltung', 'Versicherung & Gebühren', 'Sonstiges'];
 
@@ -1015,17 +1085,28 @@ function adminKassenbericht() {
   const saveAnfang = async () => {
     const v = parseNum(anfInput.value);
     if (v === null || Number.isNaN(v) || v < 0) { toast('Bitte eine Zahl ab 0 eingeben.', 'err'); return; }
-    try { S.kasse = await api('PUT', `/api/admin/anfangsbestand?year=${S.kasseYear}`, { betrag: v }); toast('Gespeichert', 'ok'); render(); } catch (e) { handleErr(e); }
+    try { S.kasse = await api('PUT', `/api/admin/anfangsbestand?year=${S.kasseYear}`, { betrag: v }); S.kasseVerlauf = null; toast('Gespeichert', 'ok'); render(); } catch (e) { handleErr(e); }
   };
 
+  const ohneBeleg = k.ausgaben.filter((x) => !x.beleg).length;
+  const belegFilter = h('input', { type: 'checkbox', checked: S.kasseNurOhneBeleg,
+    onchange: (e) => { S.kasseNurOhneBeleg = e.target.checked; render(); } });
+  const gezeigt = S.kasseNurOhneBeleg ? k.ausgaben.filter((x) => !x.beleg) : k.ausgaben;
+  const toggleGeprueft = async (x, checked) => {
+    try { await api('PUT', `/api/admin/ausgaben/${x.id}/geprueft?year=${S.kasseYear}`, { geprueft: checked }); await refreshKasse(); }
+    catch (e) { handleErr(e); }
+  };
   const tbody = h('tbody');
-  for (const x of k.ausgaben) {
+  for (const x of gezeigt) {
     tbody.append(h('tr', null, h('td', null, deDate(x.datum)), h('td', null, x.beschreibung), h('td', null, x.kategorie),
       h('td', { class: 'r' }, eur(x.betrag)),
       h('td', null, x.beleg ? h('a', { href: `/api/admin/beleg/${x.id}?year=${S.kasseYear}`, target: '_blank', title: 'Beleg ansehen' }, '📎') : null),
+      h('td', { title: x.geprueft ? `Geprüft am ${deDate(x.geprueftAm)}` : 'Von der Kassenprüfung abhaken' },
+        h('input', { type: 'checkbox', checked: x.geprueft, onchange: (e) => toggleGeprueft(x, e.target.checked) })),
       h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await ausgabeDialog(x); if (r !== false && r !== undefined) await refreshKasse(); } }, 'Bearbeiten'))));
   }
-  if (!k.ausgaben.length) tbody.append(h('tr', null, h('td', { colspan: 6, class: 'empty' }, 'Noch keine sonstigen Ausgaben erfasst.')));
+  if (!gezeigt.length) tbody.append(h('tr', null, h('td', { colspan: 7, class: 'empty' },
+    k.ausgaben.length ? 'Alle Ausgaben haben einen Beleg.' : 'Noch keine sonstigen Ausgaben erfasst.')));
 
   const katTable = (k.ausgabenKategorie || []).length > 1
     ? h('div', { class: 'tablewrap', style: 'max-width:360px;margin-top:10px' }, h('table', { class: 'data' },
@@ -1071,17 +1152,42 @@ function adminKassenbericht() {
     cards,
     h('h3', null, 'Sonstige Ausgaben der Vereinskasse'),
     h('div', { class: 'card' },
-      h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: async () => { const r = await ausgabeDialog(null); if (r !== false && r !== undefined) await refreshKasse(); } }, '+ Ausgabe erfassen')),
+      h('div', { class: 'toolbar' },
+        h('button', { class: 'btn primary', onclick: async () => { const r = await ausgabeDialog(null); if (r !== false && r !== undefined) await refreshKasse(); } }, '+ Ausgabe erfassen'),
+        h('div', { class: 'spacer' }),
+        h('label', { class: 'hint' }, belegFilter, ` nur ohne Beleg${ohneBeleg ? ` (${ohneBeleg})` : ''}`)),
       h('div', { class: 'tablewrap', style: 'max-height:360px' }, h('table', { class: 'data' },
-        h('thead', null, h('tr', null, ['Datum', 'Beschreibung', 'Kategorie', 'Betrag', 'Beleg', ''].map((t) => h('th', null, t)))), tbody)),
+        h('thead', null, h('tr', null, ['Datum', 'Beschreibung', 'Kategorie', 'Betrag', 'Beleg', 'Geprüft', ''].map((t) => h('th', null, t)))), tbody)),
       katTable),
     h('h3', null, 'Vergleich mit dem Versorger'),
     h('div', { class: 'card' },
       h('p', { class: 'hint' }, 'Trage hier die Werte der Hauptzähler bzw. der Versorgerrechnung ein, um sie mit der Summe der Pächterabrechnung zu vergleichen. Eine größere Abweichung kann auf einen Zählerfehler, Schwund oder eine falsche Ablesung hindeuten.'),
       h('div', { class: 'tablewrap' }, versorgerTable),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: saveVersorger }, 'Werte speichern'))),
-    h('div', { class: 'actions', style: 'margin-top:16px' },
-      h('a', { class: 'btn', href: `/api/admin/export-kassenbericht?year=${S.kasseYear}` }, `Kassenbericht ${S.kasseYear} als Excel`)));
+    h('div', { class: 'actions', style: 'margin-top:16px;margin-bottom:22px' },
+      h('a', { class: 'btn', href: `/api/admin/export-kassenbericht?year=${S.kasseYear}` }, `Kassenbericht ${S.kasseYear} als Excel`)),
+    h('h3', null, 'Verlauf über die Jahre'),
+    kassenberichtVerlaufCard());
+}
+
+function kassenberichtVerlaufCard() {
+  if (!S.kasseVerlauf) {
+    if (!S.kasseVerlaufLoading) loadKasseVerlauf();
+    return h('div', { class: 'card' }, h('p', { class: 'hint', style: 'margin:0' }, 'Wird geladen …'));
+  }
+  const v = S.kasseVerlauf;
+  if (!v.length) return h('div', { class: 'card empty' }, 'Noch keine Jahre vorhanden.');
+  const rows = v.map((j) => h('tr', null,
+    h('td', null, j.jahr),
+    h('td', { class: 'r' }, eur(j.rechnungssumme)),
+    h('td', { class: 'r' }, eur(j.einnahmenBezahlt)),
+    h('td', { class: 'r' }, eur(j.ausgabenSumme)),
+    h('td', { class: 'r' }, eur(j.kassenbestand))));
+  return h('div', { class: 'card' },
+    h('p', { class: 'hint' }, 'Summen des Vereins insgesamt (nicht je Pächter), zum Vergleich über die Jahre – z. B. für die Mitgliederversammlung.'),
+    h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['Jahr', 'Rechnungen gestellt', 'Zahlungen eingegangen', 'Sonstige Ausgaben', 'Kassenbestand'].map((t) => h('th', null, t)))),
+      h('tbody', null, rows))));
 }
 
 // ---- Import / Export / Sicherung

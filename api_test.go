@@ -1002,3 +1002,99 @@ func TestBelegAnhang(t *testing.T) {
 		t.Fatal("Beleg-Datei sollte nach dem Löschen der Ausgabe weg sein")
 	}
 }
+
+func TestZaehlerwechselAPI(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Wechsel", "gartengroesse": 300, "wasserzaehlerNr": "ALT-1"}))
+	ab := Ablesung{
+		WasserVJ: fp(100), WasserAkt: fp(30), StromVJ: fp(0), StromAkt: fp(0), Stunden: fp(12),
+		WasserWechsel: &ZaehlerWechsel{AltEnde: fp(180), NeueNr: "NEU-2", NeuStart: fp(0)},
+	}
+	res := decode[ablesungResp](t, do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", ab))
+	if res.WasserVerbrauch == nil || *res.WasserVerbrauch != 110 {
+		t.Fatalf("Verbrauch: %+v", res.WasserVerbrauch)
+	}
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	var updated Paechter
+	for _, x := range st.Paechter {
+		if x.ID == p.ID {
+			updated = x
+		}
+	}
+	if updated.WasserzaehlerNr != "NEU-2" {
+		t.Fatalf("Zählernummer wurde nicht übernommen: %+v", updated)
+	}
+}
+
+func TestKassenpruefer(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Rasenmäher", Betrag: 50}, cookie))
+	if a1.Geprueft {
+		t.Fatal("neue Ausgabe sollte nicht geprüft sein")
+	}
+
+	if rec := do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"/geprueft?year=2025", map[string]any{"geprueft": true}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("ohne Anmeldung: %d", rec.Code)
+	}
+	updated := decode[Ausgabe](t, do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"/geprueft?year=2025", map[string]any{"geprueft": true}, cookie))
+	if !updated.Geprueft || updated.GeprueftAm == "" {
+		t.Fatalf("geprüft nicht gesetzt: %+v", updated)
+	}
+
+	// Bearbeiten der Ausgabe darf den Haken nicht zurücksetzen
+	do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"?year=2025", Ausgabe{Datum: "2025-03-02", Beschreibung: "Rasenmäher (neu)", Betrag: 55}, cookie)
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if !k.Ausgaben[0].Geprueft {
+		t.Fatalf("Haken nach Bearbeiten verloren: %+v", k.Ausgaben[0])
+	}
+
+	// Zurücknehmen
+	back := decode[Ausgabe](t, do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"/geprueft?year=2025", map[string]any{"geprueft": false}, cookie))
+	if back.Geprueft || back.GeprueftAm != "" {
+		t.Fatalf("Haken nicht zurückgenommen: %+v", back)
+	}
+}
+
+func TestKassenberichtVerlauf(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+	do(h, "PUT", "/api/admin/anfangsbestand?year=2025", map[string]any{"betrag": 200}, cookie)
+	do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "X", Betrag: 40}, cookie)
+	do(h, "POST", "/api/admin/jahreswechsel", nil, cookie)
+	do(h, "POST", "/api/admin/ausgaben?year=2026", Ausgabe{Datum: "2026-03-01", Beschreibung: "Y", Betrag: 10}, cookie)
+
+	if rec := do(h, "GET", "/api/admin/kassenbericht-verlauf", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("ohne Anmeldung: %d", rec.Code)
+	}
+	verlauf := decode[[]kassenberichtJahr](t, do(h, "GET", "/api/admin/kassenbericht-verlauf", nil, cookie))
+	if len(verlauf) != 2 || verlauf[0].Jahr != 2026 || verlauf[1].Jahr != 2025 {
+		t.Fatalf("Verlauf: %+v", verlauf)
+	}
+	if verlauf[1].AusgabenSumme != 40 || verlauf[0].AusgabenSumme != 10 {
+		t.Fatalf("Ausgabensummen: %+v", verlauf)
+	}
+	if verlauf[0].Anfangsbestand != verlauf[1].Kassenbestand {
+		t.Fatalf("Anfangsbestand 2026 sollte Kassenbestand 2025 sein: %+v", verlauf)
+	}
+}
+
+func TestPaechterNotiz(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Notiz", "gartengroesse": 300, "notiz": "Tochter kümmert sich, Tel. 0123"}))
+	if p.Notiz != "Tochter kümmert sich, Tel. 0123" {
+		t.Fatalf("Notiz beim Anlegen: %+v", p)
+	}
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if st.Paechter[0].Notiz == "" {
+		t.Fatal("Notiz fehlt im Zustand")
+	}
+	// zu lange Notiz wird gekürzt, nicht abgelehnt
+	long := strings.Repeat("a", 400)
+	p2 := decode[Paechter](t, do(h, "PUT", "/api/admin/paechter/"+p.ID, map[string]any{"mitgliedsnr": "1", "name": "Notiz", "gartengroesse": 300, "notiz": long}))
+	if len([]rune(p2.Notiz)) != 300 {
+		t.Fatalf("Notiz sollte auf 300 Zeichen gekürzt werden, hat %d", len([]rune(p2.Notiz)))
+	}
+}

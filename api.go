@@ -390,7 +390,28 @@ func cleanAblesung(in Ablesung) (Ablesung, error) {
 		}
 	}
 	in.Hinweis = trim(in.Hinweis, 300)
+	var err error
+	if in.WasserWechsel, err = cleanZaehlerWechsel(in.WasserWechsel); err != nil {
+		return in, err
+	}
+	if in.StromWechsel, err = cleanZaehlerWechsel(in.StromWechsel); err != nil {
+		return in, err
+	}
 	return in, nil
+}
+
+func cleanZaehlerWechsel(w *ZaehlerWechsel) (*ZaehlerWechsel, error) {
+	if w == nil {
+		return nil, nil
+	}
+	if !validNumPtr(w.AltEnde) || !validNumPtr(w.NeuStart) {
+		return nil, bad("Die Zählerstände beim Zählerwechsel müssen Zahlen ab 0 sein")
+	}
+	if w.AltEnde == nil && w.NeuStart == nil && strings.TrimSpace(w.NeueNr) == "" {
+		return nil, nil // leer eingegeben: kein Wechsel
+	}
+	w.NeueNr = trim(w.NeueNr, 40)
+	return w, nil
 }
 
 func (a *App) handleAblesung(w http.ResponseWriter, r *http.Request) {
@@ -421,6 +442,13 @@ func (a *App) handleAblesung(w http.ResponseWriter, r *http.Request) {
 	if pa == nil {
 		writeErr(w, notFound("Pächter nicht gefunden"))
 		return
+	}
+	// Bei einem Zählerwechsel wandert die neue Nummer automatisch in die Stammdaten.
+	if in.WasserWechsel != nil && in.WasserWechsel.NeueNr != "" {
+		pa.WasserzaehlerNr = in.WasserWechsel.NeueNr
+	}
+	if in.StromWechsel != nil && in.StromWechsel.NeueNr != "" {
+		pa.StromzaehlerNr = in.StromWechsel.NeueNr
 	}
 	j := a.st.ensureYear(year)
 	j.Ablesungen[id] = in
@@ -491,6 +519,7 @@ func cleanPaechter(p Paechter) (Paechter, error) {
 	p.Versand = trim(p.Versand, 30)
 	p.WasserzaehlerNr = trim(p.WasserzaehlerNr, 40)
 	p.StromzaehlerNr = trim(p.StromzaehlerNr, 40)
+	p.Notiz = trim(p.Notiz, 300)
 	if p.Mitgliedsnr == "" {
 		return p, bad("Bitte eine Mitgliedsnummer eintragen")
 	}
@@ -1090,9 +1119,11 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("PUT /api/admin/versorger", a.admin(a.handleVersorger))
 	mux.HandleFunc("PUT /api/admin/anfangsbestand", a.admin(a.handleAnfangsbestand))
 	mux.HandleFunc("GET /api/admin/export-kassenbericht", a.admin(a.handleKassenberichtExport))
+	mux.HandleFunc("GET /api/admin/kassenbericht-verlauf", a.admin(a.handleKassenberichtVerlauf))
 	mux.HandleFunc("POST /api/admin/ausgaben", a.admin(a.handleAusgabeCreate))
 	mux.HandleFunc("PUT /api/admin/ausgaben/{id}", a.admin(a.handleAusgabeUpdate))
 	mux.HandleFunc("DELETE /api/admin/ausgaben/{id}", a.admin(a.handleAusgabeDelete))
+	mux.HandleFunc("PUT /api/admin/ausgaben/{id}/geprueft", a.admin(a.handleAusgabeGeprueft))
 	mux.HandleFunc("POST /api/admin/ausgaben/{id}/beleg", a.admin(a.handleBelegUpload))
 	mux.HandleFunc("DELETE /api/admin/ausgaben/{id}/beleg", a.admin(a.handleBelegDelete))
 	mux.HandleFunc("GET /api/admin/beleg/{id}", a.admin(a.handleBelegServe))
