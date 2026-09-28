@@ -22,7 +22,8 @@ import (
 	"time"
 )
 
-const appVersion = "1.0"
+// appVersion wird beim Release-Build über -ldflags "-X main.appVersion=..." gesetzt.
+var appVersion = "1.0"
 
 // appAutor erscheint in der Fußzeile der Oberfläche und im Konsolenfenster.
 const appAutor = "Derek"
@@ -33,6 +34,10 @@ type App struct {
 
 	smu      sync.Mutex
 	sessions map[string]time.Time
+
+	// imu sorgt dafür, dass Rechnungen nacheinander ausgestellt werden
+	// (sonst könnten zwei Anfragen dieselbe Versionsnummer vergeben).
+	imu sync.Mutex
 
 	lmu       sync.Mutex
 	failures  int

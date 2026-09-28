@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -621,5 +622,65 @@ func TestImportFehlerAendertNichts(t *testing.T) {
 	app.st.mu.Unlock()
 	if n != 0 {
 		t.Fatalf("abgelehnter Import darf nichts übernehmen, %d Pächter vorhanden", n)
+	}
+}
+
+func TestRechnungenGleichzeitigErsetzen(t *testing.T) {
+	app, h := newTestApp(t)
+	rec := do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Parallel", "gartengroesse": 300})
+	id := decode[Paechter](t, rec).ID
+	abl := Ablesung{WasserVJ: fp(1), WasserAkt: fp(2), StromVJ: fp(1), StromAkt: fp(2), Stunden: fp(12)}
+	do(h, "PUT", "/api/ablesung/"+id+"?year=2025", abl)
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			do(h, "POST", "/api/invoices/issue?year=2025", issueReq{IDs: []string{id}, Replace: true})
+		}()
+	}
+	wg.Wait()
+	app.st.mu.Lock()
+	defer app.st.mu.Unlock()
+	versions, gueltig := map[int]bool{}, 0
+	for _, r := range app.st.d.Rechnungen {
+		if versions[r.Version] {
+			t.Errorf("Version %d doppelt vergeben", r.Version)
+		}
+		versions[r.Version] = true
+		if r.Status == statusGueltig {
+			gueltig++
+		}
+	}
+	if len(versions) != 5 || gueltig != 1 {
+		t.Errorf("Versionen=%v gültig=%d", versions, gueltig)
+	}
+}
+
+func TestSicherungenGetrenntAufgeraeumt(t *testing.T) {
+	dir := t.TempDir()
+	for d := 0; d < 65; d++ {
+		name := fmt.Sprintf("gartenabrechnung-daten-%s.json", time.Date(2025, 1, 1+d, 0, 0, 0, 0, time.UTC).Format("2006-01-02"))
+		_ = os.WriteFile(filepath.Join(dir, name), []byte("{}"), 0o600)
+	}
+	for i := 0; i < 70; i++ {
+		name := fmt.Sprintf("gartenabrechnung-daten-2025-06-01_%06d-vor-Import.json", i)
+		_ = os.WriteFile(filepath.Join(dir, name), []byte("{}"), 0o600)
+	}
+	pruneBackups(dir, isDailyBackup, 60)
+	daily, events := 0, 0
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if isDailyBackup(e.Name()) {
+			daily++
+		} else {
+			events++
+		}
+	}
+	if daily != 60 || events != 70 {
+		t.Errorf("Tagessicherungen=%d (erwartet 60), Ereignissicherungen=%d (erwartet 70 unverändert)", daily, events)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gartenabrechnung-daten-2025-01-01.json")); err == nil {
+		t.Error("älteste Tagessicherung hätte entfernt werden müssen")
 	}
 }

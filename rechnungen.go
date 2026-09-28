@@ -161,6 +161,8 @@ func (a *App) handleIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	year := a.yearParam(r)
+	a.imu.Lock()
+	defer a.imu.Unlock()
 
 	type job struct {
 		p   Paechter

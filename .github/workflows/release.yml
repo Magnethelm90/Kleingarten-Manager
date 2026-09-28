@@ -1,0 +1,30 @@
+name: Release
+
+# Neue Version veröffentlichen: git tag v1.1 && git push origin v1.1
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+      - name: Windows-Programm bauen
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: "0"
+        run: go build -trimpath -ldflags "-s -w -X main.appVersion=${GITHUB_REF_NAME#v}" -o Gartenabrechnung.exe .
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" Gartenabrechnung.exe --title "Gartenabrechnung $GITHUB_REF_NAME" --generate-notes

@@ -115,19 +115,39 @@ func (s *Store) dailyBackup() {
 		return // heute schon gesichert
 	}
 	_ = os.WriteFile(name, old, 0o600)
-	// nur die letzten 60 Sicherungen behalten
+	pruneBackups(dir, isDailyBackup, 60)
+}
+
+// isDailyBackup erkennt Tagessicherungen (gartenabrechnung-daten-JJJJ-MM-TT.json).
+func isDailyBackup(name string) bool {
+	d, ok := strings.CutPrefix(name, "gartenabrechnung-daten-")
+	if !ok {
+		return false
+	}
+	d, ok = strings.CutSuffix(d, ".json")
+	if !ok {
+		return false
+	}
+	_, err := parseDate(d)
+	return err == nil
+}
+
+// pruneBackups behält von den Sicherungen, auf die match passt, nur die neuesten keep.
+// Tages- und Ereignissicherungen werden getrennt gezählt, damit viele Ereignisse
+// keine Tagessicherungen verdrängen.
+func pruneBackups(dir string, match func(string) bool, keep int) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
 	var names []string
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), "gartenabrechnung-daten-") {
+		if match(e.Name()) {
 			names = append(names, e.Name())
 		}
 	}
 	sort.Strings(names)
-	for len(names) > 60 {
+	for len(names) > keep {
 		_ = os.Remove(filepath.Join(dir, names[0]))
 		names = names[1:]
 	}
@@ -145,6 +165,9 @@ func (s *Store) snapshotBackup(label string) {
 	}
 	name := fmt.Sprintf("gartenabrechnung-daten-%s-%s.json", time.Now().Format("2006-01-02_150405"), label)
 	_ = os.WriteFile(filepath.Join(dir, name), old, 0o600)
+	pruneBackups(dir, func(n string) bool {
+		return strings.HasPrefix(n, "gartenabrechnung-daten-") && strings.HasSuffix(n, ".json") && !isDailyBackup(n)
+	}, 60)
 }
 
 // yearView liefert Einstellungen, Pächter und Ablesungen für ein Jahr.

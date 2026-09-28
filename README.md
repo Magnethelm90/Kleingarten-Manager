@@ -47,6 +47,9 @@ Benötigt [Go](https://go.dev/dl/) 1.24 oder neuer.
 Bei jedem Push auf `main` und jedem Pull Request prüft GitHub Actions Formatierung, `go vet` und die Tests
 und baut die `Gartenabrechnung.exe`. Sie liegt beim jeweiligen Lauf unter »Artifacts« zum Herunterladen.
 
+Neue Version veröffentlichen: `git tag v1.1 && git push origin v1.1`. GitHub baut dann die `.exe` mit dieser
+Versionsnummer und stellt sie unter »Releases« zum Download bereit.
+
 ```
 go test ./...
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Gartenabrechnung.exe .
