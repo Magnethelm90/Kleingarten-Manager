@@ -2,7 +2,7 @@
 /* Gartenabrechnung – Oberfläche. Alle Texte aus Daten werden nur über textContent/DOM-Knoten
    eingefügt (kein innerHTML), damit Namen o. Ä. nie als Code ausgeführt werden können. */
 
-const S = { state: null, year: null, tab: 'eingabe', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null };
+const S = { state: null, year: null, tab: 'eingabe', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
 
@@ -186,8 +186,10 @@ function updateCalc(tr, res) {
   g.title = res.vollstaendig && res.gesamt < 0 ? 'Guthaben zu Gunsten des Pächters' : '';
   g.textContent = res.vollstaendig ? eur(res.gesamt) : '–';
   const inf = ((S.state && S.state.issued) || {})[tr.dataset.id];
+  const hints = res.hinweise || ((S.state && S.state.hinweise) || {})[tr.dataset.id];
   tr.querySelector('.status').replaceChildren(...[statusBadge(res),
-    inf ? h('span', { class: 'badge ' + (inf.geaendert ? 'warn' : 'neu'), title: inf.geaendert ? 'Rechnung wurde ausgestellt, danach wurden Werte geändert' : 'Rechnung ist ausgestellt' }, inf.geaendert ? '⚠ nach Ausstellung geändert' : 'ausgestellt') : null].filter(Boolean));
+    inf ? h('span', { class: 'badge ' + (inf.geaendert ? 'warn' : 'neu'), title: inf.geaendert ? 'Rechnung wurde ausgestellt, danach wurden Werte geändert' : 'Rechnung ist ausgestellt' }, inf.geaendert ? '⚠ nach Ausstellung geändert' : 'ausgestellt') : null,
+    hints && hints.length ? h('span', { class: 'badge warn', title: hints.join('\n') }, '⚠ Verbrauch prüfen') : null].filter(Boolean));
 }
 
 // Nach einer Änderung neu vom Programm holen, ob eine ausgestellte Rechnung davon betroffen ist.
@@ -237,6 +239,8 @@ async function saveRow(tr, p) {
     const res = await api('PUT', `/api/ablesung/${p.id}?year=${S.year}`, body);
     S.state.ablesungen[p.id] = body;
     S.state.results[p.id] = res;
+    S.state.hinweise = S.state.hinweise || {};
+    if (res.hinweise && res.hinweise.length) S.state.hinweise[p.id] = res.hinweise; else delete S.state.hinweise[p.id];
     updateCalc(tr, res);
     showSaved();
     if ((S.state.issued || {})[p.id]) refreshIssued(tr);
@@ -272,6 +276,23 @@ async function detailsDialog(tr, p) {
   ]);
 }
 
+function verlaufDialog(p) {
+  const hist = ((S.state && S.state.history) || {})[p.id] || [];
+  const row = (e) => h('tr', null,
+    h('td', null, e.jahr),
+    h('td', { class: 'r' }, e.wasser == null ? '–' : nfFlex.format(e.wasser) + ' m³'),
+    h('td', { class: 'r' }, e.strom == null ? '–' : nfFlex.format(e.strom) + ' kWh'),
+    h('td', { class: 'r' }, e.stunden == null ? '–' : nfFlex.format(e.stunden)),
+    h('td', { class: 'r' }, e.gesamt == null ? '–' : eur(e.gesamt)),
+    h('td', null, e.ausgestellt ? h('span', { class: 'badge ok' }, 'ausgestellt') : h('span', { class: 'badge neu' }, 'berechnet')));
+  const body = hist.length
+    ? h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, ['Jahr', 'Wasser', 'Strom', 'Stunden', 'Gesamt', ''].map((t) => h('th', null, t)))),
+        h('tbody', null, hist.map(row))))
+    : h('p', { class: 'hint' }, 'Für diesen Pächter liegen noch keine Werte aus Vorjahren vor.');
+  return modal(`Jahresverlauf – ${p.name}`, body, [{ label: 'Schließen', value: true }]);
+}
+
 function eingabeRow(p, ro) {
   const a = S.state.ablesungen[p.id] || {};
   const res = S.state.results[p.id];
@@ -297,7 +318,8 @@ function eingabeRow(p, ro) {
     h('td', { class: 'gesamt' }),
     h('td', { class: 'status mid' }),
     h('td', null, h('button', { class: 'btn small detailbtn' + (hasDetails(a) ? ' primary' : ''), disabled: ro,
-      title: 'Versicherung, Grundsteuer, Auslagen, Hinweis', onclick: () => detailsDialog(tr, p) }, 'Weitere')),
+      title: 'Versicherung, Grundsteuer, Auslagen, Hinweis', onclick: () => detailsDialog(tr, p) }, 'Weitere'), ' ',
+      h('button', { class: 'btn small', title: 'Verbrauch und Betrag der Vorjahre', onclick: () => verlaufDialog(p) }, 'Verlauf')),
   );
   updateCalc(tr, res);
   // Enter springt in die Zeile darunter (gleiche Spalte)
@@ -390,6 +412,7 @@ function viewSchnell() {
       h('div', { class: 'qfoot' },
         h('div', null, h('span', { class: 'hint' }, 'Rechnungsbetrag: '), h('b', { class: 'gesamt' }), ' ', h('span', { class: 'status' })),
         h('div', { class: 'spacer' }),
+        h('button', { class: 'btn', onclick: () => verlaufDialog(p) }, 'Verlauf'),
         h('button', { class: 'btn', onclick: () => { S.tab = 'rechnungen'; S.selInvoice = p.id; S.invTab = 'pruefen'; S.invView = 'archiv'; render(); } }, 'Rechnung ansehen'),
         h('button', { class: 'btn primary', onclick: () => { input.focus(); } }, 'Fertig – nächste Nummer')));
     updateCalc(card, st.results[p.id]);
@@ -714,9 +737,10 @@ function viewAdmin() {
   const st = S.state;
   if (st.hasPassword && !st.loggedIn) return viewLogin();
   const subs = [['paechter', 'Pächter'], ['einstellungen', 'Preise & Einstellungen'], ['jahreswechsel', 'Jahreswechsel'],
-    ['daten', 'Import / Export / Sicherung'], ['sicherheit', 'Passwort']];
+    ['kassenbericht', 'Kassenbericht'], ['daten', 'Import / Export / Sicherung'], ['sicherheit', 'Passwort']];
   const body = S.adminTab === 'paechter' ? adminPaechter() : S.adminTab === 'einstellungen' ? adminSettings()
-    : S.adminTab === 'jahreswechsel' ? adminYear() : S.adminTab === 'daten' ? adminData() : adminSecurity();
+    : S.adminTab === 'jahreswechsel' ? adminYear() : S.adminTab === 'kassenbericht' ? adminKassenbericht()
+      : S.adminTab === 'daten' ? adminData() : adminSecurity();
   return h('div', null,
     h('h2', null, 'Admin-Bereich'),
     !st.hasPassword ? h('div', { class: 'banner warn' }, 'Für den Admin-Bereich ist noch kein Passwort gesetzt – jeder kann hier Pächter und Preise ändern. ',
@@ -891,6 +915,117 @@ function adminYear() {
         if (!(await confirmBox(`Jahr ${st.currentYear} jetzt abschließen und ${st.currentYear + 1} beginnen? Das kann nicht rückgängig gemacht werden (die Sicherung vorher bleibt aber erhalten).`, 'Jahr abschließen', true))) return;
         try { await api('POST', '/api/admin/jahreswechsel'); toast('Neues Jahr gestartet', 'ok'); S.year = null; await reload(); } catch (e) { handleErr(e); }
       } }, `Jahr ${st.currentYear} abschließen`))));
+}
+
+// ---- Kassenbericht
+
+async function loadKasse(year) {
+  if (S.kasseLoading) return;
+  S.kasseLoading = true;
+  try { S.kasse = await api('GET', `/api/admin/kassenbericht?year=${year}`); } catch (e) { handleErr(e); }
+  S.kasseLoading = false;
+  render();
+}
+
+async function refreshKasse() { S.kasse = null; await loadKasse(S.kasseYear); }
+
+function ausgabeDialog(a) {
+  const isNew = !a;
+  const datum = h('input', { type: 'date', value: (a && a.datum) || todayIso() });
+  const besch = h('input', { type: 'text', maxlength: 120, value: (a && a.beschreibung) || '', autocomplete: 'off' });
+  const betrag = h('input', { type: 'text', inputmode: 'decimal', value: a ? numIn(a.betrag) : '', autocomplete: 'off' });
+  const fld = (label, input) => h('div', { class: 'field' }, h('label', null, label), input);
+  const body = h('div', { class: 'form' },
+    fld('Datum', datum), fld('Beschreibung (z. B. Rasenmäher, Kontoführungsgebühren)', besch),
+    h('div', { class: 'field' }, h('label', null, 'Betrag'), h('div', { class: 'inputunit' }, betrag, h('span', null, '€'))));
+  return modal(isNew ? 'Ausgabe erfassen' : `Ausgabe bearbeiten – ${a.beschreibung}`, body, [
+    { label: 'Abbrechen', value: false },
+    isNew ? null : { label: 'Löschen', cls: 'danger', value: 'del', action: async () => {
+      const ok = await confirmBox(`Ausgabe „${a.beschreibung}“ (${eur(a.betrag)}) wirklich löschen?`, 'Löschen', true);
+      if (!ok) return false;
+      try { await api('DELETE', `/api/admin/ausgaben/${a.id}?year=${S.kasseYear}`); } catch (e) { handleErr(e); return false; }
+    } },
+    { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+      const b = parseNum(betrag.value);
+      if (!datum.value) { toast('Bitte ein Datum angeben.', 'err'); return false; }
+      if (!besch.value.trim()) { toast('Bitte eine Beschreibung eintragen.', 'err'); return false; }
+      if (b === null || Number.isNaN(b) || b <= 0) { toast('Bitte einen Betrag größer 0 eintragen.', 'err'); return false; }
+      const data = { datum: datum.value, beschreibung: besch.value.trim(), betrag: b };
+      try {
+        if (isNew) await api('POST', `/api/admin/ausgaben?year=${S.kasseYear}`, data);
+        else await api('PUT', `/api/admin/ausgaben/${a.id}?year=${S.kasseYear}`, data);
+      } catch (e) { handleErr(e); return false; }
+    } },
+  ].filter(Boolean));
+}
+
+function adminKassenbericht() {
+  const st = S.state;
+  if (S.kasseYear == null) S.kasseYear = st.currentYear;
+  const yearSel = h('select', { onchange: (e) => { S.kasseYear = Number(e.target.value); S.kasse = null; render(); } },
+    st.years.map((y) => h('option', { value: y, selected: y === S.kasseYear }, y === st.currentYear ? `${y} (aktuell)` : `${y} (abgeschlossen)`)));
+  if (!S.kasse || S.kasse.jahr !== S.kasseYear) {
+    if (!S.kasseLoading) loadKasse(S.kasseYear);
+    return h('div', null, h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), yearSel), h('p', { class: 'hint' }, 'Wird geladen …'));
+  }
+  const k = S.kasse;
+  const card = (t, big, small, cls) => h('div', { class: 'card stat ' + (cls || '') }, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small));
+  const cards = h('div', { class: 'cards' },
+    card('Von Pächtern eingegangen', eur(k.einnahmenBezahlt), 'tatsächlich gezahlt, nach heutigem Stand', 'ok'),
+    k.guthabenAusgezahlt ? card('An Pächter ausgezahlt', eur(k.guthabenAusgezahlt), 'Guthaben') : null,
+    card('Sonstige Ausgaben', eur(k.ausgabenSumme), `${k.ausgaben.length} Buchung(en)`, k.ausgabenSumme ? 'warn' : 'ok'),
+    card('Saldo', eur(k.saldo), 'Zahlungen abzüglich Guthaben und sonstiger Ausgaben – ohne Anfangsbestand der Kasse', k.saldo >= 0 ? 'ok' : 'err'));
+
+  const tbody = h('tbody');
+  for (const x of k.ausgaben) {
+    tbody.append(h('tr', null, h('td', null, deDate(x.datum)), h('td', null, x.beschreibung), h('td', { class: 'r' }, eur(x.betrag)),
+      h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await ausgabeDialog(x); if (r !== false && r !== undefined) await refreshKasse(); } }, 'Bearbeiten'))));
+  }
+  if (!k.ausgaben.length) tbody.append(h('tr', null, h('td', { colspan: 4, class: 'empty' }, 'Noch keine sonstigen Ausgaben erfasst.')));
+
+  const vW3 = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.wasserM3), autocomplete: 'off' });
+  const vWE = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.wasserEUR), autocomplete: 'off' });
+  const vSK = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.stromKWh), autocomplete: 'off' });
+  const vSE = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.stromEUR), autocomplete: 'off' });
+  const diffRow = (label, total, vInput, unit) => {
+    const v = parseNum(vInput.value);
+    const diff = v == null || Number.isNaN(v) ? null : Math.round((v - total) * 100) / 100;
+    return h('tr', null, h('td', null, label), h('td', { class: 'r' }, unit === '€' ? eur(total) : nfFlex.format(total) + ' ' + unit),
+      h('td', null, vInput), h('td', { class: 'r' + (diff != null && Math.abs(diff) > 0.004 ? ' diffwarn' : '') },
+        diff == null ? '–' : (unit === '€' ? eur(diff) : nfFlex.format(diff) + ' ' + unit)));
+  };
+  const versorgerTable = h('table', { class: 'data' },
+    h('thead', null, h('tr', null, ['', 'Pächter gesamt', 'Versorger / Hauptzähler', 'Differenz'].map((t) => h('th', null, t)))),
+    h('tbody', null,
+      diffRow('Wasser', k.wasserVerbrauch, vW3, 'm³'), diffRow('Wasser (€)', k.summen.kostenWasser, vWE, '€'),
+      diffRow('Strom', k.stromVerbrauch, vSK, 'kWh'), diffRow('Strom (€)', k.summen.kostenEnergie, vSE, '€')));
+  const saveVersorger = async () => {
+    const vals = [vW3, vWE, vSK, vSE].map((i) => parseNum(i.value));
+    if (vals.some((v) => Number.isNaN(v) || (v !== null && v < 0))) { toast('Bitte nur Zahlen ab 0 eingeben.', 'err'); return; }
+    try {
+      S.kasse = await api('PUT', `/api/admin/versorger?year=${S.kasseYear}`, { wasserM3: vals[0], wasserEUR: vals[1], stromKWh: vals[2], stromEUR: vals[3] });
+      toast('Gespeichert', 'ok');
+      render();
+    } catch (e) { handleErr(e); }
+  };
+
+  return h('div', null,
+    h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), yearSel),
+    h('p', { class: 'hint' }, `Übersicht für ${S.kasseYear}: ${k.paechter} Pächter (${k.ausgestellt} aus ausgestellten Rechnungen, ${k.berechnet} berechnet, aber noch nicht ausgestellt${k.unvollstaendig.length ? `, ${k.unvollstaendig.length} unvollständig` : ''}). Die Beträge »sonstige Ausgaben« sind Vereinskosten neben der Pächterabrechnung, z. B. Kontoführungsgebühren, Anwaltskosten oder Anschaffungen.`),
+    k.unvollstaendig.length ? h('div', { class: 'banner warn' }, `Nicht enthalten (Angaben fehlen): ${k.unvollstaendig.join(', ')}`) : null,
+    cards,
+    h('h3', null, 'Sonstige Ausgaben der Vereinskasse'),
+    h('div', { class: 'card' },
+      h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: async () => { const r = await ausgabeDialog(null); if (r !== false && r !== undefined) await refreshKasse(); } }, '+ Ausgabe erfassen')),
+      h('div', { class: 'tablewrap', style: 'max-height:360px' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, ['Datum', 'Beschreibung', 'Betrag', ''].map((t) => h('th', null, t)))), tbody))),
+    h('h3', null, 'Vergleich mit dem Versorger'),
+    h('div', { class: 'card' },
+      h('p', { class: 'hint' }, 'Trage hier die Werte der Hauptzähler bzw. der Versorgerrechnung ein, um sie mit der Summe der Pächterabrechnung zu vergleichen. Eine größere Abweichung kann auf einen Zählerfehler, Schwund oder eine falsche Ablesung hindeuten.'),
+      h('div', { class: 'tablewrap' }, versorgerTable),
+      h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: saveVersorger }, 'Werte speichern'))),
+    h('div', { class: 'actions', style: 'margin-top:16px' },
+      h('a', { class: 'btn', href: `/api/admin/export-kassenbericht?year=${S.kasseYear}` }, `Kassenbericht ${S.kasseYear} als Excel`)));
 }
 
 // ---- Import / Export / Sicherung

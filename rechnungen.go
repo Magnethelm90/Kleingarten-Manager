@@ -318,6 +318,18 @@ func openAmount(r *Rechnung) float64 {
 	return round2(total - paid)
 }
 
+// paidAmount ist der bereits gezahlte Betrag einer Rechnung (0, solange nichts
+// vermerkt ist).
+func paidAmount(r *Rechnung) float64 {
+	if r.BezahltAm == "" {
+		return 0
+	}
+	if r.BezahltBetrag != nil {
+		return *r.BezahltBetrag
+	}
+	return absf(r.Result.Gesamt)
+}
+
 type paymentReq struct {
 	BezahltAm     string   `json:"bezahltAm"`
 	BezahltBetrag *float64 `json:"bezahltBetrag"`

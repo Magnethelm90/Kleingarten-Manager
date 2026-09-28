@@ -684,3 +684,166 @@ func TestSicherungenGetrenntAufgeraeumt(t *testing.T) {
 		t.Error("älteste Tagessicherung hätte entfernt werden müssen")
 	}
 }
+
+func TestAusgabenUndKassenbericht(t *testing.T) {
+	app, h := newTestApp(t)
+	// Admin-Passwort setzen, damit die Admin-Routen geprüft werden können
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	loginRec := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"})
+	cookie := loginRec.Result().Cookies()[0]
+
+	// ohne Anmeldung: verboten
+	if rec := do(h, "GET", "/api/admin/kassenbericht?year=2025", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Kassenbericht ohne Anmeldung: %d", rec.Code)
+	}
+	if rec := do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Rasenmäher", Betrag: 50}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Ausgabe anlegen ohne Anmeldung: %d", rec.Code)
+	}
+
+	// Pächter mit Rechnung anlegen, damit die Abrechnungssummen nicht leer sind
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Zahler", "gartengroesse": 300}, cookie))
+	abl := Ablesung{WasserVJ: fp(100), WasserAkt: fp(150), StromVJ: fp(1000), StromAkt: fp(1200), Stunden: fp(20)}
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", abl)
+	issued := decode[struct {
+		Created []string `json:"created"`
+	}](t, do(h, "POST", "/api/invoices/issue?year=2025", issueReq{}))
+	if len(issued.Created) != 1 {
+		t.Fatalf("Rechnung nicht ausgestellt: %+v", issued)
+	}
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	rechnung := st.Archive[0]
+	do(h, "PUT", "/api/payment/"+rechnung.ID, map[string]any{"bezahltAm": "2025-03-15"})
+
+	// ungültige Ausgabe: abgelehnt
+	if rec := do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "", Betrag: 50}, cookie); rec.Code != http.StatusBadRequest {
+		t.Fatalf("leere Beschreibung muss abgelehnt werden: %d", rec.Code)
+	}
+	if rec := do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "X", Betrag: 0}, cookie); rec.Code != http.StatusBadRequest {
+		t.Fatalf("Betrag 0 muss abgelehnt werden: %d", rec.Code)
+	}
+
+	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Rasenmäher", Betrag: 50}, cookie))
+	a2 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-04-01", Beschreibung: "Kettensäge Reparatur", Betrag: 20}, cookie))
+	if a1.ID == "" || a2.ID == "" || a1.ID == a2.ID {
+		t.Fatalf("Ausgaben-IDs: %+v %+v", a1, a2)
+	}
+
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if len(k.Ausgaben) != 2 || k.AusgabenSumme != 70 {
+		t.Fatalf("Kassenbericht Ausgaben: %+v", k)
+	}
+	if k.EinnahmenBezahlt != rechnung.Gesamt {
+		t.Errorf("EinnahmenBezahlt: %v erwartet %v", k.EinnahmenBezahlt, rechnung.Gesamt)
+	}
+	if k.Saldo != round2(k.EinnahmenBezahlt-k.AusgabenSumme) {
+		t.Errorf("Saldo: %v", k.Saldo)
+	}
+	if k.Ausgestellt != 1 || k.Paechter != 1 {
+		t.Errorf("Pächter-Zählung: %+v", k)
+	}
+
+	// Ausgabe ändern
+	if rec := do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"?year=2025", Ausgabe{Datum: "2025-03-02", Beschreibung: "Rasenmäher (neu)", Betrag: 60}, cookie); rec.Code != 200 {
+		t.Fatalf("Ausgabe ändern: %d %s", rec.Code, rec.Body.String())
+	}
+	k = decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if k.AusgabenSumme != 80 {
+		t.Fatalf("Summe nach Änderung: %v", k.AusgabenSumme)
+	}
+
+	// Ausgabe löschen
+	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a2.ID+"?year=2025", nil, cookie); rec.Code != 200 {
+		t.Fatalf("Ausgabe löschen: %d", rec.Code)
+	}
+	k = decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if len(k.Ausgaben) != 1 || k.AusgabenSumme != 60 {
+		t.Fatalf("Kassenbericht nach Löschen: %+v", k)
+	}
+
+	// Versorgerwerte speichern und im Bericht wiederfinden
+	vr := decode[kassenbericht](t, do(h, "PUT", "/api/admin/versorger?year=2025", Versorger{WasserM3: fp(500), StromKWh: fp(3000)}, cookie))
+	if vr.Versorger.WasserM3 == nil || *vr.Versorger.WasserM3 != 500 {
+		t.Fatalf("Versorger nicht gespeichert: %+v", vr.Versorger)
+	}
+
+	// Export als Excel funktioniert (nur mit Anmeldung)
+	if rec := do(h, "GET", "/api/admin/export-kassenbericht?year=2025", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Export ohne Anmeldung: %d", rec.Code)
+	}
+	if rec := do(h, "GET", "/api/admin/export-kassenbericht?year=2025", nil, cookie); rec.Code != 200 || rec.Body.Len() == 0 {
+		t.Fatalf("Export: %d, %d Bytes", rec.Code, rec.Body.Len())
+	}
+	_ = app
+}
+
+func TestPlausibilitaetHinweise(t *testing.T) {
+	_, h := newTestApp(t)
+	mk := func(nr string) string {
+		return decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": nr, "name": "P" + nr, "gartengroesse": 300})).ID
+	}
+	// fünf normale Pächter für einen aussagekräftigen Median
+	for i := 1; i <= 5; i++ {
+		id := mk(fmt.Sprintf("%d", i))
+		do(h, "PUT", fmt.Sprintf("/api/ablesung/%s?year=2025", id), Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(400), Stunden: fp(12)})
+	}
+	// ein Ausreißer, deutlich über dem Median
+	out := mk("9")
+	res := decode[ablesungResp](t, do(h, "PUT", "/api/ablesung/"+out+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(500), StromVJ: fp(0), StromAkt: fp(400), Stunden: fp(12)}))
+	if len(res.Hinweise) == 0 || !strings.Contains(res.Hinweise[0], "Wasser") {
+		t.Fatalf("Ausreißer ohne Vorjahr sollte auffallen: %+v", res.Hinweise)
+	}
+
+	// Jahreswechsel, dann im neuen Jahr ein Ausreißer gegenüber dem eigenen Vorjahr
+	do(h, "POST", "/api/admin/jahreswechsel", nil)
+	carried := decode[stateResp](t, do(h, "GET", "/api/state?year=2026", nil)).Ablesungen[out]
+	res2 := decode[ablesungResp](t, do(h, "PUT", "/api/ablesung/"+out+"?year=2026", Ablesung{WasserVJ: carried.WasserVJ, WasserAkt: fp(2000), StromVJ: carried.StromVJ, StromAkt: fp(900), Stunden: fp(12)}))
+	if len(res2.Hinweise) == 0 {
+		t.Fatalf("Abweichung vom eigenen Vorjahr sollte auffallen: %+v", res2.Hinweise)
+	}
+
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if len(st.Hinweise[out]) == 0 {
+		t.Errorf("Hinweis muss auch im Zustand des Jahres stehen")
+	}
+}
+
+func TestJahresverlauf(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Verlauf", "gartengroesse": 300}))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)})
+	do(h, "POST", "/api/invoices/issue?year=2025", issueReq{})
+	do(h, "POST", "/api/admin/jahreswechsel", nil)
+	carried := decode[stateResp](t, do(h, "GET", "/api/state?year=2026", nil)).Ablesungen[p.ID]
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2026", Ablesung{WasserVJ: carried.WasserVJ, WasserAkt: fp(55), StromVJ: carried.StromVJ, StromAkt: fp(340), Stunden: fp(12)})
+
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2026", nil))
+	hist := st.History[p.ID]
+	if len(hist) != 2 || hist[0].Jahr != 2026 || hist[1].Jahr != 2025 {
+		t.Fatalf("Verlauf: %+v", hist)
+	}
+	if !hist[1].Ausgestellt || hist[1].Wasser == nil || *hist[1].Wasser != 40 {
+		t.Errorf("2025 sollte aus der ausgestellten Rechnung stammen: %+v", hist[1])
+	}
+	if hist[0].Ausgestellt || hist[0].Wasser == nil || *hist[0].Wasser != 15 {
+		t.Errorf("2026 sollte aus der aktuellen Berechnung stammen: %+v", hist[0])
+	}
+}
+
+func TestKassenberichtFuerAbgeschlossenesJahr(t *testing.T) {
+	app, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+	do(h, "POST", "/api/admin/jahreswechsel", nil)
+	// jetzt ist 2025 abgeschlossen, 2026 aktuell
+	if rec := do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-11-01", Beschreibung: "Nachzügler-Rechnung", Betrag: 30}, cookie); rec.Code != 200 {
+		t.Fatalf("Ausgabe für abgeschlossenes Jahr: %d %s", rec.Code, rec.Body.String())
+	}
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if k.Jahr != 2025 || k.AusgabenSumme != 30 {
+		t.Fatalf("Kassenbericht 2025: %+v", k)
+	}
+	if rec := do(h, "GET", "/api/admin/export-kassenbericht?year=2025", nil, cookie); rec.Code != 200 {
+		t.Fatalf("Export für abgeschlossenes Jahr: %d", rec.Code)
+	}
+	_ = app
+}

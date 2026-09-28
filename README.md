@@ -16,6 +16,13 @@ Internet gesendet, es gibt keine Konten, Schlüssel oder Cloud-Anbindung.
 - **Rechnungen:** PDF pro Pächter oder alle auf einmal, ausgestellte Rechnungen werden mit den damaligen Werten
   festgeschrieben und archiviert (spätere Änderungen verändern sie nicht)
 - **Zahlungen:** bezahlt abhaken (mit Datum), Teilzahlungen, Liste der offenen Posten, Excel-Export
+- **Jahresverlauf:** Wasser-, Stromverbrauch, Arbeitsstunden und Gesamtbetrag der Vorjahre pro Pächter auf einen Blick
+- **Hinweise bei ungewöhnlichem Verbrauch:** fällt der eingetragene Wasser- oder Stromverbrauch deutlich aus dem Rahmen
+  (z. B. Tippfehler beim Zählerstand), erscheint ein Hinweis – die Eingabe wird dadurch nicht blockiert
+- **Kassenbericht** (Admin-Bereich): fasst die Abrechnung aller Pächter zusammen, vergleicht Wasser- und Stromverbrauch
+  mit der Rechnung des Versorgers, verwaltet sonstige Ausgaben der Vereinskasse (Kontoführung, Anschaffungen,
+  Reparaturen – jede Ausgabe einzeln) und zeigt den Saldo aus tatsächlich eingegangenen Zahlungen und Ausgaben; als
+  Excel-Datei für die Kassenprüfung exportierbar
 - **Jahreswechsel**, Import der Mitglieder aus Excel/CSV, Excel-Export, automatische Sicherungen
 
 ## Abrechnungsregeln (Beispielwerte, im Admin-Bereich änderbar)

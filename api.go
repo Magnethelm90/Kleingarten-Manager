@@ -317,21 +317,23 @@ func (a *App) handlePassword(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- Zustand
 
 type stateResp struct {
-	Autor       string                `json:"autor"`
-	Version     string                `json:"version"`
-	DataDir     string                `json:"dataDir"`
-	CurrentYear int                   `json:"currentYear"`
-	Years       []int                 `json:"years"`
-	Year        int                   `json:"year"`
-	ReadOnly    bool                  `json:"readOnly"`
-	Settings    Settings              `json:"settings"`
-	Paechter    []Paechter            `json:"paechter"`
-	Ablesungen  map[string]Ablesung   `json:"ablesungen"`
-	Results     map[string]Result     `json:"results"`
-	HasPassword bool                  `json:"hasPassword"`
-	LoggedIn    bool                  `json:"loggedIn"`
-	Issued      map[string]issuedInfo `json:"issued"`
-	Archive     []archiveEntry        `json:"archive"`
+	Autor       string                 `json:"autor"`
+	Version     string                 `json:"version"`
+	DataDir     string                 `json:"dataDir"`
+	CurrentYear int                    `json:"currentYear"`
+	Years       []int                  `json:"years"`
+	Year        int                    `json:"year"`
+	ReadOnly    bool                   `json:"readOnly"`
+	Settings    Settings               `json:"settings"`
+	Paechter    []Paechter             `json:"paechter"`
+	Ablesungen  map[string]Ablesung    `json:"ablesungen"`
+	Results     map[string]Result      `json:"results"`
+	HasPassword bool                   `json:"hasPassword"`
+	LoggedIn    bool                   `json:"loggedIn"`
+	Issued      map[string]issuedInfo  `json:"issued"`
+	Archive     []archiveEntry         `json:"archive"`
+	History     map[string][]histEntry `json:"history"`
+	Hinweise    map[string][]string    `json:"hinweise"`
 }
 
 func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
@@ -360,6 +362,8 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		res.Results[p.ID] = calculate(v.Settings, p, v.Ablesungen[p.ID])
 	}
 	res.Issued, res.Archive = a.st.archiveViewLocked(v)
+	res.History = a.st.historyLocked()
+	res.Hinweise = plausiLocked(v, res.Results, res.History)
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
 	a.st.mu.Unlock()
@@ -424,7 +428,27 @@ func (a *App) handleAblesung(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, 200, calculate(a.st.d.Settings, *pa, in))
+	writeJSON(w, 200, a.st.ablesungResultLocked(year, id))
+}
+
+// ablesungResp ist das Ergebnis einer Eingabe: die Berechnung und die
+// Plausibilitätshinweise zum Verbrauch.
+type ablesungResp struct {
+	Result
+	Hinweise []string `json:"hinweise"`
+}
+
+func (s *Store) ablesungResultLocked(year int, id string) ablesungResp {
+	v, _ := s.viewLocked(year)
+	results := map[string]Result{}
+	for _, p := range v.Paechter {
+		results[p.ID] = calculate(v.Settings, p, v.Ablesungen[p.ID])
+	}
+	h := plausiLocked(v, results, s.historyLocked())[id]
+	if h == nil {
+		h = []string{}
+	}
+	return ablesungResp{Result: results[id], Hinweise: h}
 }
 
 // handleZaehler ändert nur die Zählernummern eines Pächters (auch für den Vorstand ohne Admin-Rechte).
@@ -1056,6 +1080,12 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/import/preview", a.admin(a.handleImportPreview))
 	mux.HandleFunc("POST /api/admin/import/apply", a.admin(a.handleImportApply))
 	mux.HandleFunc("GET /api/admin/backup", a.admin(a.handleBackup))
+	mux.HandleFunc("GET /api/admin/kassenbericht", a.admin(a.handleKassenbericht))
+	mux.HandleFunc("PUT /api/admin/versorger", a.admin(a.handleVersorger))
+	mux.HandleFunc("GET /api/admin/export-kassenbericht", a.admin(a.handleKassenberichtExport))
+	mux.HandleFunc("POST /api/admin/ausgaben", a.admin(a.handleAusgabeCreate))
+	mux.HandleFunc("PUT /api/admin/ausgaben/{id}", a.admin(a.handleAusgabeUpdate))
+	mux.HandleFunc("DELETE /api/admin/ausgaben/{id}", a.admin(a.handleAusgabeDelete))
 	mux.Handle("/", static)
 	return a.guard(mux)
 }

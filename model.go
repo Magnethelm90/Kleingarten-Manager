@@ -77,6 +77,10 @@ type Jahr struct {
 	Settings      *Settings           `json:"settings,omitempty"`
 	Paechter      []Paechter          `json:"paechter,omitempty"`
 	Ablesungen    map[string]Ablesung `json:"ablesungen"`
+	// Versorger: Hauptzähler und Versorgerrechnung, nur für den Kassenbericht
+	Versorger *Versorger `json:"versorger,omitempty"`
+	// Ausgaben: sonstige Buchungen der Vereinskasse (Kontoführung, Anschaffungen, ...)
+	Ausgaben []Ausgabe `json:"ausgaben,omitempty"`
 }
 
 // AdminAuth speichert das Admin-Passwort nur als Hash.

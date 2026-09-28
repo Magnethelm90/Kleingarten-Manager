@@ -225,3 +225,4 @@ td.paycell { white-space: nowrap; }
 td.paycell input[type=checkbox] { width: 20px; height: 20px; vertical-align: middle; margin-right: 8px; cursor: pointer; }
 td.paycell input[type=date] { font: inherit; padding: 3px 6px; }
 td.note { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+td.diffwarn { color: var(--err); font-weight: 600; }
