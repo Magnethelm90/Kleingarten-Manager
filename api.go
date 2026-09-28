@@ -746,17 +746,31 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	// Erst alle Zeilen prüfen, damit ein Fehler in einer späteren Zeile nicht
+	// einen halben Import im Speicher zurücklässt.
+	for i, row := range in.Rows {
+		p, err := cleanPaechter(row.Paechter)
+		if err != nil {
+			writeErr(w, bad(fmt.Sprintf("Zeile %d: %s", row.Zeile, err.Error())))
+			return
+		}
+		in.Rows[i].Paechter = p
+		if row.Ablesung != nil {
+			ab, err := cleanAblesung(*row.Ablesung)
+			if err != nil {
+				writeErr(w, bad(fmt.Sprintf("Zeile %d: %s", row.Zeile, err.Error())))
+				return
+			}
+			in.Rows[i].Ablesung = &ab
+		}
+	}
 	a.st.mu.Lock()
 	defer a.st.mu.Unlock()
 	a.st.snapshotBackup("vor-Import")
 	j := a.st.ensureYear(a.st.d.Settings.Jahr)
 	added, updated := 0, 0
 	for _, row := range in.Rows {
-		p, err := cleanPaechter(row.Paechter)
-		if err != nil {
-			writeErr(w, bad(fmt.Sprintf("Zeile %d: %s", row.Zeile, err.Error())))
-			return
-		}
+		p := row.Paechter
 		idx := -1
 		for i, q := range a.st.d.Paechter {
 			if strings.EqualFold(strings.TrimSpace(q.Mitgliedsnr), p.Mitgliedsnr) {
@@ -806,11 +820,7 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 			added++
 		}
 		if row.Ablesung != nil {
-			ab, err := cleanAblesung(*row.Ablesung)
-			if err != nil {
-				writeErr(w, bad(fmt.Sprintf("Zeile %d: %s", row.Zeile, err.Error())))
-				return
-			}
+			ab := *row.Ablesung
 			cur := j.Ablesungen[p.ID]
 			// nur die Felder überschreiben, die die Datei enthielt
 			if ab.WasserVJ != nil {

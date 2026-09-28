@@ -593,3 +593,33 @@ func TestSicherheitsHeader(t *testing.T) {
 		t.Errorf("CSP erlaubt Skript-Injektion: %s", csp)
 	}
 }
+
+func TestImportFehlerAendertNichts(t *testing.T) {
+	app, h := newTestApp(t)
+	rows := []ImportRow{
+		{Zeile: 2, Paechter: Paechter{Mitgliedsnr: "1", Name: "Gültig"}},
+		{Zeile: 3, Paechter: Paechter{Mitgliedsnr: "2", Name: ""}},
+	}
+	if rec := do(h, "POST", "/api/admin/import/apply", map[string]any{"rows": rows}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("ungültige Zeile muss abgelehnt werden: %d %s", rec.Code, rec.Body.String())
+	}
+	app.st.mu.Lock()
+	n := len(app.st.d.Paechter)
+	app.st.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("abgelehnter Import darf nichts übernehmen, %d Pächter vorhanden", n)
+	}
+
+	rows[1].Paechter.Name = "Auch gültig"
+	bad := -1.0
+	rows[1].Ablesung = &Ablesung{Stunden: &bad}
+	if rec := do(h, "POST", "/api/admin/import/apply", map[string]any{"rows": rows}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("ungültige Ablesung muss abgelehnt werden: %d %s", rec.Code, rec.Body.String())
+	}
+	app.st.mu.Lock()
+	n = len(app.st.d.Paechter)
+	app.st.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("abgelehnter Import darf nichts übernehmen, %d Pächter vorhanden", n)
+	}
+}
