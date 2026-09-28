@@ -248,8 +248,12 @@ func TestPaechterVerwaltung(t *testing.T) {
 	if rec := do(h, "DELETE", "/api/admin/paechter/"+id, nil); rec.Code != 200 {
 		t.Errorf("löschen: %d", rec.Code)
 	}
-	if len(app.st.d.Paechter) != 1 {
-		t.Errorf("Pächter nach Löschen: %d", len(app.st.d.Paechter))
+	if len(app.st.d.Paechter) != 2 {
+		t.Errorf("Papierkorb: Pächter sollte nur als gelöscht markiert werden, nicht verschwinden: %d", len(app.st.d.Paechter))
+	}
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if len(st.Paechter) != 1 {
+		t.Errorf("gelöschter Pächter sollte aus der aktiven Ansicht verschwinden: %d", len(st.Paechter))
 	}
 	if rec := do(h, "DELETE", "/api/admin/paechter/"+id, nil); rec.Code != http.StatusNotFound {
 		t.Errorf("erneut löschen: %d", rec.Code)
@@ -1096,5 +1100,107 @@ func TestPaechterNotiz(t *testing.T) {
 	p2 := decode[Paechter](t, do(h, "PUT", "/api/admin/paechter/"+p.ID, map[string]any{"mitgliedsnr": "1", "name": "Notiz", "gartengroesse": 300, "notiz": long}))
 	if len([]rune(p2.Notiz)) != 300 {
 		t.Fatalf("Notiz sollte auf 300 Zeichen gekürzt werden, hat %d", len([]rune(p2.Notiz)))
+	}
+}
+
+func TestPapierkorb(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Weg", "gartengroesse": 300}))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)})
+	do(h, "DELETE", "/api/admin/paechter/"+p.ID, nil)
+
+	// Nummer ist wieder frei
+	if rec := do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Neu", "gartengroesse": 100}); rec.Code != 200 {
+		t.Fatalf("Nummer sollte nach Löschen wieder frei sein: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// im Papierkorb sichtbar
+	korb := decode[[]Paechter](t, do(h, "GET", "/api/admin/paechter-papierkorb", nil))
+	if len(korb) != 1 || korb[0].ID != p.ID {
+		t.Fatalf("Papierkorb: %+v", korb)
+	}
+	// aber nicht mehr bearbeitbar oder in Zählerständen erreichbar
+	if rec := do(h, "PUT", "/api/admin/paechter/"+p.ID, map[string]any{"mitgliedsnr": "99", "name": "Weg2", "gartengroesse": 300}); rec.Code != http.StatusNotFound {
+		t.Fatalf("Bearbeiten im Papierkorb sollte scheitern: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{Stunden: fp(1)}); rec.Code != http.StatusNotFound {
+		t.Fatalf("Ablesung im Papierkorb sollte scheitern: %d", rec.Code)
+	}
+
+	// Wiederherstellen scheitert, solange die Nummer vergeben ist
+	if rec := do(h, "POST", "/api/admin/paechter/"+p.ID+"/wiederherstellen", nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("Wiederherstellen mit doppelter Nummer sollte scheitern: %d", rec.Code)
+	}
+
+	// endgültig löschen
+	if rec := do(h, "DELETE", "/api/admin/paechter/"+p.ID+"/endgueltig", nil); rec.Code != 200 {
+		t.Fatalf("endgültig löschen: %d %s", rec.Code, rec.Body.String())
+	}
+	korb2 := decode[[]Paechter](t, do(h, "GET", "/api/admin/paechter-papierkorb", nil))
+	if len(korb2) != 0 {
+		t.Fatalf("Papierkorb sollte leer sein: %+v", korb2)
+	}
+	if rec := do(h, "DELETE", "/api/admin/paechter/"+p.ID+"/endgueltig", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("nochmal endgültig löschen: %d", rec.Code)
+	}
+}
+
+func TestPapierkorbWiederherstellen(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Weg", "gartengroesse": 300}))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)})
+	do(h, "DELETE", "/api/admin/paechter/"+p.ID, nil)
+
+	restored := decode[Paechter](t, do(h, "POST", "/api/admin/paechter/"+p.ID+"/wiederherstellen", nil))
+	if restored.Geloescht || restored.GeloeschtAm != "" {
+		t.Fatalf("wiederhergestellt: %+v", restored)
+	}
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if len(st.Paechter) != 1 {
+		t.Fatalf("Pächter sollte wieder aktiv sein: %d", len(st.Paechter))
+	}
+	if ab := st.Ablesungen[p.ID]; ab.WasserAkt == nil || *ab.WasserAkt != 40 {
+		t.Errorf("Zählerstände sollten den Papierkorb überstanden haben: %+v", ab)
+	}
+	// Mitgliedsnummer ist wieder belegt
+	if rec := do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Kollision", "gartengroesse": 50}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("Nummer sollte wieder belegt sein: %d", rec.Code)
+	}
+}
+
+func TestArchivAlleJahre(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Verlauf", "gartengroesse": 300}))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)})
+	do(h, "POST", "/api/invoices/issue?year=2025", issueReq{})
+	do(h, "POST", "/api/admin/jahreswechsel", nil)
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2026", Ablesung{WasserVJ: fp(40), WasserAkt: fp(55), StromVJ: fp(300), StromAkt: fp(340), Stunden: fp(12)})
+	do(h, "POST", "/api/invoices/issue?year=2026", issueReq{})
+
+	all := decode[[]archiveEntry](t, do(h, "GET", "/api/archiv-alle", nil))
+	if len(all) != 2 {
+		t.Fatalf("Archiv über alle Jahre: %d Einträge, erwartet 2: %+v", len(all), all)
+	}
+	if all[0].Jahr != 2026 || all[1].Jahr != 2025 {
+		t.Fatalf("Reihenfolge (neuestes zuerst): %+v", all)
+	}
+	for _, e := range all {
+		if e.Mitgliedsnr != "1" || e.Name != "Verlauf" {
+			t.Errorf("Eintrag: %+v", e)
+		}
+	}
+}
+
+func TestLetzteSicherung(t *testing.T) {
+	_, h := newTestApp(t)
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if st.LetzteSicherung != "" {
+		t.Fatalf("ganz frisch angelegt: sollte noch keine Sicherung existieren: %q", st.LetzteSicherung)
+	}
+	// eine zweite Speicherung legt die erste Tagessicherung an (die erste sichert das Vorherige, nicht sich selbst)
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "X", "gartengroesse": 100})
+	st = decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if st.LetzteSicherung == "" {
+		t.Fatal("nach der zweiten Speicherung sollte eine Tagessicherung existieren")
 	}
 }

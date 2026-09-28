@@ -2,7 +2,7 @@
 /* Gartenabrechnung – Oberfläche. Alle Texte aus Daten werden nur über textContent/DOM-Knoten
    eingefügt (kein innerHTML), damit Namen o. Ä. nie als Code ausgeführt werden können. */
 
-const S = { state: null, year: null, tab: 'eingabe', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false };
+const S = { state: null, year: null, tab: 'uebersicht', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false, nurUnvollstaendig: false, archivSuche: '', archivAlle: null, archivAlleLoading: false, papierkorb: null, papierkorbLoading: false, papierkorbOffen: false, dashKasse: null, dashKasseLoading: false };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
 
@@ -134,13 +134,13 @@ function render() {
     title: 'Abrechnungsjahr',
   }, st.years.map((y) => h('option', { value: y, selected: y === st.year },
     y === st.currentYear ? `${y} (aktuell)` : `${y} (abgeschlossen)`)));
-  if (S.tab === 'admin') yearSel.disabled = true;
+  if (S.tab === 'admin' || S.tab === 'uebersicht') yearSel.disabled = true;
 
   const tabBtn = (id, label) => h('button', {
     class: S.tab === id ? 'active' : '',
     onclick: async () => {
       S.tab = id;
-      if (id === 'admin' && S.year !== st.currentYear) S.year = st.currentYear;
+      if ((id === 'admin' || id === 'uebersicht') && S.year !== st.currentYear) S.year = st.currentYear;
       await reload();
     },
   }, label);
@@ -148,7 +148,7 @@ function render() {
   app.append(
     h('header', { class: 'top' },
       h('div', { class: 'brand' }, h('b', null, 'Gartenabrechnung'), h('span', null, st.settings.vereinName)),
-      h('nav', { class: 'tabs' }, tabBtn('eingabe', 'Zählerstände'), tabBtn('rechnungen', 'Rechnungen'), tabBtn('zahlungen', 'Zahlungen'), tabBtn('admin', 'Admin')),
+      h('nav', { class: 'tabs' }, tabBtn('uebersicht', 'Übersicht'), tabBtn('eingabe', 'Zählerstände'), tabBtn('rechnungen', 'Rechnungen'), tabBtn('zahlungen', 'Zahlungen'), tabBtn('admin', 'Admin')),
       h('div', { class: 'spacer' }),
       h('div', null, h('label', null, 'Jahr'), yearSel),
       h('button', { class: 'quit', onclick: quitApp, title: 'Programm beenden' }, 'Beenden'),
@@ -158,7 +158,7 @@ function render() {
       st.readOnly && S.tab !== 'admin' && S.tab !== 'zahlungen'
         ? h('div', { class: 'banner info' }, `Das Jahr ${st.year} ist abgeschlossen. Du kannst es ansehen und Rechnungen neu ausdrucken, aber nichts mehr ändern.`)
         : null,
-      S.tab === 'eingabe' ? viewEingabe() : S.tab === 'rechnungen' ? viewRechnungen() : S.tab === 'zahlungen' ? viewZahlungen() : viewAdmin(),
+      S.tab === 'uebersicht' ? viewUebersicht() : S.tab === 'eingabe' ? viewEingabe() : S.tab === 'rechnungen' ? viewRechnungen() : S.tab === 'zahlungen' ? viewZahlungen() : viewAdmin(),
       h('div', { class: 'footer' }, `Gartenabrechnung ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir)),
     ),
   );
@@ -167,7 +167,7 @@ function render() {
 // Erinnerung an offene Rechnungen des laufenden Jahres, direkt nach dem Öffnen sichtbar.
 // Bleibt bis zum nächsten Programmstart ausgeblendet, sobald sie einmal weggeklickt wurde.
 function openRechnungenBanner(st) {
-  if (S.remindDismissed || S.tab === 'zahlungen' || st.year !== st.currentYear) return null;
+  if (S.remindDismissed || S.tab === 'zahlungen' || S.tab === 'uebersicht' || st.year !== st.currentYear) return null;
   const all = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt >= 0);
   const open = all.filter(payIsOpen);
   if (!open.length) return null;
@@ -185,6 +185,48 @@ async function quitApp() {
   document.getElementById('app').replaceChildren(
     h('div', { class: 'center card' }, h('h2', null, 'Programm beendet'),
       h('p', null, 'Du kannst dieses Browserfenster jetzt schließen. Zum erneuten Starten die Gartenabrechnung.exe öffnen.')));
+}
+
+// ------------------------------------------------------------------ Tab: Übersicht
+
+async function loadDashKasse(year) {
+  if (S.dashKasseLoading) return;
+  S.dashKasseLoading = true;
+  try { S.dashKasse = await api('GET', `/api/admin/kassenbericht?year=${year}`); } catch (e) { S.dashKasse = false; }
+  S.dashKasseLoading = false;
+  render();
+}
+
+function viewUebersicht() {
+  const st = S.state;
+  const istAdmin = !st.hasPassword || st.loggedIn;
+  const all = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt >= 0);
+  const open = all.filter(payIsOpen);
+  const today = todayIso();
+  const overdue = open.filter((e) => e.faellig && e.faellig < today);
+  const unvollstaendig = st.paechter.filter((p) => !(st.results[p.id] && st.results[p.id].vollstaendig));
+
+  const card = (t, big, small, cls) => h('div', { class: 'card stat ' + (cls || '') }, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small));
+  const cards = [
+    card('Offene Rechnungen', String(open.length), open.length ? `${eur(open.reduce((a, e) => a + payOpen(e), 0))} · ${overdue.length} überfällig` : 'alles bezahlt', open.length ? 'warn' : 'ok'),
+    card('Unvollständige Pächter', String(unvollstaendig.length), `von ${st.paechter.length} in ${st.currentYear}`, unvollstaendig.length ? 'warn' : 'ok'),
+    card('Letzte Sicherung', st.letzteSicherung ? deDate(st.letzteSicherung) : 'noch keine', 'automatisch bei jeder Änderung', st.letzteSicherung ? 'ok' : 'warn'),
+  ];
+  if (istAdmin) {
+    if (S.dashKasse === null) { if (!S.dashKasseLoading) loadDashKasse(st.currentYear); }
+    else if (S.dashKasse !== false) {
+      cards.unshift(card('Kassenbestand', eur(S.dashKasse.kassenbestand), `Stand ${st.currentYear}`, S.dashKasse.kassenbestand >= 0 ? 'ok' : 'err'));
+    }
+  }
+
+  return h('div', null,
+    h('h2', null, `Willkommen bei der Gartenabrechnung ${st.currentYear}`),
+    h('p', { class: 'hint' }, `${st.settings.vereinName}. Kurzer Überblick über den aktuellen Stand.`),
+    h('div', { class: 'cards' }, cards),
+    h('div', { class: 'actions', style: 'margin-top:6px' },
+      h('button', { class: 'btn primary', onclick: () => { S.tab = 'eingabe'; render(); } }, 'Zu den Zählerständen'),
+      h('button', { class: 'btn', onclick: () => { S.tab = 'zahlungen'; render(); } }, 'Zu den Zahlungen'),
+      istAdmin ? h('button', { class: 'btn', onclick: () => { S.tab = 'admin'; S.adminTab = 'kassenbericht'; render(); } }, 'Zum Kassenbericht') : null));
 }
 
 // ------------------------------------------------------------------ Tab: Zählerstände
@@ -527,7 +569,8 @@ function viewTabelle() {
   const fill = () => {
     tbody.replaceChildren();
     const q = S.filter.trim().toLowerCase();
-    const shown = list.filter((p) => !q || [p.mitgliedsnr, p.name, p.gartennr].some((x) => (x || '').toLowerCase().includes(q)));
+    const shown = list.filter((p) => (!q || [p.mitgliedsnr, p.name, p.gartennr].some((x) => (x || '').toLowerCase().includes(q))) &&
+      (!S.nurUnvollstaendig || !(st.results[p.id] && st.results[p.id].vollstaendig)));
     for (const p of shown) tbody.append(eingabeRow(p, ro));
     if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 15, class: 'empty' },
       list.length ? 'Keine Treffer.' : 'Noch keine Pächter angelegt. Das geht im Bereich »Admin« → Pächter.')));
@@ -536,11 +579,14 @@ function viewTabelle() {
 
   const search = h('input', { type: 'search', placeholder: 'Suchen (Nummer oder Name)', value: S.filter, style: 'width:240px',
     oninput: (e) => { S.filter = e.target.value; fill(); } });
+  const nurOffen = h('label', { class: 'hint' },
+    h('input', { type: 'checkbox', checked: S.nurUnvollstaendig, onchange: (e) => { S.nurUnvollstaendig = e.target.checked; fill(); } }),
+    ` nur unvollständig${list.length - done ? ` (${list.length - done})` : ''}`);
 
   const th = (t, cls, extra) => h('th', { class: cls || '', ...(extra || {}) }, t);
   return h('div', null,
     h('p', { class: 'hint' }, 'Hier trägst du pro Pächter die Zählernummern, Zählerstände und Arbeitsstunden ein. Alles wird sofort gespeichert und die Beträge werden automatisch berechnet.'),
-    h('div', { class: 'toolbar' }, search,
+    h('div', { class: 'toolbar' }, search, nurOffen,
       h('span', { class: 'stat' }, `${list.length} Pächter · ${done} vollständig`),
       h('span', { class: 'saveind' }, '✓ gespeichert'),
       h('div', { class: 'spacer' }),
@@ -585,26 +631,60 @@ function viewRechnungen() {
   return h('div', null, h('h2', null, `Rechnungen ${st.year}`), sub, S.invTab === 'archiv' ? viewArchiv() : viewAusstellen());
 }
 
+async function loadArchivAlle() {
+  if (S.archivAlleLoading) return;
+  S.archivAlleLoading = true;
+  try { S.archivAlle = await api('GET', '/api/archiv-alle'); } catch (e) { handleErr(e); }
+  S.archivAlleLoading = false;
+  render();
+}
+
+function archivRow(a, mitJahr) {
+  const url = `/api/archive/${a.id}.pdf`;
+  return h('tr', { class: a.status === 'ersetzt' ? 'ersetzt' : '' },
+    mitJahr ? h('td', { class: 'mid' }, a.jahr) : null,
+    h('td', null, a.mitgliedsnr), h('td', null, a.name), h('td', { class: 'mono' }, a.nummer), h('td', { class: 'mid' }, a.version),
+    h('td', { class: 'r' }, eur(a.gesamt)), h('td', null, fmtWhen(a.ausgestellt)),
+    h('td', null, h('span', { class: 'badge ' + (a.status === 'gueltig' ? 'ok' : 'warn') }, a.status === 'gueltig' ? 'gültig' : 'ersetzt')),
+    h('td', null, h('a', { class: 'btn small', href: url, target: '_blank' }, 'Ansehen'), ' ',
+      h('a', { class: 'btn small', href: url, download: a.datei ? a.datei.split('/').pop() : 'Rechnung.pdf' }, 'Speichern')));
+}
+
 function viewArchiv() {
   const st = S.state;
-  const rows = st.archive || [];
-  const rowEls = rows.map((a) => {
-    const url = `/api/archive/${a.id}.pdf`;
-    return h('tr', { class: a.status === 'ersetzt' ? 'ersetzt' : '' },
-      h('td', null, a.mitgliedsnr), h('td', null, a.name), h('td', { class: 'mono' }, a.nummer), h('td', { class: 'mid' }, a.version),
-      h('td', { class: 'r' }, eur(a.gesamt)), h('td', null, fmtWhen(a.ausgestellt)),
-      h('td', null, h('span', { class: 'badge ' + (a.status === 'gueltig' ? 'ok' : 'warn') }, a.status === 'gueltig' ? 'gültig' : 'ersetzt')),
-      h('td', null, h('a', { class: 'btn small', href: url, target: '_blank' }, 'Ansehen'), ' ',
-        h('a', { class: 'btn small', href: url, download: a.datei ? a.datei.split('/').pop() : 'Rechnung.pdf' }, 'Speichern')));
-  });
+  const q = S.archivSuche.trim().toLowerCase();
+  const suchModus = q.length > 0;
+  if (suchModus && !S.archivAlle && !S.archivAlleLoading) loadArchivAlle();
+
+  const suchfeld = h('input', { type: 'search', placeholder: 'Suche über alle Jahre (Nummer oder Name)', value: S.archivSuche, style: 'width:300px',
+    oninput: (e) => { S.archivSuche = e.target.value; render(); } });
+
+  let body;
+  if (suchModus) {
+    if (!S.archivAlle) {
+      body = h('div', { class: 'card empty' }, 'Wird geladen …');
+    } else {
+      const treffer = S.archivAlle.filter((a) => [a.mitgliedsnr, a.name, a.nummer].some((x) => (x || '').toLowerCase().includes(q)));
+      body = treffer.length
+        ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+            h('thead', null, h('tr', null, ['Jahr', 'Nr.', 'Name', 'Rechnungs-Nr.', 'Version', 'Betrag', 'Ausgestellt am', 'Status', ''].map((t) => h('th', null, t)))),
+            h('tbody', null, treffer.map((a) => archivRow(a, true)))))
+        : h('div', { class: 'card empty' }, 'Keine Treffer.');
+    }
+  } else {
+    const rows = st.archive || [];
+    body = rows.length
+      ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+          h('thead', null, h('tr', null, ['Nr.', 'Name', 'Rechnungs-Nr.', 'Version', 'Betrag', 'Ausgestellt am', 'Status', ''].map((t) => h('th', null, t)))),
+          h('tbody', null, rows.map((a) => archivRow(a, false)))))
+      : h('div', { class: 'card empty' }, 'In diesem Jahr wurde noch keine Rechnung ausgestellt.');
+  }
+
   return h('div', null,
     h('p', { class: 'hint' }, `Hier liegen alle ausgestellten Rechnungen des Jahres ${st.year}. Sie sind mit den Preisen und Angaben von damals gespeichert und ändern sich nie, auch wenn du später Preise, Namen oder Zählerstände änderst. Wurde eine Rechnung neu ausgestellt, bleibt die alte als »ersetzt« erhalten.`),
-    h('div', { class: 'toolbar' },
+    h('div', { class: 'toolbar' }, suchfeld, h('div', { class: 'spacer' }),
       h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'rechnungen', year: st.year }).catch(handleErr) }, 'Rechnungsordner öffnen')),
-    rows.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
-      h('thead', null, h('tr', null, ['Nr.', 'Name', 'Rechnungs-Nr.', 'Version', 'Betrag', 'Ausgestellt am', 'Status', ''].map((t) => h('th', null, t)))),
-      h('tbody', null, rowEls)))
-      : h('div', { class: 'card empty' }, 'In diesem Jahr wurde noch keine Rechnung ausgestellt.'));
+    body);
 }
 
 function viewAusstellen() {
@@ -900,9 +980,9 @@ function adminPaechter() {
         h('td', null,
           h('button', { class: 'btn small', onclick: async () => { if (await paechterDialog(p)) await reload(); } }, 'Bearbeiten'), ' ',
           h('button', { class: 'btn small danger', onclick: async () => {
-            const ok = await confirmBox(`Pächter „${p.name}“ (${p.mitgliedsnr}) wirklich löschen? Die Zählerstände des laufenden Jahres gehen dabei verloren. Vorher wird automatisch eine Sicherung angelegt. Bereits ausgestellte Rechnungen bleiben im Archiv erhalten, abgeschlossene Jahre bleiben unverändert.`, 'Löschen', true);
+            const ok = await confirmBox(`Pächter „${p.name}“ (${p.mitgliedsnr}) in den Papierkorb legen? Er verschwindet aus allen Ansichten, Zählerstände und Rechnungen bleiben aber erhalten und lassen sich im Papierkorb wiederherstellen.`, 'In den Papierkorb', true);
             if (!ok) return;
-            try { await api('DELETE', `/api/admin/paechter/${p.id}`); toast('Gelöscht', 'ok'); await reload(); } catch (e) { handleErr(e); }
+            try { await api('DELETE', `/api/admin/paechter/${p.id}`); toast('In den Papierkorb gelegt', 'ok'); S.papierkorb = null; await reload(); } catch (e) { handleErr(e); }
           } }, 'Löschen'))));
     }
     if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 9, class: 'empty' }, list.length ? 'Keine Treffer.' : 'Noch keine Pächter. Lege den ersten mit »Pächter anlegen« an oder importiere eine Liste.')));
@@ -915,7 +995,48 @@ function adminPaechter() {
       h('input', { type: 'search', placeholder: 'Suchen', value: S.filter, style: 'width:220px', oninput: (e) => { S.filter = e.target.value; fill(); } }),
       h('span', { class: 'stat' }, `${list.length} Pächter`)),
     h('div', { class: 'tablewrap' }, h('table', null,
-      h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Größe', 'Umlage', 'Wasserzähler', 'Stromzähler', ''].map((x) => h('th', null, x)))), tbody)));
+      h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Größe', 'Umlage', 'Wasserzähler', 'Stromzähler', ''].map((x) => h('th', null, x)))), tbody)),
+    papierkorbCard());
+}
+
+async function loadPapierkorb() {
+  if (S.papierkorbLoading) return;
+  S.papierkorbLoading = true;
+  try { S.papierkorb = await api('GET', '/api/admin/paechter-papierkorb'); } catch (e) { handleErr(e); }
+  S.papierkorbLoading = false;
+  render();
+}
+
+function papierkorbCard() {
+  if (!S.papierkorbOffen) {
+    return h('div', { style: 'margin-top:14px' },
+      h('button', { class: 'btn', onclick: () => { S.papierkorbOffen = true; S.papierkorb = null; render(); } }, '🗑 Papierkorb'));
+  }
+  if (!S.papierkorb) {
+    if (!S.papierkorbLoading) loadPapierkorb();
+    return h('div', { class: 'card', style: 'margin-top:14px' }, h('p', { class: 'hint', style: 'margin:0' }, 'Wird geladen …'));
+  }
+  const rows = S.papierkorb.map((p) => h('tr', null,
+    h('td', null, p.mitgliedsnr), h('td', null, p.name), h('td', null, deDate(p.geloeschtAm)),
+    h('td', null,
+      h('button', { class: 'btn small primary', onclick: async () => {
+        try { await api('POST', `/api/admin/paechter/${p.id}/wiederherstellen`); toast('Wiederhergestellt', 'ok'); S.papierkorb = null; await reload(); }
+        catch (e) { handleErr(e); }
+      } }, 'Wiederherstellen'), ' ',
+      h('button', { class: 'btn small danger', onclick: async () => {
+        const ok = await confirmBox(`Pächter „${p.name}“ (${p.mitgliedsnr}) endgültig löschen? Das kann nicht rückgängig gemacht werden. Bereits ausgestellte Rechnungen bleiben im Archiv erhalten.`, 'Endgültig löschen', true);
+        if (!ok) return;
+        try { await api('DELETE', `/api/admin/paechter/${p.id}/endgueltig`); toast('Endgültig gelöscht', 'ok'); S.papierkorb = null; render(); await loadPapierkorb(); }
+        catch (e) { handleErr(e); }
+      } }, 'Endgültig löschen'))));
+  return h('div', { class: 'card', style: 'margin-top:14px' },
+    h('div', { class: 'toolbar' }, h('b', null, 'Papierkorb'), h('div', { class: 'spacer' }),
+      h('button', { class: 'btn small', onclick: () => { S.papierkorbOffen = false; render(); } }, 'Schließen')),
+    S.papierkorb.length
+      ? h('div', { class: 'tablewrap', style: 'margin-top:10px' }, h('table', { class: 'data' },
+          h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Name', 'Gelöscht am', ''].map((t) => h('th', null, t)))),
+          h('tbody', null, rows)))
+      : h('p', { class: 'hint', style: 'margin:10px 0 0' }, 'Papierkorb ist leer.'));
 }
 
 // ---- Einstellungen
@@ -991,7 +1112,7 @@ function adminYear() {
       done < total ? h('div', { class: 'banner warn', style: 'margin-top:12px' }, `Achtung: Bei ${total - done} von ${total} Pächtern fehlen noch Angaben.`) : null,
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: async () => {
         if (!(await confirmBox(`Jahr ${st.currentYear} jetzt abschließen und ${st.currentYear + 1} beginnen? Das kann nicht rückgängig gemacht werden (die Sicherung vorher bleibt aber erhalten).`, 'Jahr abschließen', true))) return;
-        try { await api('POST', '/api/admin/jahreswechsel'); toast('Neues Jahr gestartet', 'ok'); S.year = null; await reload(); } catch (e) { handleErr(e); }
+        try { await api('POST', '/api/admin/jahreswechsel'); toast('Neues Jahr gestartet', 'ok'); S.year = null; S.dashKasse = null; S.kasse = null; S.kasseVerlauf = null; await reload(); } catch (e) { handleErr(e); }
       } }, `Jahr ${st.currentYear} abschließen`))));
 }
 

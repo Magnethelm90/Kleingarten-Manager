@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -334,6 +335,8 @@ type stateResp struct {
 	Archive     []archiveEntry         `json:"archive"`
 	History     map[string][]histEntry `json:"history"`
 	Hinweise    map[string][]string    `json:"hinweise"`
+	// LetzteSicherung: JJJJ-MM-TT der jüngsten Sicherungsdatei, leer wenn keine existiert.
+	LetzteSicherung string `json:"letzteSicherung,omitempty"`
 }
 
 func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
@@ -364,6 +367,9 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	res.Issued, res.Archive = a.st.archiveViewLocked(v)
 	res.History = a.st.historyLocked()
 	res.Hinweise = plausiLocked(v, res.Results, res.History)
+	if t := a.st.letzteSicherung(); !t.IsZero() {
+		res.LetzteSicherung = t.Format("2006-01-02")
+	}
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
 	a.st.mu.Unlock()
@@ -435,7 +441,7 @@ func (a *App) handleAblesung(w http.ResponseWriter, r *http.Request) {
 	}
 	var pa *Paechter
 	for i := range a.st.d.Paechter {
-		if a.st.d.Paechter[i].ID == id {
+		if a.st.d.Paechter[i].ID == id && !a.st.d.Paechter[i].Geloescht {
 			pa = &a.st.d.Paechter[i]
 		}
 	}
@@ -493,7 +499,7 @@ func (a *App) handleZaehler(w http.ResponseWriter, r *http.Request) {
 	a.st.mu.Lock()
 	defer a.st.mu.Unlock()
 	for i := range a.st.d.Paechter {
-		if a.st.d.Paechter[i].ID == id {
+		if a.st.d.Paechter[i].ID == id && !a.st.d.Paechter[i].Geloescht {
 			a.st.d.Paechter[i].WasserzaehlerNr = trim(in.WasserzaehlerNr, 40)
 			a.st.d.Paechter[i].StromzaehlerNr = trim(in.StromzaehlerNr, 40)
 			if err := a.st.saveLocked(); err != nil {
@@ -535,9 +541,11 @@ func cleanPaechter(p Paechter) (Paechter, error) {
 	return p, nil
 }
 
+// nrTaken prüft die Mitgliedsnummer nur unter den aktiven Pächtern: die
+// Nummer eines Pächters im Papierkorb ist wieder frei.
 func (s *Store) nrTaken(nr, exceptID string) bool {
 	for _, q := range s.d.Paechter {
-		if q.ID != exceptID && strings.EqualFold(strings.TrimSpace(q.Mitgliedsnr), nr) {
+		if !q.Geloescht && q.ID != exceptID && strings.EqualFold(strings.TrimSpace(q.Mitgliedsnr), nr) {
 			return true
 		}
 	}
@@ -590,7 +598,7 @@ func (a *App) handlePaechterUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range a.st.d.Paechter {
-		if a.st.d.Paechter[i].ID == id {
+		if a.st.d.Paechter[i].ID == id && !a.st.d.Paechter[i].Geloescht {
 			in.ID = id
 			a.st.d.Paechter[i] = in
 			if err := a.st.saveLocked(); err != nil {
@@ -604,17 +612,18 @@ func (a *App) handlePaechterUpdate(w http.ResponseWriter, r *http.Request) {
 	writeErr(w, notFound("Pächter nicht gefunden"))
 }
 
+// handlePaechterDelete legt einen Pächter in den Papierkorb: er verschwindet
+// aus allen aktiven Ansichten, Zählerstände und Rechnungen bleiben aber
+// erhalten und die Löschung lässt sich rückgängig machen.
 func (a *App) handlePaechterDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	a.st.mu.Lock()
 	defer a.st.mu.Unlock()
 	for i := range a.st.d.Paechter {
-		if a.st.d.Paechter[i].ID == id {
+		if a.st.d.Paechter[i].ID == id && !a.st.d.Paechter[i].Geloescht {
 			a.st.snapshotBackup("vor-Loeschen")
-			a.st.d.Paechter = append(a.st.d.Paechter[:i], a.st.d.Paechter[i+1:]...)
-			if j := a.st.d.Jahre[yearKey(a.st.d.Settings.Jahr)]; j != nil {
-				delete(j.Ablesungen, id)
-			}
+			a.st.d.Paechter[i].Geloescht = true
+			a.st.d.Paechter[i].GeloeschtAm = time.Now().Format("2006-01-02")
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
 				return
@@ -622,6 +631,78 @@ func (a *App) handlePaechterDelete(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 200, map[string]bool{"ok": true})
 			return
 		}
+	}
+	writeErr(w, notFound("Pächter nicht gefunden"))
+}
+
+// handlePaechterPapierkorb listet die Pächter im Papierkorb, neueste Löschung zuerst.
+func (a *App) handlePaechterPapierkorb(w http.ResponseWriter, r *http.Request) {
+	a.st.mu.Lock()
+	out := []Paechter{}
+	for _, p := range a.st.d.Paechter {
+		if p.Geloescht {
+			out = append(out, p)
+		}
+	}
+	a.st.mu.Unlock()
+	sort.SliceStable(out, func(i, j int) bool { return out[i].GeloeschtAm > out[j].GeloeschtAm })
+	writeJSON(w, 200, out)
+}
+
+// handlePaechterWiederherstellen holt einen Pächter aus dem Papierkorb zurück.
+func (a *App) handlePaechterWiederherstellen(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	for i := range a.st.d.Paechter {
+		if a.st.d.Paechter[i].ID == id && a.st.d.Paechter[i].Geloescht {
+			if a.st.nrTaken(a.st.d.Paechter[i].Mitgliedsnr, id) {
+				writeErr(w, bad("Die Mitgliedsnummer "+a.st.d.Paechter[i].Mitgliedsnr+
+					" ist inzwischen an einen anderen Pächter vergeben. Bitte zuerst dort die Nummer ändern."))
+				return
+			}
+			a.st.d.Paechter[i].Geloescht = false
+			a.st.d.Paechter[i].GeloeschtAm = ""
+			if err := a.st.saveLocked(); err != nil {
+				writeErr(w, err)
+				return
+			}
+			writeJSON(w, 200, a.st.d.Paechter[i])
+			return
+		}
+	}
+	writeErr(w, notFound("Nicht im Papierkorb gefunden"))
+}
+
+// handlePaechterEndgueltig entfernt einen Pächter aus dem Papierkorb endgültig
+// (nur möglich, solange er im Papierkorb ist). Zählerstände des laufenden
+// Jahres gehen dabei verloren, abgeschlossene Jahre und das Rechnungsarchiv
+// bleiben unverändert.
+func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	for i := range a.st.d.Paechter {
+		if a.st.d.Paechter[i].ID != id {
+			continue
+		}
+		if !a.st.d.Paechter[i].Geloescht {
+			writeErr(w, bad("Nur Pächter im Papierkorb können endgültig gelöscht werden"))
+			return
+		}
+		a.st.snapshotBackup("vor-endgueltigem-Loeschen")
+		a.st.d.Paechter = append(a.st.d.Paechter[:i], a.st.d.Paechter[i+1:]...)
+		for _, j := range a.st.d.Jahre {
+			if !j.Abgeschlossen {
+				delete(j.Ablesungen, id)
+			}
+		}
+		if err := a.st.saveLocked(); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
+		return
 	}
 	writeErr(w, notFound("Pächter nicht gefunden"))
 }
@@ -792,7 +873,7 @@ func (a *App) handleImportPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	a.st.mu.Lock()
 	settings := a.st.d.Settings
-	existing := append([]Paechter(nil), a.st.d.Paechter...)
+	existing := aktivePaechter(a.st.d.Paechter)
 	a.st.mu.Unlock()
 	rows, warn, err := parseImport(table, raw, settings, existing)
 	if err != nil {
@@ -837,7 +918,7 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 		p := row.Paechter
 		idx := -1
 		for i, q := range a.st.d.Paechter {
-			if strings.EqualFold(strings.TrimSpace(q.Mitgliedsnr), p.Mitgliedsnr) {
+			if !q.Geloescht && strings.EqualFold(strings.TrimSpace(q.Mitgliedsnr), p.Mitgliedsnr) {
 				idx = i
 			}
 		}
@@ -1098,6 +1179,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/invoice/{id}", a.handleInvoice)
 	mux.HandleFunc("POST /api/invoices/issue", a.handleIssue)
 	mux.HandleFunc("GET /api/archive/{id}", a.handleArchivePDF)
+	mux.HandleFunc("GET /api/archiv-alle", a.handleArchivAlle)
 	mux.HandleFunc("PUT /api/payment/{id}", a.handlePayment)
 	mux.HandleFunc("GET /api/export-payments", a.handlePaymentsExport)
 	mux.HandleFunc("GET /api/export", a.handleExport)
@@ -1110,6 +1192,9 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/paechter", a.admin(a.handlePaechterCreate))
 	mux.HandleFunc("PUT /api/admin/paechter/{id}", a.admin(a.handlePaechterUpdate))
 	mux.HandleFunc("DELETE /api/admin/paechter/{id}", a.admin(a.handlePaechterDelete))
+	mux.HandleFunc("GET /api/admin/paechter-papierkorb", a.admin(a.handlePaechterPapierkorb))
+	mux.HandleFunc("POST /api/admin/paechter/{id}/wiederherstellen", a.admin(a.handlePaechterWiederherstellen))
+	mux.HandleFunc("DELETE /api/admin/paechter/{id}/endgueltig", a.admin(a.handlePaechterEndgueltig))
 	mux.HandleFunc("PUT /api/admin/settings", a.admin(a.handleSettings))
 	mux.HandleFunc("POST /api/admin/jahreswechsel", a.admin(a.handleNextYear))
 	mux.HandleFunc("POST /api/admin/import/preview", a.admin(a.handleImportPreview))

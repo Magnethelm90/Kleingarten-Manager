@@ -101,6 +101,26 @@ func (s *Store) saveLocked() error {
 
 func (s *Store) backupDir() string { return filepath.Join(s.dir, "Sicherungen") }
 
+// letzteSicherung liefert den Zeitpunkt der jüngsten Sicherungsdatei (leer,
+// wenn noch keine existiert). Für die Übersicht auf der Startseite.
+func (s *Store) letzteSicherung() time.Time {
+	entries, err := os.ReadDir(s.backupDir())
+	if err != nil {
+		return time.Time{}
+	}
+	var newest time.Time
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+	}
+	return newest
+}
+
 func (s *Store) dailyBackup() {
 	old, err := os.ReadFile(s.path)
 	if err != nil {
@@ -192,9 +212,22 @@ func (s *Store) viewLocked(year int) (yearView, bool) {
 		v.ReadOnly = true
 	} else {
 		v.Settings = s.d.Settings
-		v.Paechter = s.d.Paechter
+		v.Paechter = aktivePaechter(s.d.Paechter)
 	}
 	return v, true
+}
+
+// aktivePaechter blendet Pächter im Papierkorb aus dem laufenden Jahr aus.
+// Abgeschlossene Jahre sind davon nicht betroffen: sie zeigen weiterhin die
+// eingefrorene Kopie von damals, egal ob der Pächter inzwischen gelöscht wurde.
+func aktivePaechter(all []Paechter) []Paechter {
+	out := make([]Paechter, 0, len(all))
+	for _, p := range all {
+		if !p.Geloescht {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func (s *Store) years() []int {

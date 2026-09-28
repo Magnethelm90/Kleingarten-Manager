@@ -55,6 +55,13 @@ type Paechter struct {
 	StromzaehlerNr   string   `json:"stromzaehlerNr"`
 	// Notiz: interner Vermerk, erscheint nirgends auf der Rechnung.
 	Notiz string `json:"notiz,omitempty"`
+
+	// Geloescht: Papierkorb statt endgültigem Löschen. Ein gelöschter Pächter
+	// verschwindet aus allen aktiven Ansichten und Berechnungen, seine
+	// Zählerstände und Rechnungen bleiben aber erhalten und lassen sich
+	// wiederherstellen.
+	Geloescht   bool   `json:"geloescht,omitempty"`
+	GeloeschtAm string `json:"geloeschtAm,omitempty"` // JJJJ-MM-TT
 }
 
 // Ablesung sind die jährlichen Eingaben pro Pächter.
