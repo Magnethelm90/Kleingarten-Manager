@@ -101,6 +101,26 @@ func (s *Store) saveLocked() error {
 
 func (s *Store) backupDir() string { return filepath.Join(s.dir, "Sicherungen") }
 
+// letzteSicherung liefert den Zeitpunkt der jüngsten Sicherungsdatei (leer,
+// wenn noch keine existiert). Für die Übersicht auf der Startseite.
+func (s *Store) letzteSicherung() time.Time {
+	entries, err := os.ReadDir(s.backupDir())
+	if err != nil {
+		return time.Time{}
+	}
+	var newest time.Time
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+	}
+	return newest
+}
+
 func (s *Store) dailyBackup() {
 	old, err := os.ReadFile(s.path)
 	if err != nil {
@@ -115,19 +135,39 @@ func (s *Store) dailyBackup() {
 		return // heute schon gesichert
 	}
 	_ = os.WriteFile(name, old, 0o600)
-	// nur die letzten 60 Sicherungen behalten
+	pruneBackups(dir, isDailyBackup, 60)
+}
+
+// isDailyBackup erkennt Tagessicherungen (gartenabrechnung-daten-JJJJ-MM-TT.json).
+func isDailyBackup(name string) bool {
+	d, ok := strings.CutPrefix(name, "gartenabrechnung-daten-")
+	if !ok {
+		return false
+	}
+	d, ok = strings.CutSuffix(d, ".json")
+	if !ok {
+		return false
+	}
+	_, err := parseDate(d)
+	return err == nil
+}
+
+// pruneBackups behält von den Sicherungen, auf die match passt, nur die neuesten keep.
+// Tages- und Ereignissicherungen werden getrennt gezählt, damit viele Ereignisse
+// keine Tagessicherungen verdrängen.
+func pruneBackups(dir string, match func(string) bool, keep int) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
 	var names []string
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), "gartenabrechnung-daten-") {
+		if match(e.Name()) {
 			names = append(names, e.Name())
 		}
 	}
 	sort.Strings(names)
-	for len(names) > 60 {
+	for len(names) > keep {
 		_ = os.Remove(filepath.Join(dir, names[0]))
 		names = names[1:]
 	}
@@ -145,6 +185,9 @@ func (s *Store) snapshotBackup(label string) {
 	}
 	name := fmt.Sprintf("gartenabrechnung-daten-%s-%s.json", time.Now().Format("2006-01-02_150405"), label)
 	_ = os.WriteFile(filepath.Join(dir, name), old, 0o600)
+	pruneBackups(dir, func(n string) bool {
+		return strings.HasPrefix(n, "gartenabrechnung-daten-") && strings.HasSuffix(n, ".json") && !isDailyBackup(n)
+	}, 60)
 }
 
 // yearView liefert Einstellungen, Pächter und Ablesungen für ein Jahr.
@@ -169,9 +212,22 @@ func (s *Store) viewLocked(year int) (yearView, bool) {
 		v.ReadOnly = true
 	} else {
 		v.Settings = s.d.Settings
-		v.Paechter = s.d.Paechter
+		v.Paechter = aktivePaechter(s.d.Paechter)
 	}
 	return v, true
+}
+
+// aktivePaechter blendet Pächter im Papierkorb aus dem laufenden Jahr aus.
+// Abgeschlossene Jahre sind davon nicht betroffen: sie zeigen weiterhin die
+// eingefrorene Kopie von damals, egal ob der Pächter inzwischen gelöscht wurde.
+func aktivePaechter(all []Paechter) []Paechter {
+	out := make([]Paechter, 0, len(all))
+	for _, p := range all {
+		if !p.Geloescht {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func (s *Store) years() []int {

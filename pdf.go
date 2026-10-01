@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-pdf/fpdf"
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 // Eingebettete Schrift (Liberation Sans, SIL Open Font License, siehe fonts/LICENSE-Liberation.txt).
@@ -34,6 +35,21 @@ const (
 // invoiceNumber bildet die Rechnungsnummer, z. B. 100-35-95.
 func invoiceNumber(s Settings, p Paechter) string {
 	return strings.TrimSpace(s.RechnungsnrPraefix) + "-" + strings.TrimSpace(p.Mitgliedsnr)
+}
+
+// epcQRPayload baut den Text für den GiroCode (EPC069-12 / SEPA-Überweisung).
+// Banking-Apps lesen daraus IBAN, Betrag und Verwendungszweck aus und füllen
+// die Überweisung automatisch aus.
+func epcQRPayload(s Settings, p Paechter, betrag float64) string {
+	iban := strings.ReplaceAll(strings.TrimSpace(s.IBAN), " ", "")
+	bic := strings.ReplaceAll(strings.TrimSpace(s.BIC), " ", "")
+	name := trim(s.VereinName, 70)
+	lines := []string{
+		"BCD", "002", "1", "SCT", bic, name, iban,
+		fmt.Sprintf("EUR%.2f", betrag),
+		"", "", "Rechnung " + invoiceNumber(s, p),
+	}
+	return strings.Join(lines, "\n")
 }
 
 func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) {
@@ -276,10 +292,33 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 			"Bei Verspätung der Überweisung werden Mahngebühren bzw. Verzugszinsen angerechnet.",
 			germanDate(s.Zahlungsziel), s.BankName, s.IBAN, s.BIC, invoiceNumber(s, p), einspruch)
 	}
+	// GiroCode (QR-Code zum Bezahlen): die Banking-App liest IBAN, Betrag und
+	// Verwendungszweck daraus und füllt die Überweisung automatisch aus.
+	const qrSize = 24.0
+	textW := rightX - leftX
+	var qrPNG []byte
+	if !guthaben && r.Gesamt != 0 && strings.TrimSpace(s.IBAN) != "" {
+		if png, err := qrcode.Encode(epcQRPayload(s, p, absf(r.Gesamt)), qrcode.Medium, 300); err == nil {
+			qrPNG = png
+			textW = rightX - leftX - qrSize - 5
+		}
+	}
+	qrTop := y
 	font("", 10)
 	pdf.SetXY(leftX, y)
-	pdf.MultiCell(rightX-leftX, 4.7, tr(pay), "", "L", false)
-	y = pdf.GetY() + 3
+	pdf.MultiCell(textW, 4.7, tr(pay), "", "L", false)
+	y = pdf.GetY()
+	if qrPNG != nil {
+		pdf.RegisterImageOptionsReader("girocode", fpdf.ImageOptions{ImageType: "PNG"}, bytes.NewReader(qrPNG))
+		pdf.ImageOptions("girocode", rightX-qrSize, qrTop, qrSize, qrSize, false, fpdf.ImageOptions{ImageType: "PNG"}, 0, "")
+		font("", 6.5)
+		pdf.SetXY(rightX-qrSize, qrTop+qrSize+0.6)
+		pdf.CellFormat(qrSize, 3, tr("GiroCode zum Bezahlen"), "", 0, "C", false, 0, "")
+		if b := qrTop + qrSize + 3; b > y {
+			y = b
+		}
+	}
+	y += 2
 	if !guthaben && r.Gesamt != 0 {
 		text(leftX, rightX-leftX, "(*) Bei Zahlungsvorgängen bitte angeben!", "L")
 		next(rowH + 3)

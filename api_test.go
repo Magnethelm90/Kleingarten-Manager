@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -246,8 +248,12 @@ func TestPaechterVerwaltung(t *testing.T) {
 	if rec := do(h, "DELETE", "/api/admin/paechter/"+id, nil); rec.Code != 200 {
 		t.Errorf("löschen: %d", rec.Code)
 	}
-	if len(app.st.d.Paechter) != 1 {
-		t.Errorf("Pächter nach Löschen: %d", len(app.st.d.Paechter))
+	if len(app.st.d.Paechter) != 2 {
+		t.Errorf("Papierkorb: Pächter sollte nur als gelöscht markiert werden, nicht verschwinden: %d", len(app.st.d.Paechter))
+	}
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if len(st.Paechter) != 1 {
+		t.Errorf("gelöschter Pächter sollte aus der aktiven Ansicht verschwinden: %d", len(st.Paechter))
 	}
 	if rec := do(h, "DELETE", "/api/admin/paechter/"+id, nil); rec.Code != http.StatusNotFound {
 		t.Errorf("erneut löschen: %d", rec.Code)
@@ -591,5 +597,610 @@ func TestSicherheitsHeader(t *testing.T) {
 	}
 	if strings.Contains(csp, "unsafe-eval") || strings.Contains(csp, "script-src 'unsafe-inline'") {
 		t.Errorf("CSP erlaubt Skript-Injektion: %s", csp)
+	}
+}
+
+func TestImportFehlerAendertNichts(t *testing.T) {
+	app, h := newTestApp(t)
+	rows := []ImportRow{
+		{Zeile: 2, Paechter: Paechter{Mitgliedsnr: "1", Name: "Gültig"}},
+		{Zeile: 3, Paechter: Paechter{Mitgliedsnr: "2", Name: ""}},
+	}
+	if rec := do(h, "POST", "/api/admin/import/apply", map[string]any{"rows": rows}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("ungültige Zeile muss abgelehnt werden: %d %s", rec.Code, rec.Body.String())
+	}
+	app.st.mu.Lock()
+	n := len(app.st.d.Paechter)
+	app.st.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("abgelehnter Import darf nichts übernehmen, %d Pächter vorhanden", n)
+	}
+
+	rows[1].Paechter.Name = "Auch gültig"
+	bad := -1.0
+	rows[1].Ablesung = &Ablesung{Stunden: &bad}
+	if rec := do(h, "POST", "/api/admin/import/apply", map[string]any{"rows": rows}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("ungültige Ablesung muss abgelehnt werden: %d %s", rec.Code, rec.Body.String())
+	}
+	app.st.mu.Lock()
+	n = len(app.st.d.Paechter)
+	app.st.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("abgelehnter Import darf nichts übernehmen, %d Pächter vorhanden", n)
+	}
+}
+
+func TestRechnungenGleichzeitigErsetzen(t *testing.T) {
+	app, h := newTestApp(t)
+	rec := do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Parallel", "gartengroesse": 300})
+	id := decode[Paechter](t, rec).ID
+	abl := Ablesung{WasserVJ: fp(1), WasserAkt: fp(2), StromVJ: fp(1), StromAkt: fp(2), Stunden: fp(12)}
+	do(h, "PUT", "/api/ablesung/"+id+"?year=2025", abl)
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			do(h, "POST", "/api/invoices/issue?year=2025", issueReq{IDs: []string{id}, Replace: true})
+		}()
+	}
+	wg.Wait()
+	app.st.mu.Lock()
+	defer app.st.mu.Unlock()
+	versions, gueltig := map[int]bool{}, 0
+	for _, r := range app.st.d.Rechnungen {
+		if versions[r.Version] {
+			t.Errorf("Version %d doppelt vergeben", r.Version)
+		}
+		versions[r.Version] = true
+		if r.Status == statusGueltig {
+			gueltig++
+		}
+	}
+	if len(versions) != 5 || gueltig != 1 {
+		t.Errorf("Versionen=%v gültig=%d", versions, gueltig)
+	}
+}
+
+func TestSicherungenGetrenntAufgeraeumt(t *testing.T) {
+	dir := t.TempDir()
+	for d := 0; d < 65; d++ {
+		name := fmt.Sprintf("gartenabrechnung-daten-%s.json", time.Date(2025, 1, 1+d, 0, 0, 0, 0, time.UTC).Format("2006-01-02"))
+		_ = os.WriteFile(filepath.Join(dir, name), []byte("{}"), 0o600)
+	}
+	for i := 0; i < 70; i++ {
+		name := fmt.Sprintf("gartenabrechnung-daten-2025-06-01_%06d-vor-Import.json", i)
+		_ = os.WriteFile(filepath.Join(dir, name), []byte("{}"), 0o600)
+	}
+	pruneBackups(dir, isDailyBackup, 60)
+	daily, events := 0, 0
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if isDailyBackup(e.Name()) {
+			daily++
+		} else {
+			events++
+		}
+	}
+	if daily != 60 || events != 70 {
+		t.Errorf("Tagessicherungen=%d (erwartet 60), Ereignissicherungen=%d (erwartet 70 unverändert)", daily, events)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gartenabrechnung-daten-2025-01-01.json")); err == nil {
+		t.Error("älteste Tagessicherung hätte entfernt werden müssen")
+	}
+}
+
+func TestAusgabenUndKassenbericht(t *testing.T) {
+	app, h := newTestApp(t)
+	// Admin-Passwort setzen, damit die Admin-Routen geprüft werden können
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	loginRec := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"})
+	cookie := loginRec.Result().Cookies()[0]
+
+	// ohne Anmeldung: verboten
+	if rec := do(h, "GET", "/api/admin/kassenbericht?year=2025", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Kassenbericht ohne Anmeldung: %d", rec.Code)
+	}
+	if rec := do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Rasenmäher", Betrag: 50}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Ausgabe anlegen ohne Anmeldung: %d", rec.Code)
+	}
+
+	// Pächter mit Rechnung anlegen, damit die Abrechnungssummen nicht leer sind
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Zahler", "gartengroesse": 300}, cookie))
+	abl := Ablesung{WasserVJ: fp(100), WasserAkt: fp(150), StromVJ: fp(1000), StromAkt: fp(1200), Stunden: fp(20)}
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", abl)
+	issued := decode[struct {
+		Created []string `json:"created"`
+	}](t, do(h, "POST", "/api/invoices/issue?year=2025", issueReq{}))
+	if len(issued.Created) != 1 {
+		t.Fatalf("Rechnung nicht ausgestellt: %+v", issued)
+	}
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	rechnung := st.Archive[0]
+	do(h, "PUT", "/api/payment/"+rechnung.ID, map[string]any{"bezahltAm": "2025-03-15"})
+
+	// ungültige Ausgabe: abgelehnt
+	if rec := do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "", Betrag: 50}, cookie); rec.Code != http.StatusBadRequest {
+		t.Fatalf("leere Beschreibung muss abgelehnt werden: %d", rec.Code)
+	}
+	if rec := do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "X", Betrag: 0}, cookie); rec.Code != http.StatusBadRequest {
+		t.Fatalf("Betrag 0 muss abgelehnt werden: %d", rec.Code)
+	}
+
+	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Rasenmäher", Betrag: 50}, cookie))
+	a2 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-04-01", Beschreibung: "Kettensäge Reparatur", Betrag: 20}, cookie))
+	if a1.ID == "" || a2.ID == "" || a1.ID == a2.ID {
+		t.Fatalf("Ausgaben-IDs: %+v %+v", a1, a2)
+	}
+
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if len(k.Ausgaben) != 2 || k.AusgabenSumme != 70 {
+		t.Fatalf("Kassenbericht Ausgaben: %+v", k)
+	}
+	if k.EinnahmenBezahlt != rechnung.Gesamt {
+		t.Errorf("EinnahmenBezahlt: %v erwartet %v", k.EinnahmenBezahlt, rechnung.Gesamt)
+	}
+	if k.Saldo != round2(k.EinnahmenBezahlt-k.AusgabenSumme) {
+		t.Errorf("Saldo: %v", k.Saldo)
+	}
+	if k.Ausgestellt != 1 || k.Paechter != 1 {
+		t.Errorf("Pächter-Zählung: %+v", k)
+	}
+
+	// Ausgabe ändern
+	if rec := do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"?year=2025", Ausgabe{Datum: "2025-03-02", Beschreibung: "Rasenmäher (neu)", Betrag: 60}, cookie); rec.Code != 200 {
+		t.Fatalf("Ausgabe ändern: %d %s", rec.Code, rec.Body.String())
+	}
+	k = decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if k.AusgabenSumme != 80 {
+		t.Fatalf("Summe nach Änderung: %v", k.AusgabenSumme)
+	}
+
+	// Ausgabe löschen
+	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a2.ID+"?year=2025", nil, cookie); rec.Code != 200 {
+		t.Fatalf("Ausgabe löschen: %d", rec.Code)
+	}
+	k = decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if len(k.Ausgaben) != 1 || k.AusgabenSumme != 60 {
+		t.Fatalf("Kassenbericht nach Löschen: %+v", k)
+	}
+
+	// Versorgerwerte speichern und im Bericht wiederfinden
+	vr := decode[kassenbericht](t, do(h, "PUT", "/api/admin/versorger?year=2025", Versorger{WasserM3: fp(500), StromKWh: fp(3000)}, cookie))
+	if vr.Versorger.WasserM3 == nil || *vr.Versorger.WasserM3 != 500 {
+		t.Fatalf("Versorger nicht gespeichert: %+v", vr.Versorger)
+	}
+
+	// Export als Excel funktioniert (nur mit Anmeldung)
+	if rec := do(h, "GET", "/api/admin/export-kassenbericht?year=2025", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Export ohne Anmeldung: %d", rec.Code)
+	}
+	if rec := do(h, "GET", "/api/admin/export-kassenbericht?year=2025", nil, cookie); rec.Code != 200 || rec.Body.Len() == 0 {
+		t.Fatalf("Export: %d, %d Bytes", rec.Code, rec.Body.Len())
+	}
+	_ = app
+}
+
+func TestPlausibilitaetHinweise(t *testing.T) {
+	_, h := newTestApp(t)
+	mk := func(nr string) string {
+		return decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": nr, "name": "P" + nr, "gartengroesse": 300})).ID
+	}
+	// fünf normale Pächter für einen aussagekräftigen Median
+	for i := 1; i <= 5; i++ {
+		id := mk(fmt.Sprintf("%d", i))
+		do(h, "PUT", fmt.Sprintf("/api/ablesung/%s?year=2025", id), Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(400), Stunden: fp(12)})
+	}
+	// ein Ausreißer, deutlich über dem Median
+	out := mk("9")
+	res := decode[ablesungResp](t, do(h, "PUT", "/api/ablesung/"+out+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(500), StromVJ: fp(0), StromAkt: fp(400), Stunden: fp(12)}))
+	if len(res.Hinweise) == 0 || !strings.Contains(res.Hinweise[0], "Wasser") {
+		t.Fatalf("Ausreißer ohne Vorjahr sollte auffallen: %+v", res.Hinweise)
+	}
+
+	// Jahreswechsel, dann im neuen Jahr ein Ausreißer gegenüber dem eigenen Vorjahr
+	do(h, "POST", "/api/admin/jahreswechsel", nil)
+	carried := decode[stateResp](t, do(h, "GET", "/api/state?year=2026", nil)).Ablesungen[out]
+	res2 := decode[ablesungResp](t, do(h, "PUT", "/api/ablesung/"+out+"?year=2026", Ablesung{WasserVJ: carried.WasserVJ, WasserAkt: fp(2000), StromVJ: carried.StromVJ, StromAkt: fp(900), Stunden: fp(12)}))
+	if len(res2.Hinweise) == 0 {
+		t.Fatalf("Abweichung vom eigenen Vorjahr sollte auffallen: %+v", res2.Hinweise)
+	}
+
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if len(st.Hinweise[out]) == 0 {
+		t.Errorf("Hinweis muss auch im Zustand des Jahres stehen")
+	}
+}
+
+func TestJahresverlauf(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Verlauf", "gartengroesse": 300}))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)})
+	do(h, "POST", "/api/invoices/issue?year=2025", issueReq{})
+	do(h, "POST", "/api/admin/jahreswechsel", nil)
+	carried := decode[stateResp](t, do(h, "GET", "/api/state?year=2026", nil)).Ablesungen[p.ID]
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2026", Ablesung{WasserVJ: carried.WasserVJ, WasserAkt: fp(55), StromVJ: carried.StromVJ, StromAkt: fp(340), Stunden: fp(12)})
+
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2026", nil))
+	hist := st.History[p.ID]
+	if len(hist) != 2 || hist[0].Jahr != 2026 || hist[1].Jahr != 2025 {
+		t.Fatalf("Verlauf: %+v", hist)
+	}
+	if !hist[1].Ausgestellt || hist[1].Wasser == nil || *hist[1].Wasser != 40 {
+		t.Errorf("2025 sollte aus der ausgestellten Rechnung stammen: %+v", hist[1])
+	}
+	if hist[0].Ausgestellt || hist[0].Wasser == nil || *hist[0].Wasser != 15 {
+		t.Errorf("2026 sollte aus der aktuellen Berechnung stammen: %+v", hist[0])
+	}
+}
+
+func TestKassenberichtFuerAbgeschlossenesJahr(t *testing.T) {
+	app, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+	do(h, "POST", "/api/admin/jahreswechsel", nil)
+	// jetzt ist 2025 abgeschlossen, 2026 aktuell
+	if rec := do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-11-01", Beschreibung: "Nachzügler-Rechnung", Betrag: 30}, cookie); rec.Code != 200 {
+		t.Fatalf("Ausgabe für abgeschlossenes Jahr: %d %s", rec.Code, rec.Body.String())
+	}
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if k.Jahr != 2025 || k.AusgabenSumme != 30 {
+		t.Fatalf("Kassenbericht 2025: %+v", k)
+	}
+	if rec := do(h, "GET", "/api/admin/export-kassenbericht?year=2025", nil, cookie); rec.Code != 200 {
+		t.Fatalf("Export für abgeschlossenes Jahr: %d", rec.Code)
+	}
+	_ = app
+}
+
+func TestAusgabenKategorien(t *testing.T) {
+	app, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+
+	// ohne Kategorie: Standardkategorie wird gesetzt
+	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Rasenmäher", Betrag: 50}, cookie))
+	if a1.Kategorie != kategorieStandard {
+		t.Fatalf("Standardkategorie: %+v", a1)
+	}
+	do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-04-01", Beschreibung: "Kettensäge Reparatur", Kategorie: "Instandhaltung", Betrag: 20}, cookie)
+	do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-04-15", Beschreibung: "Rasenmäher Wartung", Kategorie: "Instandhaltung", Betrag: 15}, cookie)
+
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	byKat := map[string]float64{}
+	for _, kat := range k.AusgabenKategorie {
+		byKat[kat.Kategorie] = kat.Summe
+	}
+	if byKat["Instandhaltung"] != 35 || byKat[kategorieStandard] != 50 {
+		t.Fatalf("Kategorien-Summen: %+v", byKat)
+	}
+	_ = app
+}
+
+func TestAnfangsbestandUndJahreswechsel(t *testing.T) {
+	app, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+
+	// Anfangsbestand von Hand setzen
+	k := decode[kassenbericht](t, do(h, "PUT", "/api/admin/anfangsbestand?year=2025", map[string]any{"betrag": 500}, cookie))
+	if k.Anfangsbestand != 500 || k.Kassenbestand != 500 {
+		t.Fatalf("Anfangsbestand: %+v", k)
+	}
+
+	// ohne Anmeldung verboten
+	if rec := do(h, "PUT", "/api/admin/anfangsbestand?year=2025", map[string]any{"betrag": 999}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Anfangsbestand ohne Anmeldung: %d", rec.Code)
+	}
+
+	// Pächter mit bezahlter Rechnung, dazu eine Ausgabe über 50 €
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Kasse", "gartengroesse": 100}, cookie))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(0), StromVJ: fp(0), StromAkt: fp(0), Stunden: fp(12)})
+	do(h, "POST", "/api/invoices/issue?year=2025", issueReq{})
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	rechnung := st.Archive[0]
+	do(h, "PUT", "/api/payment/"+rechnung.ID, map[string]any{"bezahltAm": "2025-05-01"})
+	do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-06-01", Beschreibung: "Reparatur", Betrag: 50}, cookie)
+
+	k = decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	wantKassenbestand := round2(500 + k.EinnahmenBezahlt - k.GuthabenAusgezahlt - 50)
+	if k.Kassenbestand != wantKassenbestand {
+		t.Fatalf("Kassenbestand: %v erwartet %v (einnahmen=%v guthaben=%v)", k.Kassenbestand, wantKassenbestand, k.EinnahmenBezahlt, k.GuthabenAusgezahlt)
+	}
+
+	// Jahreswechsel: der Kassenbestand von 2025 wird zum Anfangsbestand von 2026
+	if rec := do(h, "POST", "/api/admin/jahreswechsel", nil, cookie); rec.Code != 200 {
+		t.Fatalf("Jahreswechsel: %d %s", rec.Code, rec.Body.String())
+	}
+	k2026 := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2026", nil, cookie))
+	if k2026.Anfangsbestand != k.Kassenbestand {
+		t.Fatalf("Anfangsbestand 2026: %v erwartet %v", k2026.Anfangsbestand, k.Kassenbestand)
+	}
+	if k2026.Kassenbestand != k2026.Anfangsbestand {
+		t.Fatalf("Kassenbestand 2026 ohne weitere Buchungen sollte gleich Anfangsbestand sein: %+v", k2026)
+	}
+	_ = app
+}
+
+// doMultipart schickt eine Datei als multipart/form-data an das Testprogramm.
+func doMultipart(h http.Handler, path, filename string, content []byte, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", filename)
+	if err != nil {
+		panic(err)
+	}
+	if _, err := fw.Write(content); err != nil {
+		panic(err)
+	}
+	if err := mw.Close(); err != nil {
+		panic(err)
+	}
+	req := httptest.NewRequest("POST", path, &buf)
+	req.Host = "127.0.0.1:8765"
+	req.Header.Set("X-GA-Request", "1")
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestBelegAnhang(t *testing.T) {
+	app, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Rasenmäher", Betrag: 50}, cookie))
+
+	// falscher Dateityp wird abgelehnt
+	if rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung.exe", []byte("xx"), cookie); rec.Code != http.StatusBadRequest {
+		t.Fatalf("falscher Dateityp: %d", rec.Code)
+	}
+	// ohne Anmeldung verboten
+	if rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung.pdf", []byte("%PDF-1.4 Inhalt")); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Upload ohne Anmeldung: %d", rec.Code)
+	}
+
+	rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung.pdf", []byte("%PDF-1.4 Inhalt"), cookie)
+	if rec.Code != 200 {
+		t.Fatalf("Beleg hochladen: %d %s", rec.Code, rec.Body.String())
+	}
+	updated := decode[Ausgabe](t, rec)
+	if updated.Beleg == "" {
+		t.Fatal("Beleg-Pfad fehlt nach Upload")
+	}
+	if _, err := os.Stat(filepath.Join(app.st.dir, updated.Beleg)); err != nil {
+		t.Fatalf("Beleg-Datei fehlt auf der Platte: %v", err)
+	}
+
+	// Beleg abrufen
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025", nil, cookie); rec.Code != 200 || rec.Body.String() != "%PDF-1.4 Inhalt" {
+		t.Fatalf("Beleg abrufen: %d %q", rec.Code, rec.Body.String())
+	}
+
+	// Ausgabe bearbeiten (ohne Beleg-Feld): Beleg bleibt erhalten
+	do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"?year=2025", Ausgabe{Datum: "2025-03-02", Beschreibung: "Rasenmäher (neu)", Betrag: 55}, cookie)
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if k.Ausgaben[0].Beleg == "" {
+		t.Fatalf("Beleg nach Bearbeiten verloren: %+v", k.Ausgaben[0])
+	}
+
+	// Beleg löschen
+	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", nil, cookie); rec.Code != 200 {
+		t.Fatalf("Beleg löschen: %d", rec.Code)
+	}
+	if _, err := os.Stat(filepath.Join(app.st.dir, updated.Beleg)); err == nil {
+		t.Fatal("Beleg-Datei sollte nach dem Löschen weg sein")
+	}
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025", nil, cookie); rec.Code != http.StatusNotFound {
+		t.Fatalf("Beleg nach Löschen sollte fehlen: %d", rec.Code)
+	}
+
+	// Ausgabe löschen: verbleibender Beleg wird mit entfernt
+	rec2 := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung2.jpg", []byte("bild"), cookie)
+	updated2 := decode[Ausgabe](t, rec2)
+	do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"?year=2025", nil, cookie)
+	if _, err := os.Stat(filepath.Join(app.st.dir, updated2.Beleg)); err == nil {
+		t.Fatal("Beleg-Datei sollte nach dem Löschen der Ausgabe weg sein")
+	}
+}
+
+func TestZaehlerwechselAPI(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Wechsel", "gartengroesse": 300, "wasserzaehlerNr": "ALT-1"}))
+	ab := Ablesung{
+		WasserVJ: fp(100), WasserAkt: fp(30), StromVJ: fp(0), StromAkt: fp(0), Stunden: fp(12),
+		WasserWechsel: &ZaehlerWechsel{AltEnde: fp(180), NeueNr: "NEU-2", NeuStart: fp(0)},
+	}
+	res := decode[ablesungResp](t, do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", ab))
+	if res.WasserVerbrauch == nil || *res.WasserVerbrauch != 110 {
+		t.Fatalf("Verbrauch: %+v", res.WasserVerbrauch)
+	}
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	var updated Paechter
+	for _, x := range st.Paechter {
+		if x.ID == p.ID {
+			updated = x
+		}
+	}
+	if updated.WasserzaehlerNr != "NEU-2" {
+		t.Fatalf("Zählernummer wurde nicht übernommen: %+v", updated)
+	}
+}
+
+func TestKassenpruefer(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Rasenmäher", Betrag: 50}, cookie))
+	if a1.Geprueft {
+		t.Fatal("neue Ausgabe sollte nicht geprüft sein")
+	}
+
+	if rec := do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"/geprueft?year=2025", map[string]any{"geprueft": true}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("ohne Anmeldung: %d", rec.Code)
+	}
+	updated := decode[Ausgabe](t, do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"/geprueft?year=2025", map[string]any{"geprueft": true}, cookie))
+	if !updated.Geprueft || updated.GeprueftAm == "" {
+		t.Fatalf("geprüft nicht gesetzt: %+v", updated)
+	}
+
+	// Bearbeiten der Ausgabe darf den Haken nicht zurücksetzen
+	do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"?year=2025", Ausgabe{Datum: "2025-03-02", Beschreibung: "Rasenmäher (neu)", Betrag: 55}, cookie)
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if !k.Ausgaben[0].Geprueft {
+		t.Fatalf("Haken nach Bearbeiten verloren: %+v", k.Ausgaben[0])
+	}
+
+	// Zurücknehmen
+	back := decode[Ausgabe](t, do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"/geprueft?year=2025", map[string]any{"geprueft": false}, cookie))
+	if back.Geprueft || back.GeprueftAm != "" {
+		t.Fatalf("Haken nicht zurückgenommen: %+v", back)
+	}
+}
+
+func TestKassenberichtVerlauf(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+	do(h, "PUT", "/api/admin/anfangsbestand?year=2025", map[string]any{"betrag": 200}, cookie)
+	do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "X", Betrag: 40}, cookie)
+	do(h, "POST", "/api/admin/jahreswechsel", nil, cookie)
+	do(h, "POST", "/api/admin/ausgaben?year=2026", Ausgabe{Datum: "2026-03-01", Beschreibung: "Y", Betrag: 10}, cookie)
+
+	if rec := do(h, "GET", "/api/admin/kassenbericht-verlauf", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("ohne Anmeldung: %d", rec.Code)
+	}
+	verlauf := decode[[]kassenberichtJahr](t, do(h, "GET", "/api/admin/kassenbericht-verlauf", nil, cookie))
+	if len(verlauf) != 2 || verlauf[0].Jahr != 2026 || verlauf[1].Jahr != 2025 {
+		t.Fatalf("Verlauf: %+v", verlauf)
+	}
+	if verlauf[1].AusgabenSumme != 40 || verlauf[0].AusgabenSumme != 10 {
+		t.Fatalf("Ausgabensummen: %+v", verlauf)
+	}
+	if verlauf[0].Anfangsbestand != verlauf[1].Kassenbestand {
+		t.Fatalf("Anfangsbestand 2026 sollte Kassenbestand 2025 sein: %+v", verlauf)
+	}
+}
+
+func TestPaechterNotiz(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Notiz", "gartengroesse": 300, "notiz": "Tochter kümmert sich, Tel. 0123"}))
+	if p.Notiz != "Tochter kümmert sich, Tel. 0123" {
+		t.Fatalf("Notiz beim Anlegen: %+v", p)
+	}
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if st.Paechter[0].Notiz == "" {
+		t.Fatal("Notiz fehlt im Zustand")
+	}
+	// zu lange Notiz wird gekürzt, nicht abgelehnt
+	long := strings.Repeat("a", 400)
+	p2 := decode[Paechter](t, do(h, "PUT", "/api/admin/paechter/"+p.ID, map[string]any{"mitgliedsnr": "1", "name": "Notiz", "gartengroesse": 300, "notiz": long}))
+	if len([]rune(p2.Notiz)) != 300 {
+		t.Fatalf("Notiz sollte auf 300 Zeichen gekürzt werden, hat %d", len([]rune(p2.Notiz)))
+	}
+}
+
+func TestPapierkorb(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Weg", "gartengroesse": 300}))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)})
+	do(h, "DELETE", "/api/admin/paechter/"+p.ID, nil)
+
+	// Nummer ist wieder frei
+	if rec := do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Neu", "gartengroesse": 100}); rec.Code != 200 {
+		t.Fatalf("Nummer sollte nach Löschen wieder frei sein: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// im Papierkorb sichtbar
+	korb := decode[[]Paechter](t, do(h, "GET", "/api/admin/paechter-papierkorb", nil))
+	if len(korb) != 1 || korb[0].ID != p.ID {
+		t.Fatalf("Papierkorb: %+v", korb)
+	}
+	// aber nicht mehr bearbeitbar oder in Zählerständen erreichbar
+	if rec := do(h, "PUT", "/api/admin/paechter/"+p.ID, map[string]any{"mitgliedsnr": "99", "name": "Weg2", "gartengroesse": 300}); rec.Code != http.StatusNotFound {
+		t.Fatalf("Bearbeiten im Papierkorb sollte scheitern: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{Stunden: fp(1)}); rec.Code != http.StatusNotFound {
+		t.Fatalf("Ablesung im Papierkorb sollte scheitern: %d", rec.Code)
+	}
+
+	// Wiederherstellen scheitert, solange die Nummer vergeben ist
+	if rec := do(h, "POST", "/api/admin/paechter/"+p.ID+"/wiederherstellen", nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("Wiederherstellen mit doppelter Nummer sollte scheitern: %d", rec.Code)
+	}
+
+	// endgültig löschen
+	if rec := do(h, "DELETE", "/api/admin/paechter/"+p.ID+"/endgueltig", nil); rec.Code != 200 {
+		t.Fatalf("endgültig löschen: %d %s", rec.Code, rec.Body.String())
+	}
+	korb2 := decode[[]Paechter](t, do(h, "GET", "/api/admin/paechter-papierkorb", nil))
+	if len(korb2) != 0 {
+		t.Fatalf("Papierkorb sollte leer sein: %+v", korb2)
+	}
+	if rec := do(h, "DELETE", "/api/admin/paechter/"+p.ID+"/endgueltig", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("nochmal endgültig löschen: %d", rec.Code)
+	}
+}
+
+func TestPapierkorbWiederherstellen(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Weg", "gartengroesse": 300}))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)})
+	do(h, "DELETE", "/api/admin/paechter/"+p.ID, nil)
+
+	restored := decode[Paechter](t, do(h, "POST", "/api/admin/paechter/"+p.ID+"/wiederherstellen", nil))
+	if restored.Geloescht || restored.GeloeschtAm != "" {
+		t.Fatalf("wiederhergestellt: %+v", restored)
+	}
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if len(st.Paechter) != 1 {
+		t.Fatalf("Pächter sollte wieder aktiv sein: %d", len(st.Paechter))
+	}
+	if ab := st.Ablesungen[p.ID]; ab.WasserAkt == nil || *ab.WasserAkt != 40 {
+		t.Errorf("Zählerstände sollten den Papierkorb überstanden haben: %+v", ab)
+	}
+	// Mitgliedsnummer ist wieder belegt
+	if rec := do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Kollision", "gartengroesse": 50}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("Nummer sollte wieder belegt sein: %d", rec.Code)
+	}
+}
+
+func TestArchivAlleJahre(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Verlauf", "gartengroesse": 300}))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)})
+	do(h, "POST", "/api/invoices/issue?year=2025", issueReq{})
+	do(h, "POST", "/api/admin/jahreswechsel", nil)
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2026", Ablesung{WasserVJ: fp(40), WasserAkt: fp(55), StromVJ: fp(300), StromAkt: fp(340), Stunden: fp(12)})
+	do(h, "POST", "/api/invoices/issue?year=2026", issueReq{})
+
+	all := decode[[]archiveEntry](t, do(h, "GET", "/api/archiv-alle", nil))
+	if len(all) != 2 {
+		t.Fatalf("Archiv über alle Jahre: %d Einträge, erwartet 2: %+v", len(all), all)
+	}
+	if all[0].Jahr != 2026 || all[1].Jahr != 2025 {
+		t.Fatalf("Reihenfolge (neuestes zuerst): %+v", all)
+	}
+	for _, e := range all {
+		if e.Mitgliedsnr != "1" || e.Name != "Verlauf" {
+			t.Errorf("Eintrag: %+v", e)
+		}
+	}
+}
+
+func TestLetzteSicherung(t *testing.T) {
+	_, h := newTestApp(t)
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if st.LetzteSicherung != "" {
+		t.Fatalf("ganz frisch angelegt: sollte noch keine Sicherung existieren: %q", st.LetzteSicherung)
+	}
+	// eine zweite Speicherung legt die erste Tagessicherung an (die erste sichert das Vorherige, nicht sich selbst)
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "X", "gartengroesse": 100})
+	st = decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if st.LetzteSicherung == "" {
+		t.Fatal("nach der zweiten Speicherung sollte eine Tagessicherung existieren")
 	}
 }

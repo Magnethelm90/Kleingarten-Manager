@@ -2,7 +2,7 @@
 /* Gartenabrechnung – Oberfläche. Alle Texte aus Daten werden nur über textContent/DOM-Knoten
    eingefügt (kein innerHTML), damit Namen o. Ä. nie als Code ausgeführt werden können. */
 
-const S = { state: null, year: null, tab: 'eingabe', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null };
+const S = { state: null, year: null, tab: 'uebersicht', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false, nurUnvollstaendig: false, archivSuche: '', archivAlle: null, archivAlleLoading: false, papierkorb: null, papierkorbLoading: false, papierkorbOffen: false, dashKasse: null, dashKasseLoading: false };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
 
@@ -134,13 +134,13 @@ function render() {
     title: 'Abrechnungsjahr',
   }, st.years.map((y) => h('option', { value: y, selected: y === st.year },
     y === st.currentYear ? `${y} (aktuell)` : `${y} (abgeschlossen)`)));
-  if (S.tab === 'admin') yearSel.disabled = true;
+  if (S.tab === 'admin' || S.tab === 'uebersicht') yearSel.disabled = true;
 
   const tabBtn = (id, label) => h('button', {
     class: S.tab === id ? 'active' : '',
     onclick: async () => {
       S.tab = id;
-      if (id === 'admin' && S.year !== st.currentYear) S.year = st.currentYear;
+      if ((id === 'admin' || id === 'uebersicht') && S.year !== st.currentYear) S.year = st.currentYear;
       await reload();
     },
   }, label);
@@ -148,19 +148,35 @@ function render() {
   app.append(
     h('header', { class: 'top' },
       h('div', { class: 'brand' }, h('b', null, 'Gartenabrechnung'), h('span', null, st.settings.vereinName)),
-      h('nav', { class: 'tabs' }, tabBtn('eingabe', 'Zählerstände'), tabBtn('rechnungen', 'Rechnungen'), tabBtn('zahlungen', 'Zahlungen'), tabBtn('admin', 'Admin')),
+      h('nav', { class: 'tabs' }, tabBtn('uebersicht', 'Übersicht'), tabBtn('eingabe', 'Zählerstände'), tabBtn('rechnungen', 'Rechnungen'), tabBtn('zahlungen', 'Zahlungen'), tabBtn('admin', 'Admin')),
       h('div', { class: 'spacer' }),
       h('div', null, h('label', null, 'Jahr'), yearSel),
       h('button', { class: 'quit', onclick: quitApp, title: 'Programm beenden' }, 'Beenden'),
     ),
     h('main', null,
+      openRechnungenBanner(st),
       st.readOnly && S.tab !== 'admin' && S.tab !== 'zahlungen'
         ? h('div', { class: 'banner info' }, `Das Jahr ${st.year} ist abgeschlossen. Du kannst es ansehen und Rechnungen neu ausdrucken, aber nichts mehr ändern.`)
         : null,
-      S.tab === 'eingabe' ? viewEingabe() : S.tab === 'rechnungen' ? viewRechnungen() : S.tab === 'zahlungen' ? viewZahlungen() : viewAdmin(),
+      S.tab === 'uebersicht' ? viewUebersicht() : S.tab === 'eingabe' ? viewEingabe() : S.tab === 'rechnungen' ? viewRechnungen() : S.tab === 'zahlungen' ? viewZahlungen() : viewAdmin(),
       h('div', { class: 'footer' }, `Gartenabrechnung ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir)),
     ),
   );
+}
+
+// Erinnerung an offene Rechnungen des laufenden Jahres, direkt nach dem Öffnen sichtbar.
+// Bleibt bis zum nächsten Programmstart ausgeblendet, sobald sie einmal weggeklickt wurde.
+function openRechnungenBanner(st) {
+  if (S.remindDismissed || S.tab === 'zahlungen' || S.tab === 'uebersicht' || st.year !== st.currentYear) return null;
+  const all = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt >= 0);
+  const open = all.filter(payIsOpen);
+  if (!open.length) return null;
+  const today = todayIso();
+  const overdue = open.filter((e) => e.faellig && e.faellig < today);
+  return h('div', { class: 'banner warn' },
+    `${open.length} Rechnung${open.length === 1 ? '' : 'en'} ${st.year} noch offen${overdue.length ? `, davon ${overdue.length} überfällig` : ''}.`, ' ',
+    h('button', { class: 'btn small', onclick: () => { S.tab = 'zahlungen'; render(); } }, 'Zu den Zahlungen'), ' ',
+    h('button', { class: 'btn small', onclick: () => { S.remindDismissed = true; render(); } }, 'Ausblenden'));
 }
 
 async function quitApp() {
@@ -169,6 +185,48 @@ async function quitApp() {
   document.getElementById('app').replaceChildren(
     h('div', { class: 'center card' }, h('h2', null, 'Programm beendet'),
       h('p', null, 'Du kannst dieses Browserfenster jetzt schließen. Zum erneuten Starten die Gartenabrechnung.exe öffnen.')));
+}
+
+// ------------------------------------------------------------------ Tab: Übersicht
+
+async function loadDashKasse(year) {
+  if (S.dashKasseLoading) return;
+  S.dashKasseLoading = true;
+  try { S.dashKasse = await api('GET', `/api/admin/kassenbericht?year=${year}`); } catch (e) { S.dashKasse = false; }
+  S.dashKasseLoading = false;
+  render();
+}
+
+function viewUebersicht() {
+  const st = S.state;
+  const istAdmin = !st.hasPassword || st.loggedIn;
+  const all = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt >= 0);
+  const open = all.filter(payIsOpen);
+  const today = todayIso();
+  const overdue = open.filter((e) => e.faellig && e.faellig < today);
+  const unvollstaendig = st.paechter.filter((p) => !(st.results[p.id] && st.results[p.id].vollstaendig));
+
+  const card = (t, big, small, cls) => h('div', { class: 'card stat ' + (cls || '') }, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small));
+  const cards = [
+    card('Offene Rechnungen', String(open.length), open.length ? `${eur(open.reduce((a, e) => a + payOpen(e), 0))} · ${overdue.length} überfällig` : 'alles bezahlt', open.length ? 'warn' : 'ok'),
+    card('Unvollständige Pächter', String(unvollstaendig.length), `von ${st.paechter.length} in ${st.currentYear}`, unvollstaendig.length ? 'warn' : 'ok'),
+    card('Letzte Sicherung', st.letzteSicherung ? deDate(st.letzteSicherung) : 'noch keine', 'automatisch bei jeder Änderung', st.letzteSicherung ? 'ok' : 'warn'),
+  ];
+  if (istAdmin) {
+    if (S.dashKasse === null) { if (!S.dashKasseLoading) loadDashKasse(st.currentYear); }
+    else if (S.dashKasse !== false) {
+      cards.unshift(card('Kassenbestand', eur(S.dashKasse.kassenbestand), `Stand ${st.currentYear}`, S.dashKasse.kassenbestand >= 0 ? 'ok' : 'err'));
+    }
+  }
+
+  return h('div', null,
+    h('h2', null, `Willkommen bei der Gartenabrechnung ${st.currentYear}`),
+    h('p', { class: 'hint' }, `${st.settings.vereinName}. Kurzer Überblick über den aktuellen Stand.`),
+    h('div', { class: 'cards' }, cards),
+    h('div', { class: 'actions', style: 'margin-top:6px' },
+      h('button', { class: 'btn primary', onclick: () => { S.tab = 'eingabe'; render(); } }, 'Zu den Zählerständen'),
+      h('button', { class: 'btn', onclick: () => { S.tab = 'zahlungen'; render(); } }, 'Zu den Zahlungen'),
+      istAdmin ? h('button', { class: 'btn', onclick: () => { S.tab = 'admin'; S.adminTab = 'kassenbericht'; render(); } }, 'Zum Kassenbericht') : null));
 }
 
 // ------------------------------------------------------------------ Tab: Zählerstände
@@ -186,8 +244,10 @@ function updateCalc(tr, res) {
   g.title = res.vollstaendig && res.gesamt < 0 ? 'Guthaben zu Gunsten des Pächters' : '';
   g.textContent = res.vollstaendig ? eur(res.gesamt) : '–';
   const inf = ((S.state && S.state.issued) || {})[tr.dataset.id];
+  const hints = res.hinweise || ((S.state && S.state.hinweise) || {})[tr.dataset.id];
   tr.querySelector('.status').replaceChildren(...[statusBadge(res),
-    inf ? h('span', { class: 'badge ' + (inf.geaendert ? 'warn' : 'neu'), title: inf.geaendert ? 'Rechnung wurde ausgestellt, danach wurden Werte geändert' : 'Rechnung ist ausgestellt' }, inf.geaendert ? '⚠ nach Ausstellung geändert' : 'ausgestellt') : null].filter(Boolean));
+    inf ? h('span', { class: 'badge ' + (inf.geaendert ? 'warn' : 'neu'), title: inf.geaendert ? 'Rechnung wurde ausgestellt, danach wurden Werte geändert' : 'Rechnung ist ausgestellt' }, inf.geaendert ? '⚠ nach Ausstellung geändert' : 'ausgestellt') : null,
+    hints && hints.length ? h('span', { class: 'badge warn', title: hints.join('\n') }, '⚠ Verbrauch prüfen') : null].filter(Boolean));
 }
 
 // Nach einer Änderung neu vom Programm holen, ob eine ausgestellte Rechnung davon betroffen ist.
@@ -237,10 +297,64 @@ async function saveRow(tr, p) {
     const res = await api('PUT', `/api/ablesung/${p.id}?year=${S.year}`, body);
     S.state.ablesungen[p.id] = body;
     S.state.results[p.id] = res;
+    S.state.hinweise = S.state.hinweise || {};
+    if (res.hinweise && res.hinweise.length) S.state.hinweise[p.id] = res.hinweise; else delete S.state.hinweise[p.id];
     updateCalc(tr, res);
     showSaved();
     if ((S.state.issued || {})[p.id]) refreshIssued(tr);
   } catch (e) { handleErr(e); }
+}
+
+const WECHSEL_WASSER = { wKey: 'wasserWechsel', field: 'wz', label: 'Wasser', unit: 'm³' };
+const WECHSEL_STROM = { wKey: 'stromWechsel', field: 'sz', label: 'Strom', unit: 'kWh' };
+
+async function saveWechsel(tr, p, art, wechsel) {
+  const cur = S.state.ablesungen[p.id] || {};
+  const body = { ...cur, [art.wKey]: wechsel };
+  const res = await api('PUT', `/api/ablesung/${p.id}?year=${S.year}`, body);
+  S.state.ablesungen[p.id] = body;
+  S.state.results[p.id] = res;
+  S.state.hinweise = S.state.hinweise || {};
+  if (res.hinweise && res.hinweise.length) S.state.hinweise[p.id] = res.hinweise; else delete S.state.hinweise[p.id];
+  updateCalc(tr, res);
+  if (wechsel && wechsel.neueNr) {
+    p[art.field === 'wz' ? 'wasserzaehlerNr' : 'stromzaehlerNr'] = wechsel.neueNr;
+    const el = tr.querySelector(`[data-f="${art.field}"]`);
+    if (el) el.value = wechsel.neueNr;
+  }
+  const btn = tr.querySelector(`.wechselbtn-${art.field}`);
+  if (btn) btn.classList.toggle('primary', !!wechsel);
+  showSaved();
+  if ((S.state.issued || {})[p.id]) refreshIssued(tr);
+}
+
+function wechselDialog(tr, p, art) {
+  const cur = S.state.ablesungen[p.id] || {};
+  const w = cur[art.wKey] || {};
+  const altEnde = h('input', { type: 'text', inputmode: 'decimal', value: numIn(w.altEnde), autocomplete: 'off' });
+  const neueNr = h('input', { type: 'text', maxlength: 40, value: w.neueNr || '', autocomplete: 'off' });
+  const neuStart = h('input', { type: 'text', inputmode: 'decimal', value: numIn(w.neuStart != null ? w.neuStart : 0), autocomplete: 'off' });
+  const fld = (label, input, unit) => h('div', { class: 'field' }, h('label', null, label),
+    unit ? h('div', { class: 'inputunit' }, input, h('span', null, unit)) : input);
+  const hatWechsel = w.altEnde != null || w.neuStart != null || (w.neueNr && w.neueNr.trim());
+  const body = h('div', { class: 'form' },
+    h('div', { class: 'field wide' }, h('p', { class: 'hint', style: 'margin:0' },
+      `Wurde der ${art.label}zähler unterjährig getauscht? Endstand des alten und Anfangsstand des neuen Zählers eintragen – der Verbrauch wird dann aus beiden Zählern zusammengerechnet. Leer lassen, wenn es keinen Wechsel gab.`)),
+    fld('Endstand alter Zähler', altEnde, art.unit), fld('Neue Zähler-Nr.', neueNr), fld('Anfangsstand neuer Zähler', neuStart, art.unit));
+  return modal(`Zählerwechsel ${art.label} – ${p.name}`, body, [
+    { label: 'Abbrechen', value: false },
+    hatWechsel ? { label: 'Wechsel entfernen', cls: 'danger', value: 'del', action: async () => {
+      try { await saveWechsel(tr, p, art, null); } catch (e) { handleErr(e); return false; }
+    } } : null,
+    { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+      const ae = parseNum(altEnde.value), ns = parseNum(neuStart.value);
+      const leer = ae === null && ns === null && !neueNr.value.trim();
+      if (!leer && (Number.isNaN(ae) || (ae !== null && ae < 0) || Number.isNaN(ns) || (ns !== null && ns < 0))) {
+        toast('Bitte gültige Zahlen ab 0 eingeben.', 'err'); return false;
+      }
+      try { await saveWechsel(tr, p, art, leer ? null : { altEnde: ae, neueNr: neueNr.value.trim(), neuStart: ns }); } catch (e) { handleErr(e); return false; }
+    } },
+  ].filter(Boolean));
 }
 
 async function detailsDialog(tr, p) {
@@ -272,6 +386,23 @@ async function detailsDialog(tr, p) {
   ]);
 }
 
+function verlaufDialog(p) {
+  const hist = ((S.state && S.state.history) || {})[p.id] || [];
+  const row = (e) => h('tr', null,
+    h('td', null, e.jahr),
+    h('td', { class: 'r' }, e.wasser == null ? '–' : nfFlex.format(e.wasser) + ' m³'),
+    h('td', { class: 'r' }, e.strom == null ? '–' : nfFlex.format(e.strom) + ' kWh'),
+    h('td', { class: 'r' }, e.stunden == null ? '–' : nfFlex.format(e.stunden)),
+    h('td', { class: 'r' }, e.gesamt == null ? '–' : eur(e.gesamt)),
+    h('td', null, e.ausgestellt ? h('span', { class: 'badge ok' }, 'ausgestellt') : h('span', { class: 'badge neu' }, 'berechnet')));
+  const body = hist.length
+    ? h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, ['Jahr', 'Wasser', 'Strom', 'Stunden', 'Gesamt', ''].map((t) => h('th', null, t)))),
+        h('tbody', null, hist.map(row))))
+    : h('p', { class: 'hint' }, 'Für diesen Pächter liegen noch keine Werte aus Vorjahren vor.');
+  return modal(`Jahresverlauf – ${p.name}`, body, [{ label: 'Schließen', value: true }]);
+}
+
 function eingabeRow(p, ro) {
   const a = S.state.ablesungen[p.id] || {};
   const res = S.state.results[p.id];
@@ -284,11 +415,13 @@ function eingabeRow(p, ro) {
   tr.append(
     h('td', { class: 'sticky s1' }, p.mitgliedsnr),
     h('td', { class: 'name sticky s2', title: p.name }, p.name),
-    h('td', null, txt('wz', p.wasserzaehlerNr)),
+    h('td', null, txt('wz', p.wasserzaehlerNr), ro ? null : h('button', { class: 'btn small wechselbtn-wz' + (a.wasserWechsel ? ' primary' : ''),
+      title: 'Unterjähriger Zählerwechsel', onclick: () => wechselDialog(tr, p, WECHSEL_WASSER) }, '⇄')),
     h('td', null, inp('wasserVJ', a.wasserVJ)),
     h('td', null, inp('wasserAkt', a.wasserAkt)),
     h('td', { class: 'calc c-wv' }),
-    h('td', null, txt('sz', p.stromzaehlerNr)),
+    h('td', null, txt('sz', p.stromzaehlerNr), ro ? null : h('button', { class: 'btn small wechselbtn-sz' + (a.stromWechsel ? ' primary' : ''),
+      title: 'Unterjähriger Zählerwechsel', onclick: () => wechselDialog(tr, p, WECHSEL_STROM) }, '⇄')),
     h('td', null, inp('stromVJ', a.stromVJ)),
     h('td', null, inp('stromAkt', a.stromAkt)),
     h('td', { class: 'calc c-sv' }),
@@ -297,7 +430,8 @@ function eingabeRow(p, ro) {
     h('td', { class: 'gesamt' }),
     h('td', { class: 'status mid' }),
     h('td', null, h('button', { class: 'btn small detailbtn' + (hasDetails(a) ? ' primary' : ''), disabled: ro,
-      title: 'Versicherung, Grundsteuer, Auslagen, Hinweis', onclick: () => detailsDialog(tr, p) }, 'Weitere')),
+      title: 'Versicherung, Grundsteuer, Auslagen, Hinweis', onclick: () => detailsDialog(tr, p) }, 'Weitere'), ' ',
+      h('button', { class: 'btn small', title: 'Verbrauch und Betrag der Vorjahre', onclick: () => verlaufDialog(p) }, 'Verlauf')),
   );
   updateCalc(tr, res);
   // Enter springt in die Zeile darunter (gleiche Spalte)
@@ -374,14 +508,19 @@ function viewSchnell() {
     const info = (k, v) => v ? h('span', { class: 'chip' }, h('i', null, k + ' '), v) : null;
     card.append(
       h('div', { class: 'qhead' },
-        h('div', null, h('h3', null, `${p.mitgliedsnr} – ${p.name}`), h('div', { class: 'hint' }, [p.strasse, p.plzOrt].filter(Boolean).join(', '))),
+        h('div', null, h('h3', null, `${p.mitgliedsnr} – ${p.name}`), h('div', { class: 'hint' }, [p.strasse, p.plzOrt].filter(Boolean).join(', ')),
+          p.notiz ? h('div', { class: 'hint', style: 'margin-top:2px' }, '📝 ', p.notiz) : null),
         h('div', { class: 'chips' }, info('Garten', p.gartennr), info('Größe', p.gartengroesse ? `${nfFlex.format(p.gartengroesse)} m²` : ''),
           info('Umlage', eur(p.umlageAbweichend != null ? p.umlageAbweichend : st.settings.umlageStandard)))),
       h('div', { class: 'qgrid' },
-        h('fieldset', null, h('legend', null, 'Wasser'), fld('Zähler-Nr.', txt('wz', p.wasserzaehlerNr)),
+        h('fieldset', null, h('legend', null, 'Wasser'),
+          fld('Zähler-Nr.', h('div', null, txt('wz', p.wasserzaehlerNr), ro ? null : h('button', { class: 'btn small wechselbtn-wz' + (a.wasserWechsel ? ' primary' : ''),
+            title: 'Unterjähriger Zählerwechsel', onclick: () => wechselDialog(card, p, WECHSEL_WASSER) }, '⇄'))),
           fld('Stand Vorjahr', inp('wasserVJ', a.wasserVJ), 'm³'), fld('Stand aktuell', inp('wasserAkt', a.wasserAkt), 'm³'),
           h('div', { class: 'field' }, h('label', null, 'Verbrauch'), h('div', { class: 'calc c-wv qv' }))),
-        h('fieldset', null, h('legend', null, 'Strom'), fld('Zähler-Nr.', txt('sz', p.stromzaehlerNr)),
+        h('fieldset', null, h('legend', null, 'Strom'),
+          fld('Zähler-Nr.', h('div', null, txt('sz', p.stromzaehlerNr), ro ? null : h('button', { class: 'btn small wechselbtn-sz' + (a.stromWechsel ? ' primary' : ''),
+            title: 'Unterjähriger Zählerwechsel', onclick: () => wechselDialog(card, p, WECHSEL_STROM) }, '⇄'))),
           fld('Stand Vorjahr', inp('stromVJ', a.stromVJ), 'kWh'), fld('Stand aktuell', inp('stromAkt', a.stromAkt), 'kWh'),
           h('div', { class: 'field' }, h('label', null, 'Verbrauch'), h('div', { class: 'calc c-sv qv' }))),
         h('fieldset', null, h('legend', null, 'Sonstiges'), fld('Arbeitsstunden', inp('stunden', a.stunden, 'small'), 'h'),
@@ -390,6 +529,7 @@ function viewSchnell() {
       h('div', { class: 'qfoot' },
         h('div', null, h('span', { class: 'hint' }, 'Rechnungsbetrag: '), h('b', { class: 'gesamt' }), ' ', h('span', { class: 'status' })),
         h('div', { class: 'spacer' }),
+        h('button', { class: 'btn', onclick: () => verlaufDialog(p) }, 'Verlauf'),
         h('button', { class: 'btn', onclick: () => { S.tab = 'rechnungen'; S.selInvoice = p.id; S.invTab = 'pruefen'; S.invView = 'archiv'; render(); } }, 'Rechnung ansehen'),
         h('button', { class: 'btn primary', onclick: () => { input.focus(); } }, 'Fertig – nächste Nummer')));
     updateCalc(card, st.results[p.id]);
@@ -429,7 +569,8 @@ function viewTabelle() {
   const fill = () => {
     tbody.replaceChildren();
     const q = S.filter.trim().toLowerCase();
-    const shown = list.filter((p) => !q || [p.mitgliedsnr, p.name, p.gartennr].some((x) => (x || '').toLowerCase().includes(q)));
+    const shown = list.filter((p) => (!q || [p.mitgliedsnr, p.name, p.gartennr].some((x) => (x || '').toLowerCase().includes(q))) &&
+      (!S.nurUnvollstaendig || !(st.results[p.id] && st.results[p.id].vollstaendig)));
     for (const p of shown) tbody.append(eingabeRow(p, ro));
     if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 15, class: 'empty' },
       list.length ? 'Keine Treffer.' : 'Noch keine Pächter angelegt. Das geht im Bereich »Admin« → Pächter.')));
@@ -438,11 +579,14 @@ function viewTabelle() {
 
   const search = h('input', { type: 'search', placeholder: 'Suchen (Nummer oder Name)', value: S.filter, style: 'width:240px',
     oninput: (e) => { S.filter = e.target.value; fill(); } });
+  const nurOffen = h('label', { class: 'hint' },
+    h('input', { type: 'checkbox', checked: S.nurUnvollstaendig, onchange: (e) => { S.nurUnvollstaendig = e.target.checked; fill(); } }),
+    ` nur unvollständig${list.length - done ? ` (${list.length - done})` : ''}`);
 
   const th = (t, cls, extra) => h('th', { class: cls || '', ...(extra || {}) }, t);
   return h('div', null,
     h('p', { class: 'hint' }, 'Hier trägst du pro Pächter die Zählernummern, Zählerstände und Arbeitsstunden ein. Alles wird sofort gespeichert und die Beträge werden automatisch berechnet.'),
-    h('div', { class: 'toolbar' }, search,
+    h('div', { class: 'toolbar' }, search, nurOffen,
       h('span', { class: 'stat' }, `${list.length} Pächter · ${done} vollständig`),
       h('span', { class: 'saveind' }, '✓ gespeichert'),
       h('div', { class: 'spacer' }),
@@ -487,26 +631,60 @@ function viewRechnungen() {
   return h('div', null, h('h2', null, `Rechnungen ${st.year}`), sub, S.invTab === 'archiv' ? viewArchiv() : viewAusstellen());
 }
 
+async function loadArchivAlle() {
+  if (S.archivAlleLoading) return;
+  S.archivAlleLoading = true;
+  try { S.archivAlle = await api('GET', '/api/archiv-alle'); } catch (e) { handleErr(e); }
+  S.archivAlleLoading = false;
+  render();
+}
+
+function archivRow(a, mitJahr) {
+  const url = `/api/archive/${a.id}.pdf`;
+  return h('tr', { class: a.status === 'ersetzt' ? 'ersetzt' : '' },
+    mitJahr ? h('td', { class: 'mid' }, a.jahr) : null,
+    h('td', null, a.mitgliedsnr), h('td', null, a.name), h('td', { class: 'mono' }, a.nummer), h('td', { class: 'mid' }, a.version),
+    h('td', { class: 'r' }, eur(a.gesamt)), h('td', null, fmtWhen(a.ausgestellt)),
+    h('td', null, h('span', { class: 'badge ' + (a.status === 'gueltig' ? 'ok' : 'warn') }, a.status === 'gueltig' ? 'gültig' : 'ersetzt')),
+    h('td', null, h('a', { class: 'btn small', href: url, target: '_blank' }, 'Ansehen'), ' ',
+      h('a', { class: 'btn small', href: url, download: a.datei ? a.datei.split('/').pop() : 'Rechnung.pdf' }, 'Speichern')));
+}
+
 function viewArchiv() {
   const st = S.state;
-  const rows = st.archive || [];
-  const rowEls = rows.map((a) => {
-    const url = `/api/archive/${a.id}.pdf`;
-    return h('tr', { class: a.status === 'ersetzt' ? 'ersetzt' : '' },
-      h('td', null, a.mitgliedsnr), h('td', null, a.name), h('td', { class: 'mono' }, a.nummer), h('td', { class: 'mid' }, a.version),
-      h('td', { class: 'r' }, eur(a.gesamt)), h('td', null, fmtWhen(a.ausgestellt)),
-      h('td', null, h('span', { class: 'badge ' + (a.status === 'gueltig' ? 'ok' : 'warn') }, a.status === 'gueltig' ? 'gültig' : 'ersetzt')),
-      h('td', null, h('a', { class: 'btn small', href: url, target: '_blank' }, 'Ansehen'), ' ',
-        h('a', { class: 'btn small', href: url, download: a.datei ? a.datei.split('/').pop() : 'Rechnung.pdf' }, 'Speichern')));
-  });
+  const q = S.archivSuche.trim().toLowerCase();
+  const suchModus = q.length > 0;
+  if (suchModus && !S.archivAlle && !S.archivAlleLoading) loadArchivAlle();
+
+  const suchfeld = h('input', { type: 'search', placeholder: 'Suche über alle Jahre (Nummer oder Name)', value: S.archivSuche, style: 'width:300px',
+    oninput: (e) => { S.archivSuche = e.target.value; render(); } });
+
+  let body;
+  if (suchModus) {
+    if (!S.archivAlle) {
+      body = h('div', { class: 'card empty' }, 'Wird geladen …');
+    } else {
+      const treffer = S.archivAlle.filter((a) => [a.mitgliedsnr, a.name, a.nummer].some((x) => (x || '').toLowerCase().includes(q)));
+      body = treffer.length
+        ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+            h('thead', null, h('tr', null, ['Jahr', 'Nr.', 'Name', 'Rechnungs-Nr.', 'Version', 'Betrag', 'Ausgestellt am', 'Status', ''].map((t) => h('th', null, t)))),
+            h('tbody', null, treffer.map((a) => archivRow(a, true)))))
+        : h('div', { class: 'card empty' }, 'Keine Treffer.');
+    }
+  } else {
+    const rows = st.archive || [];
+    body = rows.length
+      ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+          h('thead', null, h('tr', null, ['Nr.', 'Name', 'Rechnungs-Nr.', 'Version', 'Betrag', 'Ausgestellt am', 'Status', ''].map((t) => h('th', null, t)))),
+          h('tbody', null, rows.map((a) => archivRow(a, false)))))
+      : h('div', { class: 'card empty' }, 'In diesem Jahr wurde noch keine Rechnung ausgestellt.');
+  }
+
   return h('div', null,
     h('p', { class: 'hint' }, `Hier liegen alle ausgestellten Rechnungen des Jahres ${st.year}. Sie sind mit den Preisen und Angaben von damals gespeichert und ändern sich nie, auch wenn du später Preise, Namen oder Zählerstände änderst. Wurde eine Rechnung neu ausgestellt, bleibt die alte als »ersetzt« erhalten.`),
-    h('div', { class: 'toolbar' },
+    h('div', { class: 'toolbar' }, suchfeld, h('div', { class: 'spacer' }),
       h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'rechnungen', year: st.year }).catch(handleErr) }, 'Rechnungsordner öffnen')),
-    rows.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
-      h('thead', null, h('tr', null, ['Nr.', 'Name', 'Rechnungs-Nr.', 'Version', 'Betrag', 'Ausgestellt am', 'Status', ''].map((t) => h('th', null, t)))),
-      h('tbody', null, rowEls)))
-      : h('div', { class: 'card empty' }, 'In diesem Jahr wurde noch keine Rechnung ausgestellt.'));
+    body);
 }
 
 function viewAusstellen() {
@@ -714,9 +892,10 @@ function viewAdmin() {
   const st = S.state;
   if (st.hasPassword && !st.loggedIn) return viewLogin();
   const subs = [['paechter', 'Pächter'], ['einstellungen', 'Preise & Einstellungen'], ['jahreswechsel', 'Jahreswechsel'],
-    ['daten', 'Import / Export / Sicherung'], ['sicherheit', 'Passwort']];
+    ['kassenbericht', 'Kassenbericht'], ['daten', 'Import / Export / Sicherung'], ['sicherheit', 'Passwort']];
   const body = S.adminTab === 'paechter' ? adminPaechter() : S.adminTab === 'einstellungen' ? adminSettings()
-    : S.adminTab === 'jahreswechsel' ? adminYear() : S.adminTab === 'daten' ? adminData() : adminSecurity();
+    : S.adminTab === 'jahreswechsel' ? adminYear() : S.adminTab === 'kassenbericht' ? adminKassenbericht()
+      : S.adminTab === 'daten' ? adminData() : adminSecurity();
   return h('div', null,
     h('h2', null, 'Admin-Bereich'),
     !st.hasPassword ? h('div', { class: 'banner warn' }, 'Für den Admin-Bereich ist noch kein Passwort gesetzt – jeder kann hier Pächter und Preise ändern. ',
@@ -743,7 +922,7 @@ function viewLogin() {
 function paechterDialog(p) {
   const isNew = !p;
   const cur = p || { mitgliedsnr: '', gartennr: '', anrede: 'Herr', name: '', strasse: '', plzOrt: S.state.settings.ort, versand: 'Emailsendung',
-    gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '' };
+    gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '', notiz: '' };
   const t = (val, ph) => h('input', { type: 'text', value: val || '', placeholder: ph || '', maxlength: 100, autocomplete: 'off' });
   const f = {
     mitgliedsnr: t(cur.mitgliedsnr, 'z. B. 35-95'), gartennr: t(cur.gartennr, 'z. B. 35'),
@@ -753,6 +932,7 @@ function paechterDialog(p) {
     gartengroesse: t(numIn(cur.gartengroesse || null)),
     umlage: t(numIn(cur.umlageAbweichend), `leer = Standard (${eur(S.state.settings.umlageStandard)})`),
     wz: t(cur.wasserzaehlerNr), sz: t(cur.stromzaehlerNr),
+    notiz: h('textarea', { rows: 2, maxlength: 300, style: 'width:100%' }, cur.notiz || ''),
   };
   f.gartengroesse.setAttribute('inputmode', 'decimal');
   f.umlage.setAttribute('inputmode', 'decimal');
@@ -762,7 +942,8 @@ function paechterDialog(p) {
     fld('Name *', f.name), fld('Straße und Hausnummer', f.strasse), fld('PLZ und Ort', f.plzOrt),
     fld('Versandart', f.versand, 'Steht oben rechts auf der Rechnung'),
     fld('Gartengröße in m² *', f.gartengroesse), fld('Umlage abweichend in €', f.umlage, 'Nur ausfüllen, wenn dieser Pächter nicht die Standard-Umlage zahlt'),
-    fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz));
+    fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz),
+    fld('Notiz (nur intern, steht nicht auf der Rechnung)', f.notiz, null, true));
   return modal(isNew ? 'Pächter anlegen' : `Pächter bearbeiten – ${cur.name}`, body, [
     { label: 'Abbrechen', value: false },
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
@@ -770,7 +951,7 @@ function paechterDialog(p) {
       if (Number.isNaN(gg) || Number.isNaN(um) || (gg !== null && gg < 0) || (um !== null && um < 0)) { toast('Gartengröße und Umlage müssen Zahlen ab 0 sein.', 'err'); return false; }
       const data = { mitgliedsnr: f.mitgliedsnr.value, gartennr: f.gartennr.value, anrede: f.anrede.value, name: f.name.value,
         strasse: f.strasse.value, plzOrt: f.plzOrt.value, versand: f.versand.value, gartengroesse: gg ?? 0, umlageAbweichend: um,
-        wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value };
+        wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value, notiz: f.notiz.value.trim() };
       try {
         if (isNew) await api('POST', '/api/admin/paechter', data);
         else await api('PUT', `/api/admin/paechter/${cur.id}`, data);
@@ -790,7 +971,8 @@ function adminPaechter() {
     const shown = list.filter((p) => !q || [p.mitgliedsnr, p.name, p.gartennr, p.strasse].some((x) => (x || '').toLowerCase().includes(q)));
     for (const p of shown) {
       tbody.append(h('tr', null,
-        h('td', null, p.mitgliedsnr), h('td', null, p.gartennr), h('td', { class: 'name', title: p.name }, p.name),
+        h('td', null, p.mitgliedsnr), h('td', null, p.gartennr),
+        h('td', { class: 'name', title: p.name }, p.name, p.notiz ? h('span', { title: p.notiz, style: 'margin-left:4px;cursor:help' }, '📝') : null),
         h('td', null, [p.strasse, p.plzOrt].filter(Boolean).join(', ')),
         h('td', { class: 'num' }, nfFlex.format(p.gartengroesse) + ' m²'),
         h('td', { class: 'num' }, p.umlageAbweichend == null ? 'Standard' : eur(p.umlageAbweichend)),
@@ -798,9 +980,9 @@ function adminPaechter() {
         h('td', null,
           h('button', { class: 'btn small', onclick: async () => { if (await paechterDialog(p)) await reload(); } }, 'Bearbeiten'), ' ',
           h('button', { class: 'btn small danger', onclick: async () => {
-            const ok = await confirmBox(`Pächter „${p.name}“ (${p.mitgliedsnr}) wirklich löschen? Die Zählerstände des laufenden Jahres gehen dabei verloren. Vorher wird automatisch eine Sicherung angelegt. Bereits ausgestellte Rechnungen bleiben im Archiv erhalten, abgeschlossene Jahre bleiben unverändert.`, 'Löschen', true);
+            const ok = await confirmBox(`Pächter „${p.name}“ (${p.mitgliedsnr}) in den Papierkorb legen? Er verschwindet aus allen Ansichten, Zählerstände und Rechnungen bleiben aber erhalten und lassen sich im Papierkorb wiederherstellen.`, 'In den Papierkorb', true);
             if (!ok) return;
-            try { await api('DELETE', `/api/admin/paechter/${p.id}`); toast('Gelöscht', 'ok'); await reload(); } catch (e) { handleErr(e); }
+            try { await api('DELETE', `/api/admin/paechter/${p.id}`); toast('In den Papierkorb gelegt', 'ok'); S.papierkorb = null; await reload(); } catch (e) { handleErr(e); }
           } }, 'Löschen'))));
     }
     if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 9, class: 'empty' }, list.length ? 'Keine Treffer.' : 'Noch keine Pächter. Lege den ersten mit »Pächter anlegen« an oder importiere eine Liste.')));
@@ -813,7 +995,48 @@ function adminPaechter() {
       h('input', { type: 'search', placeholder: 'Suchen', value: S.filter, style: 'width:220px', oninput: (e) => { S.filter = e.target.value; fill(); } }),
       h('span', { class: 'stat' }, `${list.length} Pächter`)),
     h('div', { class: 'tablewrap' }, h('table', null,
-      h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Größe', 'Umlage', 'Wasserzähler', 'Stromzähler', ''].map((x) => h('th', null, x)))), tbody)));
+      h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Größe', 'Umlage', 'Wasserzähler', 'Stromzähler', ''].map((x) => h('th', null, x)))), tbody)),
+    papierkorbCard());
+}
+
+async function loadPapierkorb() {
+  if (S.papierkorbLoading) return;
+  S.papierkorbLoading = true;
+  try { S.papierkorb = await api('GET', '/api/admin/paechter-papierkorb'); } catch (e) { handleErr(e); }
+  S.papierkorbLoading = false;
+  render();
+}
+
+function papierkorbCard() {
+  if (!S.papierkorbOffen) {
+    return h('div', { style: 'margin-top:14px' },
+      h('button', { class: 'btn', onclick: () => { S.papierkorbOffen = true; S.papierkorb = null; render(); } }, '🗑 Papierkorb'));
+  }
+  if (!S.papierkorb) {
+    if (!S.papierkorbLoading) loadPapierkorb();
+    return h('div', { class: 'card', style: 'margin-top:14px' }, h('p', { class: 'hint', style: 'margin:0' }, 'Wird geladen …'));
+  }
+  const rows = S.papierkorb.map((p) => h('tr', null,
+    h('td', null, p.mitgliedsnr), h('td', null, p.name), h('td', null, deDate(p.geloeschtAm)),
+    h('td', null,
+      h('button', { class: 'btn small primary', onclick: async () => {
+        try { await api('POST', `/api/admin/paechter/${p.id}/wiederherstellen`); toast('Wiederhergestellt', 'ok'); S.papierkorb = null; await reload(); }
+        catch (e) { handleErr(e); }
+      } }, 'Wiederherstellen'), ' ',
+      h('button', { class: 'btn small danger', onclick: async () => {
+        const ok = await confirmBox(`Pächter „${p.name}“ (${p.mitgliedsnr}) endgültig löschen? Das kann nicht rückgängig gemacht werden. Bereits ausgestellte Rechnungen bleiben im Archiv erhalten.`, 'Endgültig löschen', true);
+        if (!ok) return;
+        try { await api('DELETE', `/api/admin/paechter/${p.id}/endgueltig`); toast('Endgültig gelöscht', 'ok'); S.papierkorb = null; render(); await loadPapierkorb(); }
+        catch (e) { handleErr(e); }
+      } }, 'Endgültig löschen'))));
+  return h('div', { class: 'card', style: 'margin-top:14px' },
+    h('div', { class: 'toolbar' }, h('b', null, 'Papierkorb'), h('div', { class: 'spacer' }),
+      h('button', { class: 'btn small', onclick: () => { S.papierkorbOffen = false; render(); } }, 'Schließen')),
+    S.papierkorb.length
+      ? h('div', { class: 'tablewrap', style: 'margin-top:10px' }, h('table', { class: 'data' },
+          h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Name', 'Gelöscht am', ''].map((t) => h('th', null, t)))),
+          h('tbody', null, rows)))
+      : h('p', { class: 'hint', style: 'margin:10px 0 0' }, 'Papierkorb ist leer.'));
 }
 
 // ---- Einstellungen
@@ -889,8 +1112,203 @@ function adminYear() {
       done < total ? h('div', { class: 'banner warn', style: 'margin-top:12px' }, `Achtung: Bei ${total - done} von ${total} Pächtern fehlen noch Angaben.`) : null,
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: async () => {
         if (!(await confirmBox(`Jahr ${st.currentYear} jetzt abschließen und ${st.currentYear + 1} beginnen? Das kann nicht rückgängig gemacht werden (die Sicherung vorher bleibt aber erhalten).`, 'Jahr abschließen', true))) return;
-        try { await api('POST', '/api/admin/jahreswechsel'); toast('Neues Jahr gestartet', 'ok'); S.year = null; await reload(); } catch (e) { handleErr(e); }
+        try { await api('POST', '/api/admin/jahreswechsel'); toast('Neues Jahr gestartet', 'ok'); S.year = null; S.dashKasse = null; S.kasse = null; S.kasseVerlauf = null; await reload(); } catch (e) { handleErr(e); }
       } }, `Jahr ${st.currentYear} abschließen`))));
+}
+
+// ---- Kassenbericht
+
+async function loadKasse(year) {
+  if (S.kasseLoading) return;
+  S.kasseLoading = true;
+  try { S.kasse = await api('GET', `/api/admin/kassenbericht?year=${year}`); } catch (e) { handleErr(e); }
+  S.kasseLoading = false;
+  render();
+}
+
+async function refreshKasse() { S.kasse = null; S.kasseVerlauf = null; await loadKasse(S.kasseYear); }
+
+async function loadKasseVerlauf() {
+  if (S.kasseVerlaufLoading) return;
+  S.kasseVerlaufLoading = true;
+  try { S.kasseVerlauf = await api('GET', '/api/admin/kassenbericht-verlauf'); } catch (e) { handleErr(e); }
+  S.kasseVerlaufLoading = false;
+  render();
+}
+
+const AUSGABEN_KATEGORIEN = ['Instandhaltung', 'Anschaffung', 'Verwaltung', 'Versicherung & Gebühren', 'Sonstiges'];
+
+function ausgabeDialog(a) {
+  const isNew = !a;
+  const datum = h('input', { type: 'date', value: (a && a.datum) || todayIso() });
+  const besch = h('input', { type: 'text', maxlength: 120, value: (a && a.beschreibung) || '', autocomplete: 'off' });
+  const kategorie = h('input', { type: 'text', list: 'kategorien-liste', maxlength: 40, value: (a && a.kategorie) || '', placeholder: AUSGABEN_KATEGORIEN[AUSGABEN_KATEGORIEN.length - 1], autocomplete: 'off' });
+  const katList = h('datalist', { id: 'kategorien-liste' }, AUSGABEN_KATEGORIEN.map((x) => h('option', { value: x })));
+  const betrag = h('input', { type: 'text', inputmode: 'decimal', value: a ? numIn(a.betrag) : '', autocomplete: 'off' });
+  const fileInput = h('input', { type: 'file', accept: '.jpg,.jpeg,.png,.webp,.pdf' });
+  const fld = (label, input) => h('div', { class: 'field' }, h('label', null, label), input);
+  const body = h('div', { class: 'form' },
+    fld('Datum', datum), fld('Beschreibung (z. B. Rasenmäher, Kontoführungsgebühren)', besch),
+    fld('Kategorie', h('div', null, kategorie, katList)),
+    h('div', { class: 'field' }, h('label', null, 'Betrag'), h('div', { class: 'inputunit' }, betrag, h('span', null, '€'))),
+    h('div', { class: 'field wide' }, h('label', null, 'Beleg (Foto oder PDF, optional)'),
+      a && a.beleg ? h('p', { class: 'hint', style: 'margin:0 0 6px' }, 'Aktuell hinterlegt: ',
+        h('a', { href: `/api/admin/beleg/${a.id}?year=${S.kasseYear}`, target: '_blank' }, 'Beleg ansehen')) : null,
+      fileInput));
+  return modal(isNew ? 'Ausgabe erfassen' : `Ausgabe bearbeiten – ${a.beschreibung}`, body, [
+    { label: 'Abbrechen', value: false },
+    !isNew && a.beleg ? { label: 'Beleg entfernen', cls: 'danger', value: 'delbeleg', action: async () => {
+      const ok = await confirmBox('Den hinterlegten Beleg wirklich entfernen?', 'Entfernen', true);
+      if (!ok) return false;
+      try { await api('DELETE', `/api/admin/ausgaben/${a.id}/beleg?year=${S.kasseYear}`); } catch (e) { handleErr(e); return false; }
+    } } : null,
+    isNew ? null : { label: 'Löschen', cls: 'danger', value: 'del', action: async () => {
+      const ok = await confirmBox(`Ausgabe „${a.beschreibung}“ (${eur(a.betrag)}) wirklich löschen?`, 'Löschen', true);
+      if (!ok) return false;
+      try { await api('DELETE', `/api/admin/ausgaben/${a.id}?year=${S.kasseYear}`); } catch (e) { handleErr(e); return false; }
+    } },
+    { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+      const b = parseNum(betrag.value);
+      if (!datum.value) { toast('Bitte ein Datum angeben.', 'err'); return false; }
+      if (!besch.value.trim()) { toast('Bitte eine Beschreibung eintragen.', 'err'); return false; }
+      if (b === null || Number.isNaN(b) || b <= 0) { toast('Bitte einen Betrag größer 0 eintragen.', 'err'); return false; }
+      const data = { datum: datum.value, beschreibung: besch.value.trim(), kategorie: kategorie.value.trim(), betrag: b };
+      try {
+        const saved = isNew ? await api('POST', `/api/admin/ausgaben?year=${S.kasseYear}`, data) : await api('PUT', `/api/admin/ausgaben/${a.id}?year=${S.kasseYear}`, data);
+        if (fileInput.files.length) {
+          const fd = new FormData();
+          fd.append('file', fileInput.files[0]);
+          await api('POST', `/api/admin/ausgaben/${saved.id}/beleg?year=${S.kasseYear}`, fd, true);
+        }
+      } catch (e) { handleErr(e); return false; }
+    } },
+  ].filter(Boolean));
+}
+
+function adminKassenbericht() {
+  const st = S.state;
+  if (S.kasseYear == null) S.kasseYear = st.currentYear;
+  const yearSel = h('select', { onchange: (e) => { S.kasseYear = Number(e.target.value); S.kasse = null; render(); } },
+    st.years.map((y) => h('option', { value: y, selected: y === S.kasseYear }, y === st.currentYear ? `${y} (aktuell)` : `${y} (abgeschlossen)`)));
+  if (!S.kasse || S.kasse.jahr !== S.kasseYear) {
+    if (!S.kasseLoading) loadKasse(S.kasseYear);
+    return h('div', null, h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), yearSel), h('p', { class: 'hint' }, 'Wird geladen …'));
+  }
+  const k = S.kasse;
+  const card = (t, big, small, cls) => h('div', { class: 'card stat ' + (cls || '') }, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small));
+  const cards = h('div', { class: 'cards' },
+    card('Kassenbestand', eur(k.kassenbestand), `Anfangsbestand ${eur(k.anfangsbestand)} + Zahlungen − Ausgaben`, k.kassenbestand >= 0 ? 'ok' : 'err'),
+    card('Von Pächtern eingegangen', eur(k.einnahmenBezahlt), 'tatsächlich gezahlt, nach heutigem Stand', 'ok'),
+    k.guthabenAusgezahlt ? card('An Pächter ausgezahlt', eur(k.guthabenAusgezahlt), 'Guthaben') : null,
+    card('Sonstige Ausgaben', eur(k.ausgabenSumme), `${k.ausgaben.length} Buchung(en)`, k.ausgabenSumme ? 'warn' : 'ok'));
+
+  const anfInput = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.anfangsbestand), style: 'width:140px', autocomplete: 'off' });
+  const saveAnfang = async () => {
+    const v = parseNum(anfInput.value);
+    if (v === null || Number.isNaN(v) || v < 0) { toast('Bitte eine Zahl ab 0 eingeben.', 'err'); return; }
+    try { S.kasse = await api('PUT', `/api/admin/anfangsbestand?year=${S.kasseYear}`, { betrag: v }); S.kasseVerlauf = null; toast('Gespeichert', 'ok'); render(); } catch (e) { handleErr(e); }
+  };
+
+  const ohneBeleg = k.ausgaben.filter((x) => !x.beleg).length;
+  const belegFilter = h('input', { type: 'checkbox', checked: S.kasseNurOhneBeleg,
+    onchange: (e) => { S.kasseNurOhneBeleg = e.target.checked; render(); } });
+  const gezeigt = S.kasseNurOhneBeleg ? k.ausgaben.filter((x) => !x.beleg) : k.ausgaben;
+  const toggleGeprueft = async (x, checked) => {
+    try { await api('PUT', `/api/admin/ausgaben/${x.id}/geprueft?year=${S.kasseYear}`, { geprueft: checked }); await refreshKasse(); }
+    catch (e) { handleErr(e); }
+  };
+  const tbody = h('tbody');
+  for (const x of gezeigt) {
+    tbody.append(h('tr', null, h('td', null, deDate(x.datum)), h('td', null, x.beschreibung), h('td', null, x.kategorie),
+      h('td', { class: 'r' }, eur(x.betrag)),
+      h('td', null, x.beleg ? h('a', { href: `/api/admin/beleg/${x.id}?year=${S.kasseYear}`, target: '_blank', title: 'Beleg ansehen' }, '📎') : null),
+      h('td', { title: x.geprueft ? `Geprüft am ${deDate(x.geprueftAm)}` : 'Von der Kassenprüfung abhaken' },
+        h('input', { type: 'checkbox', checked: x.geprueft, onchange: (e) => toggleGeprueft(x, e.target.checked) })),
+      h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await ausgabeDialog(x); if (r !== false && r !== undefined) await refreshKasse(); } }, 'Bearbeiten'))));
+  }
+  if (!gezeigt.length) tbody.append(h('tr', null, h('td', { colspan: 7, class: 'empty' },
+    k.ausgaben.length ? 'Alle Ausgaben haben einen Beleg.' : 'Noch keine sonstigen Ausgaben erfasst.')));
+
+  const katTable = (k.ausgabenKategorie || []).length > 1
+    ? h('div', { class: 'tablewrap', style: 'max-width:360px;margin-top:10px' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, ['Kategorie', 'Summe'].map((t) => h('th', null, t)))),
+        h('tbody', null, k.ausgabenKategorie.map((kat) => h('tr', null, h('td', null, kat.kategorie), h('td', { class: 'r' }, eur(kat.summe)))))))
+    : null;
+
+  const vW3 = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.wasserM3), autocomplete: 'off' });
+  const vWE = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.wasserEUR), autocomplete: 'off' });
+  const vSK = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.stromKWh), autocomplete: 'off' });
+  const vSE = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.stromEUR), autocomplete: 'off' });
+  const diffRow = (label, total, vInput, unit) => {
+    const v = parseNum(vInput.value);
+    const diff = v == null || Number.isNaN(v) ? null : Math.round((v - total) * 100) / 100;
+    return h('tr', null, h('td', null, label), h('td', { class: 'r' }, unit === '€' ? eur(total) : nfFlex.format(total) + ' ' + unit),
+      h('td', null, vInput), h('td', { class: 'r' + (diff != null && Math.abs(diff) > 0.004 ? ' diffwarn' : '') },
+        diff == null ? '–' : (unit === '€' ? eur(diff) : nfFlex.format(diff) + ' ' + unit)));
+  };
+  const versorgerTable = h('table', { class: 'data' },
+    h('thead', null, h('tr', null, ['', 'Pächter gesamt', 'Versorger / Hauptzähler', 'Differenz'].map((t) => h('th', null, t)))),
+    h('tbody', null,
+      diffRow('Wasser', k.wasserVerbrauch, vW3, 'm³'), diffRow('Wasser (€)', k.summen.kostenWasser, vWE, '€'),
+      diffRow('Strom', k.stromVerbrauch, vSK, 'kWh'), diffRow('Strom (€)', k.summen.kostenEnergie, vSE, '€')));
+  const saveVersorger = async () => {
+    const vals = [vW3, vWE, vSK, vSE].map((i) => parseNum(i.value));
+    if (vals.some((v) => Number.isNaN(v) || (v !== null && v < 0))) { toast('Bitte nur Zahlen ab 0 eingeben.', 'err'); return; }
+    try {
+      S.kasse = await api('PUT', `/api/admin/versorger?year=${S.kasseYear}`, { wasserM3: vals[0], wasserEUR: vals[1], stromKWh: vals[2], stromEUR: vals[3] });
+      toast('Gespeichert', 'ok');
+      render();
+    } catch (e) { handleErr(e); }
+  };
+
+  return h('div', null,
+    h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), yearSel),
+    h('p', { class: 'hint' }, `Übersicht für ${S.kasseYear}: ${k.paechter} Pächter (${k.ausgestellt} aus ausgestellten Rechnungen, ${k.berechnet} berechnet, aber noch nicht ausgestellt${k.unvollstaendig.length ? `, ${k.unvollstaendig.length} unvollständig` : ''}). Die Beträge »sonstige Ausgaben« sind Vereinskosten neben der Pächterabrechnung, z. B. Kontoführungsgebühren, Anwaltskosten oder Anschaffungen.`),
+    k.unvollstaendig.length ? h('div', { class: 'banner warn' }, `Nicht enthalten (Angaben fehlen): ${k.unvollstaendig.join(', ')}`) : null,
+    h('div', { class: 'card', style: 'margin-bottom:14px' },
+      h('div', { class: 'toolbar' },
+        h('label', null, 'Anfangsbestand der Kasse'), h('div', { class: 'inputunit' }, anfInput, h('span', null, '€')),
+        h('button', { class: 'btn small primary', onclick: saveAnfang }, 'Speichern'),
+        h('span', { class: 'hint' }, 'wird beim Jahreswechsel automatisch aus dem Kassenbestand des Vorjahres übernommen, ist hier aber jederzeit änderbar'))),
+    cards,
+    h('h3', null, 'Sonstige Ausgaben der Vereinskasse'),
+    h('div', { class: 'card' },
+      h('div', { class: 'toolbar' },
+        h('button', { class: 'btn primary', onclick: async () => { const r = await ausgabeDialog(null); if (r !== false && r !== undefined) await refreshKasse(); } }, '+ Ausgabe erfassen'),
+        h('div', { class: 'spacer' }),
+        h('label', { class: 'hint' }, belegFilter, ` nur ohne Beleg${ohneBeleg ? ` (${ohneBeleg})` : ''}`)),
+      h('div', { class: 'tablewrap', style: 'max-height:360px' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, ['Datum', 'Beschreibung', 'Kategorie', 'Betrag', 'Beleg', 'Geprüft', ''].map((t) => h('th', null, t)))), tbody)),
+      katTable),
+    h('h3', null, 'Vergleich mit dem Versorger'),
+    h('div', { class: 'card' },
+      h('p', { class: 'hint' }, 'Trage hier die Werte der Hauptzähler bzw. der Versorgerrechnung ein, um sie mit der Summe der Pächterabrechnung zu vergleichen. Eine größere Abweichung kann auf einen Zählerfehler, Schwund oder eine falsche Ablesung hindeuten.'),
+      h('div', { class: 'tablewrap' }, versorgerTable),
+      h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: saveVersorger }, 'Werte speichern'))),
+    h('div', { class: 'actions', style: 'margin-top:16px;margin-bottom:22px' },
+      h('a', { class: 'btn', href: `/api/admin/export-kassenbericht?year=${S.kasseYear}` }, `Kassenbericht ${S.kasseYear} als Excel`)),
+    h('h3', null, 'Verlauf über die Jahre'),
+    kassenberichtVerlaufCard());
+}
+
+function kassenberichtVerlaufCard() {
+  if (!S.kasseVerlauf) {
+    if (!S.kasseVerlaufLoading) loadKasseVerlauf();
+    return h('div', { class: 'card' }, h('p', { class: 'hint', style: 'margin:0' }, 'Wird geladen …'));
+  }
+  const v = S.kasseVerlauf;
+  if (!v.length) return h('div', { class: 'card empty' }, 'Noch keine Jahre vorhanden.');
+  const rows = v.map((j) => h('tr', null,
+    h('td', null, j.jahr),
+    h('td', { class: 'r' }, eur(j.rechnungssumme)),
+    h('td', { class: 'r' }, eur(j.einnahmenBezahlt)),
+    h('td', { class: 'r' }, eur(j.ausgabenSumme)),
+    h('td', { class: 'r' }, eur(j.kassenbestand))));
+  return h('div', { class: 'card' },
+    h('p', { class: 'hint' }, 'Summen des Vereins insgesamt (nicht je Pächter), zum Vergleich über die Jahre – z. B. für die Mitgliederversammlung.'),
+    h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['Jahr', 'Rechnungen gestellt', 'Zahlungen eingegangen', 'Sonstige Ausgaben', 'Kassenbestand'].map((t) => h('th', null, t)))),
+      h('tbody', null, rows))));
 }
 
 // ---- Import / Export / Sicherung

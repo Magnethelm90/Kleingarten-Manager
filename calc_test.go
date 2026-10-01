@@ -100,3 +100,51 @@ func TestZahlenformat(t *testing.T) {
 		t.Errorf("fmtFlex(300) = %q", got)
 	}
 }
+
+func TestEpcQRPayload(t *testing.T) {
+	s := defaultSettings()
+	s.VereinName = "Kleingartenverein Mustername e. V."
+	s.IBAN = "DE89 3704 0044 0532 0130 00"
+	s.BIC = "COBA DE FF"
+	s.RechnungsnrPraefix = "100"
+	p := Paechter{Mitgliedsnr: "35-95"}
+	got := epcQRPayload(s, p, 298.39)
+	want := "BCD\n002\n1\nSCT\nCOBADEFF\nKleingartenverein Mustername e. V.\nDE89370400440532013000\nEUR298.39\n\n\nRechnung 100-35-95"
+	if got != want {
+		t.Errorf("epcQRPayload:\n got=%q\nwant=%q", got, want)
+	}
+}
+
+func TestZaehlerwechsel(t *testing.T) {
+	s := defaultSettings()
+	p := Paechter{Gartengroesse: 300}
+	// Alter Zähler: 100 -> 180 (Ende), neuer Zähler: 0 -> 30 (aktuell). Gesamtverbrauch 80+30=110.
+	a := Ablesung{
+		WasserVJ: fp(100), WasserAkt: fp(30), Stunden: fp(12),
+		WasserWechsel: &ZaehlerWechsel{AltEnde: fp(180), NeueNr: "W-NEU", NeuStart: fp(0)},
+		StromVJ:       fp(1000), StromAkt: fp(2000),
+	}
+	r := calculate(s, p, a)
+	if r.WasserVerbrauch == nil || *r.WasserVerbrauch != 110 {
+		t.Fatalf("Verbrauch bei Zählerwechsel: %+v", r.WasserVerbrauch)
+	}
+	if r.Status != StatusOK || !r.Vollstaendig {
+		t.Fatalf("Status: %s vollstaendig=%v", r.Status, r.Vollstaendig)
+	}
+
+	// Unplausibel: neuer Zähler steht niedriger als sein Anfangsstand
+	bad := a
+	bad.WasserWechsel = &ZaehlerWechsel{AltEnde: fp(180), NeueNr: "W-NEU", NeuStart: fp(50)} // NeuStart(50) > WasserAkt(30)
+	rb := calculate(s, p, bad)
+	if rb.Status != StatusZaehler {
+		t.Fatalf("unplausibler Wechsel sollte auffallen: %s", rb.Status)
+	}
+
+	// Alter Zähler-Endstand unter Vorjahresstand ist auch unplausibel
+	bad2 := a
+	bad2.WasserWechsel = &ZaehlerWechsel{AltEnde: fp(50), NeueNr: "W-NEU", NeuStart: fp(0)} // AltEnde(50) < WasserVJ(100)
+	rb2 := calculate(s, p, bad2)
+	if rb2.Status != StatusZaehler {
+		t.Fatalf("AltEnde < Vorjahr sollte auffallen: %s", rb2.Status)
+	}
+}

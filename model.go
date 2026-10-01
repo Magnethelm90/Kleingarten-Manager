@@ -53,6 +53,15 @@ type Paechter struct {
 	UmlageAbweichend *float64 `json:"umlageAbweichend"`
 	WasserzaehlerNr  string   `json:"wasserzaehlerNr"`
 	StromzaehlerNr   string   `json:"stromzaehlerNr"`
+	// Notiz: interner Vermerk, erscheint nirgends auf der Rechnung.
+	Notiz string `json:"notiz,omitempty"`
+
+	// Geloescht: Papierkorb statt endgültigem Löschen. Ein gelöschter Pächter
+	// verschwindet aus allen aktiven Ansichten und Berechnungen, seine
+	// Zählerstände und Rechnungen bleiben aber erhalten und lassen sich
+	// wiederherstellen.
+	Geloescht   bool   `json:"geloescht,omitempty"`
+	GeloeschtAm string `json:"geloeschtAm,omitempty"` // JJJJ-MM-TT
 }
 
 // Ablesung sind die jährlichen Eingaben pro Pächter.
@@ -67,6 +76,20 @@ type Ablesung struct {
 	Auslagen     float64  `json:"auslagen"`
 	Abschlag     float64  `json:"abschlag"`
 	Hinweis      string   `json:"hinweis"`
+
+	// Wurde der Zähler unterjährig getauscht, wird der Verbrauch aus dem Endstand
+	// des alten und dem Anfangsstand des neuen Zählers zusammengerechnet, statt
+	// einfach Akt. minus VJ zu bilden. WasserAkt/StromAkt ist dann der aktuelle
+	// Stand des NEUEN Zählers.
+	WasserWechsel *ZaehlerWechsel `json:"wasserWechsel,omitempty"`
+	StromWechsel  *ZaehlerWechsel `json:"stromWechsel,omitempty"`
+}
+
+// ZaehlerWechsel dokumentiert einen unterjährigen Zählertausch.
+type ZaehlerWechsel struct {
+	AltEnde  *float64 `json:"altEnde"`  // Endstand des alten Zählers
+	NeueNr   string   `json:"neueNr"`   // Nummer des neuen Zählers
+	NeuStart *float64 `json:"neuStart"` // Anfangsstand des neuen Zählers
 }
 
 // Jahr fasst die Daten eines Abrechnungsjahres zusammen. Abgeschlossene Jahre
@@ -77,6 +100,14 @@ type Jahr struct {
 	Settings      *Settings           `json:"settings,omitempty"`
 	Paechter      []Paechter          `json:"paechter,omitempty"`
 	Ablesungen    map[string]Ablesung `json:"ablesungen"`
+	// Versorger: Hauptzähler und Versorgerrechnung, nur für den Kassenbericht
+	Versorger *Versorger `json:"versorger,omitempty"`
+	// Ausgaben: sonstige Buchungen der Vereinskasse (Kontoführung, Anschaffungen, ...)
+	Ausgaben []Ausgabe `json:"ausgaben,omitempty"`
+	// Anfangsbestand der Vereinskasse zu Jahresbeginn, für den Kassenbericht.
+	// Wird beim Jahreswechsel automatisch aus dem Kassenbestand des Vorjahres
+	// vorbelegt, kann aber jederzeit von Hand angepasst werden.
+	Anfangsbestand *float64 `json:"anfangsbestand,omitempty"`
 }
 
 // AdminAuth speichert das Admin-Passwort nur als Hash.

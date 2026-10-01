@@ -10,12 +10,33 @@ Internet gesendet, es gibt keine Konten, Schlüssel oder Cloud-Anbindung.
 
 ## Funktionen
 
+- **Übersicht:** Startseite mit Kennzahlen auf einen Blick – Kassenbestand, offene Rechnungen, unvollständige
+  Pächter, Datum der letzten Sicherung
 - **Admin-Bereich:** Pächter anlegen, ändern, löschen (Nummer, Name, Anschrift, Gartengröße, Umlage, Zählernummern),
-  Preise und Regeln einstellen (Wasser, Strom, Pacht, Arbeitsstunden, Bankverbindung, Rechnungsdatum), optionales Passwort
+  Preise und Regeln einstellen (Wasser, Strom, Pacht, Arbeitsstunden, Bankverbindung, Rechnungsdatum), optionales Passwort.
+  Gelöschte Pächter landen im Papierkorb (Zählerstände und Rechnungen bleiben erhalten) und lassen sich
+  wiederherstellen oder endgültig entfernen
 - **Schnelleingabe:** Nummer eintippen, Stammdaten und Vorjahresstände erscheinen automatisch, nur neue Zählerstände eingeben
 - **Rechnungen:** PDF pro Pächter oder alle auf einmal, ausgestellte Rechnungen werden mit den damaligen Werten
-  festgeschrieben und archiviert (spätere Änderungen verändern sie nicht)
+  festgeschrieben und archiviert (spätere Änderungen verändern sie nicht); das Archiv lässt sich auch über alle
+  Jahre hinweg durchsuchen (z. B. „wann wurde dieser Pächter zuletzt abgerechnet“)
 - **Zahlungen:** bezahlt abhaken (mit Datum), Teilzahlungen, Liste der offenen Posten, Excel-Export
+- **GiroCode auf der Rechnung:** QR-Code zum Bezahlen, die Banking-App füllt IBAN, Betrag und Verwendungszweck
+  automatisch aus
+- **Zählerwechsel:** wird ein Zähler unterjährig getauscht, wird der Verbrauch aus dem Endstand des alten und
+  dem Anfangsstand des neuen Zählers richtig zusammengerechnet, die neue Zählernummer wandert automatisch in
+  die Stammdaten
+- **Jahresverlauf:** Wasser-, Stromverbrauch, Arbeitsstunden und Gesamtbetrag der Vorjahre pro Pächter auf einen Blick
+- **Hinweise bei ungewöhnlichem Verbrauch:** fällt der eingetragene Wasser- oder Stromverbrauch deutlich aus dem Rahmen
+  (z. B. Tippfehler beim Zählerstand), erscheint ein Hinweis – die Eingabe wird dadurch nicht blockiert
+- **Notizfeld je Pächter:** interner Vermerk (z. B. „Tochter kümmert sich, Tel. …“), steht nirgends auf der Rechnung
+- **Kassenbericht** (Admin-Bereich, eigene Jahresauswahl): fasst die Abrechnung aller Pächter zusammen, vergleicht
+  Wasser- und Stromverbrauch mit der Rechnung des Versorgers, verwaltet sonstige Ausgaben der Vereinskasse
+  (Kontoführung, Anschaffungen, Reparaturen – jede Ausgabe einzeln, mit Kategorie, optionalem Beleg-Foto/PDF und
+  Kassenprüfer-Haken) und führt mit einem Anfangsbestand einen echten Kassenbestand (wird beim Jahreswechsel
+  automatisch fortgeschrieben); dazu ein Verlauf über die Jahre für den Verein insgesamt; als Excel-Datei für
+  die Kassenprüfung exportierbar
+- Beim Öffnen ein Hinweis, wenn noch Rechnungen offen oder überfällig sind
 - **Jahreswechsel**, Import der Mitglieder aus Excel/CSV, Excel-Export, automatische Sicherungen
 
 ## Abrechnungsregeln (Beispielwerte, im Admin-Bereich änderbar)
@@ -43,6 +64,12 @@ Optionen: `--data <Ordner>`, `--port <Zahl>`, `--no-browser`, `--reset-admin` (A
 ## Selbst bauen
 
 Benötigt [Go](https://go.dev/dl/) 1.24 oder neuer.
+
+Bei jedem Push auf `main` und jedem Pull Request prüft GitHub Actions Formatierung, `go vet` und die Tests
+und baut die `Gartenabrechnung.exe`. Sie liegt beim jeweiligen Lauf unter »Artifacts« zum Herunterladen.
+
+Neue Version veröffentlichen: `git tag v1.1 && git push origin v1.1`. GitHub baut dann die `.exe` mit dieser
+Versionsnummer und stellt sie unter »Releases« zum Download bereit.
 
 ```
 go test ./...
@@ -75,6 +102,7 @@ Sicherheitslücken bitte nicht öffentlich melden, sondern direkt an den Autor.
 ## Verwendete Bestandteile
 
 - [go-pdf/fpdf](https://github.com/go-pdf/fpdf) (MIT) für die PDF-Erzeugung
+- [skip2/go-qrcode](https://github.com/skip2/go-qrcode) (MIT) für den GiroCode auf der Rechnung
 - Liberation Sans (SIL Open Font License, siehe `fonts/LICENSE-Liberation.txt`) als eingebettete Schrift
 
 Copyright © Derek

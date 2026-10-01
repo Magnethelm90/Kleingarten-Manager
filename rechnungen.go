@@ -52,6 +52,7 @@ type issuedInfo struct {
 // archiveEntry ist eine Zeile im Rechnungsarchiv.
 type archiveEntry struct {
 	ID          string  `json:"id"`
+	Jahr        int     `json:"jahr"`
 	Mitgliedsnr string  `json:"mitgliedsnr"`
 	Name        string  `json:"name"`
 	Nummer      string  `json:"nummer"`
@@ -67,6 +68,33 @@ type archiveEntry struct {
 	Notiz         string   `json:"notiz"`
 }
 
+func archiveEntryFrom(r *Rechnung) archiveEntry {
+	return archiveEntry{
+		ID: r.ID, Jahr: r.Jahr, Mitgliedsnr: r.Paechter.Mitgliedsnr, Name: r.Paechter.Name, Nummer: r.Nummer,
+		Version: r.Version, Status: r.Status, Ausgestellt: r.Ausgestellt, Gesamt: r.Result.Gesamt, Datei: r.Datei,
+		Faellig: r.Settings.Zahlungsziel, BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz,
+	}
+}
+
+// archiveAllLocked liefert das gesamte Rechnungsarchiv über alle Jahre, neuestes
+// Jahr zuerst, für die Archivsuche. Der Aufrufer hält s.mu.
+func (s *Store) archiveAllLocked() []archiveEntry {
+	out := make([]archiveEntry, 0, len(s.d.Rechnungen))
+	for _, r := range s.d.Rechnungen {
+		out = append(out, archiveEntryFrom(r))
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Jahr != out[j].Jahr {
+			return out[i].Jahr > out[j].Jahr
+		}
+		if out[i].Mitgliedsnr != out[j].Mitgliedsnr {
+			return natLess(out[i].Mitgliedsnr, out[j].Mitgliedsnr)
+		}
+		return out[i].Version < out[j].Version
+	})
+	return out
+}
+
 // archiveViewLocked liefert die gültigen Rechnungen je Pächter und das Archiv
 // des Jahres. Der Aufrufer hält s.mu.
 func (s *Store) archiveViewLocked(v yearView) (map[string]issuedInfo, []archiveEntry) {
@@ -80,11 +108,7 @@ func (s *Store) archiveViewLocked(v yearView) (map[string]issuedInfo, []archiveE
 		if r.Jahr != v.Jahr {
 			continue
 		}
-		archive = append(archive, archiveEntry{
-			ID: r.ID, Mitgliedsnr: r.Paechter.Mitgliedsnr, Name: r.Paechter.Name, Nummer: r.Nummer,
-			Version: r.Version, Status: r.Status, Ausgestellt: r.Ausgestellt, Gesamt: r.Result.Gesamt, Datei: r.Datei,
-			Faellig: r.Settings.Zahlungsziel, BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz,
-		})
+		archive = append(archive, archiveEntryFrom(r))
 		if r.Status != statusGueltig {
 			continue
 		}
@@ -161,6 +185,8 @@ func (a *App) handleIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	year := a.yearParam(r)
+	a.imu.Lock()
+	defer a.imu.Unlock()
 
 	type job struct {
 		p   Paechter
@@ -269,6 +295,15 @@ func (a *App) handleIssue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"folder": dir, "created": names, "skipped": skipped})
 }
 
+// handleArchivAlle liefert das Rechnungsarchiv über alle Jahre, für die Suche
+// im Archiv (z. B. »wann wurde dieser Pächter zuletzt abgerechnet«).
+func (a *App) handleArchivAlle(w http.ResponseWriter, r *http.Request) {
+	a.st.mu.Lock()
+	out := a.st.archiveAllLocked()
+	a.st.mu.Unlock()
+	writeJSON(w, 200, out)
+}
+
 // handleArchivePDF liefert eine ausgestellte Rechnung. Das PDF wird aus den
 // eingefrorenen Werten erzeugt und ist damit unabhängig von späteren Änderungen.
 func (a *App) handleArchivePDF(w http.ResponseWriter, r *http.Request) {
@@ -314,6 +349,18 @@ func openAmount(r *Rechnung) float64 {
 		paid = *r.BezahltBetrag
 	}
 	return round2(total - paid)
+}
+
+// paidAmount ist der bereits gezahlte Betrag einer Rechnung (0, solange nichts
+// vermerkt ist).
+func paidAmount(r *Rechnung) float64 {
+	if r.BezahltAm == "" {
+		return 0
+	}
+	if r.BezahltBetrag != nil {
+		return *r.BezahltBetrag
+	}
+	return absf(r.Result.Gesamt)
 }
 
 type paymentReq struct {

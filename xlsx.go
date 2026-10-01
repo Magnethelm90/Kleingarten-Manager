@@ -91,7 +91,8 @@ func writeXLSX(sheetName string, widths []float64, rows [][]xCell) ([]byte, erro
 		sheet.WriteString("</row>")
 	}
 	sheet.WriteString("</sheetData>")
-	if lastCol > 0 && len(rows) > 0 {
+	// Autofilter nur bei Tabellen mit Kopfzeile (nicht bei Berichten mit Titel)
+	if lastCol > 0 && len(rows) > 0 && len(rows[0]) > 0 && rows[0][0].Style == stHeader {
 		fmt.Fprintf(&sheet, `<autoFilter ref="A1:%s%d"/>`, colName(lastCol-1), len(rows))
 	}
 	sheet.WriteString(`<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>` +
