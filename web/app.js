@@ -26,6 +26,40 @@ function h(tag, props, ...kids) {
   return el;
 }
 
+function svgEl(tag, attrs, ...kids) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k, v] of Object.entries(attrs || {})) if (v != null) el.setAttribute(k, v);
+  for (const kid of kids.flat(Infinity)) {
+    if (kid == null || kid === false) continue;
+    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+
+// Einfaches Balkendiagramm ohne externe Bibliothek (reines inline-SVG, keine
+// Fremdskripte nötig). data: [{label, value}]. valueFmt formatiert die Zahl
+// über den Balken, negative Werte werden rot dargestellt.
+function barChart(data, opts) {
+  const { height = 150, valueFmt = (v) => nfFlex.format(v) } = opts || {};
+  if (!data.length) return h('p', { class: 'hint' }, 'Noch keine Werte vorhanden.');
+  const width = Math.max(260, data.length * 70);
+  const padL = 6, padB = 32, padT = 18, padR = 6;
+  const w = width - padL - padR, hgt = height - padT - padB;
+  const max = Math.max(1, ...data.map((d) => Math.abs(d.value)));
+  const bw = w / data.length;
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, width: '100%', height, class: 'barchart' });
+  svg.append(svgEl('line', { x1: padL, y1: padT + hgt, x2: padL + w, y2: padT + hgt, class: 'axis' }));
+  data.forEach((d, i) => {
+    const bh = (Math.abs(d.value) / max) * hgt;
+    const x = padL + i * bw + bw * 0.18;
+    const y = padT + hgt - bh;
+    svg.append(svgEl('rect', { x, y, width: bw * 0.64, height: Math.max(bh, 1), rx: 2, class: 'bar' + (d.value < 0 ? ' neg' : '') }));
+    svg.append(svgEl('text', { x: x + bw * 0.32, y: y - 4, class: 'barval' }, valueFmt(d.value)));
+    svg.append(svgEl('text', { x: x + bw * 0.32, y: height - 10, class: 'barlabel' }, d.label));
+  });
+  return h('div', { class: 'chartwrap' }, svg);
+}
+
 const nf2 = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const nfFlex = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
 const nfIn = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 4, useGrouping: false });
@@ -401,10 +435,14 @@ function verlaufDialog(p) {
     h('td', { class: 'r' }, e.stunden == null ? '–' : nfFlex.format(e.stunden)),
     h('td', { class: 'r' }, e.gesamt == null ? '–' : eur(e.gesamt)),
     h('td', null, e.ausgestellt ? h('span', { class: 'badge ok' }, 'ausgestellt') : h('span', { class: 'badge neu' }, 'berechnet')));
+  const chrono = [...hist].reverse();
   const body = hist.length
-    ? h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
-        h('thead', null, h('tr', null, ['Jahr', 'Wasser', 'Strom', 'Stunden', 'Gesamt', ''].map((t) => h('th', null, t)))),
-        h('tbody', null, hist.map(row))))
+    ? h('div', null,
+        h('p', { class: 'hint', style: 'margin:0 0 4px' }, 'Gesamtbetrag je Jahr:'),
+        barChart(chrono.filter((e) => e.gesamt != null).map((e) => ({ label: String(e.jahr), value: e.gesamt })), { valueFmt: (v) => eur(v) }),
+        h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
+          h('thead', null, h('tr', null, ['Jahr', 'Wasser', 'Strom', 'Stunden', 'Gesamt', ''].map((t) => h('th', null, t)))),
+          h('tbody', null, hist.map(row)))))
     : h('p', { class: 'hint' }, 'Für diesen Pächter liegen noch keine Werte aus Vorjahren vor.');
   return modal(`Jahresverlauf – ${p.name}`, body, [{ label: 'Schließen', value: true }]);
 }
@@ -636,6 +674,22 @@ async function issue(ids, replace) {
 // bräuchte Koordinaten, die es nicht gibt – die Kacheln geben trotzdem auf
 // einen Blick den Überblick, welcher Garten noch offen, unvollständig oder
 // erledigt ist.
+// Belegungshistorie eines Gartens: welcher Pächter hatte ihn wann. Bleibt
+// auch nach endgültigem Löschen eines Pächters erhalten.
+async function gartenHistorieDialog(gartennr) {
+  let hist;
+  try { hist = await api('GET', `/api/garten-historie?gartennr=${encodeURIComponent(gartennr)}`); } catch (e) { handleErr(e); return; }
+  const chrono = [...hist].reverse();
+  const row = (e) => h('tr', null, h('td', null, e.mitgliedsnr), h('td', null, e.name),
+    h('td', null, deDate(e.seit)), h('td', null, e.bis ? deDate(e.bis) : h('span', { class: 'badge ok' }, 'aktuell')));
+  const body = chrono.length
+    ? h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Name', 'Seit', 'Bis'].map((t) => h('th', null, t)))),
+        h('tbody', null, chrono.map(row))))
+    : h('p', { class: 'hint' }, 'Für diesen Garten liegt noch keine Historie vor.');
+  await modal(`Verlauf Garten ${gartennr}`, body, [{ label: 'Schließen', value: true }]);
+}
+
 function viewLageplan() {
   const st = S.state;
   const issuedOf = (p) => (st.issued || {})[p.id];
@@ -658,6 +712,8 @@ function viewLageplan() {
     counts[s]++;
     return h('div', { class: 'kachel kachel-' + s, title: `${p.name}${p.notiz ? ' · 📝 ' + p.notiz : ''} – ${labels[s]}`,
       onclick: () => { S.tab = 'eingabe'; S.eingabeMode = 'schnell'; S.quickId = p.id; render(); } },
+      p.gartennr ? h('button', { class: 'kachel-hist', title: `Verlauf von Garten ${p.gartennr}`,
+        onclick: (e) => { e.stopPropagation(); gartenHistorieDialog(p.gartennr); } }, '🕘') : null,
       h('div', { class: 'kachel-nr' }, p.gartennr || p.mitgliedsnr), h('div', { class: 'kachel-name' }, p.name));
   });
   const legend = (cls, label) => h('span', { class: 'hint', style: 'margin-right:14px' },
@@ -950,7 +1006,8 @@ function viewZahlungen() {
       h('input', { type: 'search', placeholder: 'Suchen (Nummer oder Name)', value: S.payQ, style: 'width:240px', oninput: (e) => { S.payQ = e.target.value; draw(); } }),
       h('div', { class: 'spacer' }),
       h('a', { class: 'btn', href: `/api/export-payments?year=${st.year}&nur=offen` }, 'Offene Posten als Excel'),
-      h('a', { class: 'btn', href: `/api/export-payments?year=${st.year}` }, 'Alle Zahlungen als Excel')),
+      h('a', { class: 'btn', href: `/api/export-payments?year=${st.year}` }, 'Alle Zahlungen als Excel'),
+      h('a', { class: 'btn', href: `/api/export-ics?year=${st.year}`, title: 'Fälligkeitstermine der offenen Rechnungen zum Import in den eigenen Kalender' }, 'Fälligkeiten als Kalender (.ics)')),
     filters,
     mahnBar,
     h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
@@ -1412,8 +1469,11 @@ function kassenberichtVerlaufCard() {
     h('td', { class: 'r' }, eur(j.einnahmenBezahlt)),
     h('td', { class: 'r' }, eur(j.ausgabenSumme)),
     h('td', { class: 'r' }, eur(j.kassenbestand))));
+  const chartData = [...v].reverse().map((j) => ({ label: String(j.jahr), value: j.kassenbestand }));
   return h('div', { class: 'card' },
     h('p', { class: 'hint' }, 'Summen des Vereins insgesamt (nicht je Pächter), zum Vergleich über die Jahre – z. B. für die Mitgliederversammlung.'),
+    h('p', { class: 'hint', style: 'margin:0 0 4px' }, 'Kassenbestand am Jahresende:'),
+    barChart(chartData, { valueFmt: (v) => eur(v) }),
     h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
       h('thead', null, h('tr', null, ['Jahr', 'Rechnungen gestellt', 'Zahlungen eingegangen', 'Sonstige Ausgaben', 'Kassenbestand'].map((t) => h('th', null, t)))),
       h('tbody', null, rows))));

@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -506,6 +507,50 @@ func (a *App) handleMahnung(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="Mahnungen.zip"`)
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(buf.Bytes())
+}
+
+// icsEscape maskiert Sonderzeichen nach RFC 5545 (Komma, Semikolon, Backslash,
+// Zeilenumbruch) für Text-Felder in einer .ics-Datei.
+func icsEscape(s string) string {
+	r := strings.NewReplacer("\\", "\\\\", ";", "\\;", ",", "\\,", "\n", "\\n")
+	return r.Replace(s)
+}
+
+// handleICSExport liefert die Fälligkeitstermine der noch offenen Rechnungen
+// eines Jahres als Kalenderdatei (.ics) zum Import in den eigenen Kalender.
+func (a *App) handleICSExport(w http.ResponseWriter, r *http.Request) {
+	year := a.yearParam(r)
+	a.st.mu.Lock()
+	var list []*Rechnung
+	for _, x := range a.st.d.Rechnungen {
+		if x.Jahr == year && x.Status == statusGueltig && x.Result.Gesamt >= 0 && openAmount(x) > 0 {
+			list = append(list, x)
+		}
+	}
+	a.st.mu.Unlock()
+	sort.SliceStable(list, func(i, j int) bool { return natLess(list[i].Paechter.Mitgliedsnr, list[j].Paechter.Mitgliedsnr) })
+
+	var b strings.Builder
+	b.WriteString("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Gartenabrechnung//DE\r\nCALSCALE:GREGORIAN\r\n")
+	now := time.Now().UTC().Format("20060102T150405Z")
+	for _, x := range list {
+		due := strings.ReplaceAll(x.Settings.Zahlungsziel, "-", "")
+		if due == "" {
+			continue
+		}
+		b.WriteString("BEGIN:VEVENT\r\n")
+		fmt.Fprintf(&b, "UID:%s@gartenabrechnung\r\n", x.ID)
+		fmt.Fprintf(&b, "DTSTAMP:%s\r\n", now)
+		fmt.Fprintf(&b, "DTSTART;VALUE=DATE:%s\r\n", due)
+		fmt.Fprintf(&b, "SUMMARY:%s\r\n", icsEscape(fmt.Sprintf("Zahlungsziel %s %s (%s)", x.Paechter.Mitgliedsnr, x.Paechter.Name, fmtEUR(openAmount(x)))))
+		fmt.Fprintf(&b, "DESCRIPTION:%s\r\n", icsEscape(fmt.Sprintf("Rechnung %s, offener Betrag %s", x.Nummer, fmtEUR(openAmount(x)))))
+		b.WriteString("END:VEVENT\r\n")
+	}
+	b.WriteString("END:VCALENDAR\r\n")
+
+	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="Faelligkeiten_%d.ics"`, year))
+	_, _ = w.Write([]byte(b.String()))
 }
 
 // handlePaymentsExport liefert die Zahlungsübersicht des Jahres als Excel-Datei.

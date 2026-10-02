@@ -129,6 +129,69 @@ func (s *Store) mirrorToSecondary(name string, data []byte) {
 	}
 }
 
+// ---------------------------------------------------------------- Gartenverlauf
+//
+// Die Belegungshistorie wird unabhängig vom Abrechnungsjahr anhand des echten
+// Kalenderdatums geführt. Der Aufrufer hält jeweils s.mu.
+
+// gartenOeffnen trägt einen neuen, noch offenen Abschnitt ein (Bis bleibt leer).
+func (s *Store) gartenOeffnen(id, gartennr, mitgliedsnr, name string) {
+	gartennr = strings.TrimSpace(gartennr)
+	if gartennr == "" {
+		return
+	}
+	s.d.GartenHistorie = append(s.d.GartenHistorie, GartenEintrag{
+		Gartennr: gartennr, PaechterID: id, Mitgliedsnr: mitgliedsnr, Name: name, Seit: time.Now().Format("2006-01-02"),
+	})
+}
+
+// gartenSchliessen beendet den offenen Abschnitt eines Pächters (z. B. bei
+// Gartenwechsel oder Löschung).
+func (s *Store) gartenSchliessen(id, bis string) {
+	for i := range s.d.GartenHistorie {
+		e := &s.d.GartenHistorie[i]
+		if e.PaechterID == id && e.Bis == "" {
+			e.Bis = bis
+		}
+	}
+}
+
+// gartenWiederOeffnen macht eine Schließung rückgängig (Papierkorb wiederhergestellt).
+func (s *Store) gartenWiederOeffnen(id, bis string) {
+	for i := range s.d.GartenHistorie {
+		e := &s.d.GartenHistorie[i]
+		if e.PaechterID == id && e.Bis == bis {
+			e.Bis = ""
+		}
+	}
+}
+
+// gartenAktualisieren hält Name/Mitgliedsnr im offenen Abschnitt aktuell, wenn
+// sich diese ändern, ohne dass der Garten selbst wechselt.
+func (s *Store) gartenAktualisieren(id, mitgliedsnr, name string) {
+	for i := range s.d.GartenHistorie {
+		e := &s.d.GartenHistorie[i]
+		if e.PaechterID == id && e.Bis == "" {
+			e.Mitgliedsnr, e.Name = mitgliedsnr, name
+		}
+	}
+}
+
+// gartenWechsel behandelt einen Garten- oder Stammdatenwechsel beim Speichern
+// eines Pächters: schließt den alten Abschnitt bei Gartenwechsel und eröffnet
+// bei Bedarf einen neuen, sonst werden nur Name/Mitgliedsnr nachgezogen.
+func (s *Store) gartenWechsel(id, altGartennr, neuGartennr, mitgliedsnr, name string) {
+	altGartennr, neuGartennr = strings.TrimSpace(altGartennr), strings.TrimSpace(neuGartennr)
+	if altGartennr == neuGartennr {
+		s.gartenAktualisieren(id, mitgliedsnr, name)
+		return
+	}
+	if altGartennr != "" {
+		s.gartenSchliessen(id, time.Now().Format("2006-01-02"))
+	}
+	s.gartenOeffnen(id, neuGartennr, mitgliedsnr, name)
+}
+
 // checkWritableDir prüft, ob in einen Ordner geschrieben werden kann (legt ihn
 // bei Bedarf an). Für die Validierung eines vom Benutzer eingetragenen Pfades,
 // z. B. des zweiten Sicherungsordners, damit Tippfehler sofort auffallen.

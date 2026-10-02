@@ -49,6 +49,11 @@ gibt keine Konten, Schlüssel oder Cloud-Anbindung.
   der Änderung; es gibt nur ein gemeinsames Admin-Passwort, daher keine Zuordnung zu einer Person)
 - **Kassenprüfer-Zugang:** eigenes, optionales Passwort mit Lesezugriff auf den Kassenbericht (inkl.
   Geprüft-Haken für die sonstigen Ausgaben), getrennt vom Admin-Passwort und ohne dessen übrige Rechte
+- **Diagramme:** Kassenbestand und Gesamtbetrag im Jahresverlauf zusätzlich als Balkendiagramm, nicht nur als Tabelle
+- **Fälligkeiten als Kalender (.ics):** die Zahlungsziele der offenen Rechnungen eines Jahres lassen sich als
+  Kalenderdatei herunterladen und in den eigenen Kalender importieren
+- **Gartenverlauf:** Belegungshistorie je Garten (welcher Pächter hatte ihn wann), unabhängig vom Abrechnungsjahr
+  und über einen Gartenwechsel oder eine endgültige Löschung hinweg abrufbar (über das Uhr-Symbol im Lageplan)
 - **Update-Prüfung auf Knopfdruck:** fragt nur bei Klick einmalig die GitHub-Release-Seite dieses Projekts ab, ob
   eine neuere Version verfügbar ist – nie automatisch, es läuft sonst keine Internetverbindung im Hintergrund
 

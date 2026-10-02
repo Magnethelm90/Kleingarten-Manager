@@ -1425,3 +1425,79 @@ func TestVersionNewer(t *testing.T) {
 		}
 	}
 }
+
+func TestGartenVerlauf(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Erika Erst", "gartennr": "5", "gartengroesse": 300}))
+
+	hist := decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=5", nil))
+	if len(hist) != 1 || hist[0].Name != "Erika Erst" || hist[0].Bis != "" || hist[0].Seit == "" {
+		t.Fatalf("nach Anlage: %+v", hist)
+	}
+
+	// Namensänderung im selben Garten: aktualisiert den offenen Abschnitt, legt keinen neuen an
+	upd := map[string]any{"mitgliedsnr": "1", "name": "Erika Zweit", "gartennr": "5", "gartengroesse": 300}
+	do(h, "PUT", "/api/admin/paechter/"+p.ID, upd)
+	hist = decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=5", nil))
+	if len(hist) != 1 || hist[0].Name != "Erika Zweit" {
+		t.Fatalf("nach Namensänderung: %+v", hist)
+	}
+
+	// Gartenwechsel: alter Abschnitt wird geschlossen, neuer eröffnet
+	do(h, "PUT", "/api/admin/paechter/"+p.ID, map[string]any{"mitgliedsnr": "1", "name": "Erika Zweit", "gartennr": "9", "gartengroesse": 300})
+	histAlt := decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=5", nil))
+	histNeu := decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=9", nil))
+	if len(histAlt) != 1 || histAlt[0].Bis == "" {
+		t.Fatalf("alter Garten sollte geschlossen sein: %+v", histAlt)
+	}
+	if len(histNeu) != 1 || histNeu[0].Bis != "" {
+		t.Fatalf("neuer Garten sollte offen sein: %+v", histNeu)
+	}
+
+	// Löschen (Papierkorb) schließt den Abschnitt, Wiederherstellen öffnet ihn erneut
+	do(h, "DELETE", "/api/admin/paechter/"+p.ID, nil)
+	histNeu = decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=9", nil))
+	if len(histNeu) != 1 || histNeu[0].Bis == "" {
+		t.Fatalf("nach Löschung sollte der Abschnitt geschlossen sein: %+v", histNeu)
+	}
+	do(h, "POST", "/api/admin/paechter/"+p.ID+"/wiederherstellen", nil)
+	histNeu = decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=9", nil))
+	if len(histNeu) != 1 || histNeu[0].Bis != "" {
+		t.Fatalf("nach Wiederherstellung sollte der Abschnitt wieder offen sein: %+v", histNeu)
+	}
+
+	// endgültiges Löschen: Historie bleibt erhalten
+	do(h, "DELETE", "/api/admin/paechter/"+p.ID, nil)
+	do(h, "DELETE", "/api/admin/paechter/"+p.ID+"/endgueltig", nil)
+	histNeu = decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=9", nil))
+	if len(histNeu) != 1 {
+		t.Fatalf("Historie sollte nach endgültiger Löschung erhalten bleiben: %+v", histNeu)
+	}
+}
+
+func TestICSExport(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Fällig Fritz", "gartengroesse": 300}))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)})
+	do(h, "POST", "/api/invoices/issue?year=2025", issueReq{})
+
+	rec := do(h, "GET", "/api/export-ics?year=2025", nil)
+	if rec.Code != 200 {
+		t.Fatalf("ICS-Export: %d %s", rec.Code, rec.Body)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "BEGIN:VCALENDAR") || !strings.Contains(body, "BEGIN:VEVENT") || !strings.Contains(body, "DTSTART;VALUE=DATE:20260215") {
+		t.Fatalf("ICS-Inhalt unerwartet: %s", body)
+	}
+	if !strings.Contains(body, "Fällig Fritz") && !strings.Contains(body, icsEscape("Fällig Fritz")) {
+		t.Errorf("Name sollte im ICS vorkommen: %s", body)
+	}
+
+	// vollständig bezahlt: taucht nicht mehr auf
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	do(h, "PUT", "/api/payment/"+st.Issued[p.ID].ID, paymentReq{BezahltAm: "2026-01-20"})
+	rec = do(h, "GET", "/api/export-ics?year=2025", nil)
+	if strings.Contains(rec.Body.String(), "BEGIN:VEVENT") {
+		t.Errorf("bezahlte Rechnung sollte nicht mehr im ICS stehen: %s", rec.Body.String())
+	}
+}

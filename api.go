@@ -759,6 +759,7 @@ func (a *App) handlePaechterCreate(w http.ResponseWriter, r *http.Request) {
 	in.ID = newID()
 	a.st.d.Paechter = append(a.st.d.Paechter, in)
 	a.st.ensureYear(a.st.d.Settings.Jahr).Ablesungen[in.ID] = Ablesung{}
+	a.st.gartenOeffnen(in.ID, in.Gartennr, in.Mitgliedsnr, in.Name)
 	a.st.audit("Pächter angelegt: %s %s", in.Mitgliedsnr, in.Name)
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
@@ -787,8 +788,10 @@ func (a *App) handlePaechterUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	for i := range a.st.d.Paechter {
 		if a.st.d.Paechter[i].ID == id && !a.st.d.Paechter[i].Geloescht {
+			alt := a.st.d.Paechter[i]
 			in.ID = id
 			a.st.d.Paechter[i] = in
+			a.st.gartenWechsel(id, alt.Gartennr, in.Gartennr, in.Mitgliedsnr, in.Name)
 			a.st.audit("Pächter geändert: %s %s", in.Mitgliedsnr, in.Name)
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
@@ -813,6 +816,7 @@ func (a *App) handlePaechterDelete(w http.ResponseWriter, r *http.Request) {
 			a.st.snapshotBackup("vor-Loeschen")
 			a.st.d.Paechter[i].Geloescht = true
 			a.st.d.Paechter[i].GeloeschtAm = time.Now().Format("2006-01-02")
+			a.st.gartenSchliessen(id, a.st.d.Paechter[i].GeloeschtAm)
 			a.st.audit("Pächter in den Papierkorb gelegt: %s %s", a.st.d.Paechter[i].Mitgliedsnr, a.st.d.Paechter[i].Name)
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
@@ -851,8 +855,10 @@ func (a *App) handlePaechterWiederherstellen(w http.ResponseWriter, r *http.Requ
 					" ist inzwischen an einen anderen Pächter vergeben. Bitte zuerst dort die Nummer ändern."))
 				return
 			}
+			bis := a.st.d.Paechter[i].GeloeschtAm
 			a.st.d.Paechter[i].Geloescht = false
 			a.st.d.Paechter[i].GeloeschtAm = ""
+			a.st.gartenWiederOeffnen(id, bis)
 			a.st.audit("Pächter aus dem Papierkorb wiederhergestellt: %s %s", a.st.d.Paechter[i].Mitgliedsnr, a.st.d.Paechter[i].Name)
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
@@ -897,6 +903,23 @@ func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeErr(w, notFound("Pächter nicht gefunden"))
+}
+
+// handleGartenHistorie liefert die Belegungshistorie eines Gartens (wer hatte
+// ihn wann), unabhängig vom Abrechnungsjahr. Ohne ?gartennr= kommt die
+// komplette Historie aller Gärten zurück.
+func (a *App) handleGartenHistorie(w http.ResponseWriter, r *http.Request) {
+	nr := strings.TrimSpace(r.URL.Query().Get("gartennr"))
+	a.st.mu.Lock()
+	out := []GartenEintrag{}
+	for _, e := range a.st.d.GartenHistorie {
+		if nr == "" || e.Gartennr == nr {
+			out = append(out, e)
+		}
+	}
+	a.st.mu.Unlock()
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Seit < out[j].Seit })
+	writeJSON(w, 200, out)
 }
 
 // ---------------------------------------------------------------- Einstellungen (Admin)
@@ -1472,6 +1495,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/archiv-alle", a.handleArchivAlle)
 	mux.HandleFunc("PUT /api/payment/{id}", a.handlePayment)
 	mux.HandleFunc("GET /api/export-payments", a.handlePaymentsExport)
+	mux.HandleFunc("GET /api/export-ics", a.handleICSExport)
+	mux.HandleFunc("GET /api/garten-historie", a.handleGartenHistorie)
 	mux.HandleFunc("GET /api/export", a.handleExport)
 	mux.HandleFunc("POST /api/open-folder", a.handleOpenFolder)
 	mux.HandleFunc("POST /api/quit", a.handleQuit)

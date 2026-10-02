@@ -499,7 +499,7 @@ type kassenbericht struct {
 // Pächter ist die gültige ausgestellte Rechnung, sonst die aktuelle Berechnung.
 // Der Aufrufer hält s.mu.
 func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
-	k := kassenbericht{Jahr: v.Jahr, Unvollstaendig: []string{}}
+	k := kassenbericht{Jahr: v.Jahr, Unvollstaendig: []string{}, Ausgaben: []Ausgabe{}, AusgabenKategorie: []kategorieSumme{}}
 	if j := s.d.Jahre[yearKey(v.Jahr)]; j != nil {
 		if j.Versorger != nil {
 			k.Versorger = *j.Versorger
@@ -507,7 +507,7 @@ func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
 		if j.Anfangsbestand != nil {
 			k.Anfangsbestand = *j.Anfangsbestand
 		}
-		k.Ausgaben = append([]Ausgabe(nil), j.Ausgaben...)
+		k.Ausgaben = append(k.Ausgaben, j.Ausgaben...)
 	}
 	sort.SliceStable(k.Ausgaben, func(i, j int) bool { return k.Ausgaben[i].Datum < k.Ausgaben[j].Datum })
 	kat := map[string]float64{}

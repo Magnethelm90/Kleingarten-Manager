@@ -44,6 +44,19 @@ type Settings struct {
 	ZweiteSicherung string `json:"zweiteSicherung,omitempty"`
 }
 
+// GartenEintrag ist ein Abschnitt in der Belegungshistorie eines Gartens:
+// welcher Pächter hatte ihn von wann bis wann (Bis leer = bis heute). Bleibt
+// auch nach einer endgültigen Löschung des Pächters erhalten, damit z. B.
+// Rückfragen zu alten Zählerständen eines früheren Pächters beantwortbar sind.
+type GartenEintrag struct {
+	Gartennr    string `json:"gartennr"`
+	PaechterID  string `json:"paechterId"`
+	Mitgliedsnr string `json:"mitgliedsnr"`
+	Name        string `json:"name"`
+	Seit        string `json:"seit"`          // JJJJ-MM-TT
+	Bis         string `json:"bis,omitempty"` // leer = aktuell
+}
+
 // Paechter sind die Stammdaten eines Pächters (ändern sich selten).
 type Paechter struct {
 	ID               string   `json:"id"`
@@ -147,6 +160,8 @@ type Data struct {
 	// AuditLog: Änderungsprotokoll (Pächter, Preise, Jahreswechsel, ...), auf die
 	// letzten 1000 Einträge begrenzt.
 	AuditLog []AuditEntry `json:"auditLog,omitempty"`
+	// GartenHistorie: Belegungshistorie je Garten (unabhängig vom Abrechnungsjahr).
+	GartenHistorie []GartenEintrag `json:"gartenHistorie,omitempty"`
 }
 
 func defaultSettings() Settings {

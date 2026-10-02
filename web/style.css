@@ -228,7 +228,9 @@ td.note { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-spa
 td.diffwarn { color: var(--err); font-weight: 600; }
 
 .kachelgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
-.kachel { border-radius: 8px; padding: 10px 8px; cursor: pointer; border: 1px solid rgba(0,0,0,.08); transition: transform .1s; }
+.kachel { position: relative; border-radius: 8px; padding: 10px 8px; cursor: pointer; border: 1px solid rgba(0,0,0,.08); transition: transform .1s; }
+.kachel-hist { position: absolute; top: 2px; right: 2px; border: none; background: transparent; cursor: pointer; font-size: 12px; opacity: .6; padding: 2px 4px; border-radius: 4px; }
+.kachel-hist:hover { opacity: 1; background: rgba(0,0,0,.08); }
 .kachel:hover { transform: scale(1.03); }
 .kachel-nr { font-weight: 700; font-size: 15px; }
 .kachel-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -237,3 +239,11 @@ td.diffwarn { color: var(--err); font-weight: 600; }
 .kachel-offen { background: var(--warn-bg); color: var(--warn); }
 .kachel-bezahlt { background: var(--ok-bg); color: var(--ok); }
 .kachel-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+
+.chartwrap { margin: 4px 0 14px; max-width: 100%; overflow-x: auto; }
+.chartwrap svg.barchart { display: block; }
+.barchart .axis { stroke: currentColor; stroke-opacity: .25; }
+.barchart .bar { fill: var(--brand, #2e6b3a); }
+.barchart .bar.neg { fill: var(--err); }
+.barchart .barval { font-size: 10px; text-anchor: middle; fill: currentColor; }
+.barchart .barlabel { font-size: 10px; text-anchor: middle; fill: currentColor; opacity: .7; }
