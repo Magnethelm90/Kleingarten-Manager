@@ -5,7 +5,7 @@
 const S = { state: null, year: null, tab: 'uebersicht', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false, nurUnvollstaendig: false, archivSuche: '', archivAlle: null, archivAlleLoading: false, papierkorb: null, papierkorbLoading: false, papierkorbOffen: false, dashKasse: null, dashKasseLoading: false,
   mahnSel: new Set(), pruefLoginMode: false, protokoll: null, protokollLoading: false, updateCheck: null, updateChecking: false,
   sicherungDismissed: false, abschlussCheck: null, abschlussLoading: false, jubilaeen: null, jubilaeenLoading: false,
-  dashJubilaeen: null, dashJubilaeenLoading: false, jubilaeumDismissed: false };
+  dashJubilaeen: null, dashJubilaeenLoading: false, jubilaeumDismissed: false, globalSearchQ: '' };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
 
@@ -191,6 +191,7 @@ function render() {
       h('div', { class: 'brand' }, h('b', null, 'Kleingarten-Manager'), h('span', null, st.settings.vereinName)),
       h('nav', { class: 'tabs' }, tabBtn('uebersicht', 'Übersicht'), tabBtn('eingabe', 'Zählerstände'), tabBtn('lageplan', 'Lageplan'), tabBtn('rechnungen', 'Rechnungen'), tabBtn('zahlungen', 'Zahlungen'), tabBtn('admin', 'Admin')),
       h('div', { class: 'spacer' }),
+      globalSearchBox(st),
       h('div', null, h('label', null, 'Jahr'), yearSel),
       h('button', { class: 'quit', onclick: quitApp, title: 'Programm beenden' }, 'Beenden'),
     ),
@@ -205,6 +206,52 @@ function render() {
       h('div', { class: 'footer' }, `Kleingarten-Manager ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir)),
     ),
   );
+}
+
+// Globale Suche im Kopfbereich: springt von jeder Seite direkt zur
+// Schnellansicht eines Pächters (Nummer, Gartennummer, Name oder Straße).
+function globalSearchBox(st) {
+  const list = st.paechter || [];
+  const find = (q) => {
+    q = q.trim().toLowerCase();
+    if (!q) return [];
+    return list.filter((p) => [p.mitgliedsnr, p.gartennr, p.name, p.strasse].some((x) => (x || '').toLowerCase().includes(q)))
+      .sort(cmpNr).slice(0, 8);
+  };
+  const results = h('div', { class: 'globalsearch-results' });
+  const goTo = (p) => {
+    S.tab = 'eingabe';
+    S.eingabeMode = 'schnell';
+    S.quickId = p.id;
+    S.globalSearchQ = '';
+    render();
+  };
+  const draw = () => {
+    results.replaceChildren();
+    const m = find(S.globalSearchQ);
+    if (!S.globalSearchQ.trim()) { results.classList.remove('open'); return; }
+    results.classList.add('open');
+    if (!m.length) { results.append(h('div', { class: 'gs-empty' }, 'Nichts gefunden.')); return; }
+    for (const p of m)
+      results.append(h('button', { class: 'gs-item', type: 'button', onclick: () => goTo(p) },
+        h('b', null, p.gartennr || p.mitgliedsnr), ' ', p.name,
+        h('span', { class: 'hint' }, p.mitgliedsnr)));
+  };
+  const input = h('input', {
+    type: 'search', placeholder: '🔍 Garten, Name, Nummer …', class: 'gs-input', autocomplete: 'off',
+    value: S.globalSearchQ,
+    oninput: (e) => { S.globalSearchQ = e.target.value; draw(); },
+    onkeydown: (e) => {
+      if (e.key === 'Escape') { S.globalSearchQ = ''; input.value = ''; draw(); input.blur(); }
+      if (e.key !== 'Enter') return;
+      const m = find(S.globalSearchQ);
+      if (m.length === 1) goTo(m[0]);
+    },
+    onblur: () => setTimeout(() => { results.classList.remove('open'); }, 150),
+    onfocus: () => draw(),
+  });
+  draw();
+  return h('div', { class: 'globalsearch' }, input, results);
 }
 
 // Erinnerung an offene Rechnungen des laufenden Jahres, direkt nach dem Öffnen sichtbar.

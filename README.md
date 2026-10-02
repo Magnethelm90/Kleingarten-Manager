@@ -14,6 +14,8 @@ gibt keine Konten, Schlüssel oder Cloud-Anbindung.
 
 - **Übersicht:** Startseite mit Kennzahlen auf einen Blick – Kassenbestand, offene Rechnungen, unvollständige
   Pächter, Datum der letzten Sicherung
+- **Globale Suche:** Suchfeld im Kopfbereich, von jeder Seite aus erreichbar – Name, Gartennummer, Mitgliedsnummer
+  oder Straße eingeben, springt direkt zur Schnellansicht des passenden Pächters
 - **Admin-Bereich:** Pächter anlegen, ändern, löschen (Nummer, Name, Anschrift, Gartengröße, Umlage, Zählernummern),
   Preise und Regeln einstellen (Wasser, Strom, Pacht, Arbeitsstunden, Bankverbindung, Rechnungsdatum), optionales Passwort.
   Gelöschte Pächter landen im Papierkorb (Zählerstände und Rechnungen bleiben erhalten) und lassen sich
