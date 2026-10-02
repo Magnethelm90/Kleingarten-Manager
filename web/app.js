@@ -1305,6 +1305,8 @@ function abschlussChecklist(st) {
   if (k) {
     items.push(item(ungeprueft === 0, ungeprueft === 0 ? 'Alle sonstigen Ausgaben sind geprüft' : `${ungeprueft} sonstige Ausgabe(n) noch ohne Geprüft-Haken`));
     items.push(item(k.kassenbestand >= 0, k.kassenbestand >= 0 ? `Kassenbestand positiv (${eur(k.kassenbestand)})` : `Kassenbestand negativ (${eur(k.kassenbestand)})`));
+    const wk = k.ausgaben.filter((x) => x.wiederkehrend).length;
+    if (wk > 0) items.push(h('li', null, '🔁 ', `${wk} wiederkehrende Ausgabe(n) werden automatisch als Vorschlag fürs neue Jahr übernommen`));
   }
   return h('div', { class: 'card narrow', style: 'max-width:760px;margin-bottom:16px' },
     h('h3', { style: 'margin-top:0' }, 'Vor dem Abschluss prüfen'),
@@ -1362,12 +1364,16 @@ function ausgabeDialog(a) {
   const kategorie = h('input', { type: 'text', list: 'kategorien-liste', maxlength: 40, value: (a && a.kategorie) || '', placeholder: AUSGABEN_KATEGORIEN[AUSGABEN_KATEGORIEN.length - 1], autocomplete: 'off' });
   const katList = h('datalist', { id: 'kategorien-liste' }, AUSGABEN_KATEGORIEN.map((x) => h('option', { value: x })));
   const betrag = h('input', { type: 'text', inputmode: 'decimal', value: a ? numIn(a.betrag) : '', autocomplete: 'off' });
+  const wiederkehrend = h('input', { type: 'checkbox', checked: !!(a && a.wiederkehrend) });
   const fileInput = h('input', { type: 'file', accept: '.jpg,.jpeg,.png,.webp,.pdf' });
   const fld = (label, input) => h('div', { class: 'field' }, h('label', null, label), input);
   const body = h('div', { class: 'form' },
     fld('Datum', datum), fld('Beschreibung (z. B. Rasenmäher, Kontoführungsgebühren)', besch),
     fld('Kategorie', h('div', null, kategorie, katList)),
     h('div', { class: 'field' }, h('label', null, 'Betrag'), h('div', { class: 'inputunit' }, betrag, h('span', null, '€'))),
+    h('div', { class: 'field wide', style: 'border:none' },
+      h('label', { style: 'display:flex;align-items:center;gap:6px;font-weight:normal' }, wiederkehrend, 'Jährlich wiederkehrend'),
+      h('span', { class: 'fhint' }, 'Wird beim Jahreswechsel automatisch als Vorschlag fürs neue Jahr angelegt (gleiche Beschreibung, Kategorie und Betrag, ungeprüft, ohne Beleg) – z. B. für Kontoführungsgebühren. Lässt sich dort weiterhin anpassen oder löschen.')),
     h('div', { class: 'field wide' }, h('label', null, 'Beleg (Foto oder PDF, optional)'),
       a && a.beleg ? h('p', { class: 'hint', style: 'margin:0 0 6px' }, 'Aktuell hinterlegt: ',
         h('a', { href: `/api/admin/beleg/${a.id}?year=${S.kasseYear}`, target: '_blank' }, 'Beleg ansehen')) : null,
@@ -1389,7 +1395,7 @@ function ausgabeDialog(a) {
       if (!datum.value) { toast('Bitte ein Datum angeben.', 'err'); return false; }
       if (!besch.value.trim()) { toast('Bitte eine Beschreibung eintragen.', 'err'); return false; }
       if (b === null || Number.isNaN(b) || b <= 0) { toast('Bitte einen Betrag größer 0 eintragen.', 'err'); return false; }
-      const data = { datum: datum.value, beschreibung: besch.value.trim(), kategorie: kategorie.value.trim(), betrag: b };
+      const data = { datum: datum.value, beschreibung: besch.value.trim(), kategorie: kategorie.value.trim(), betrag: b, wiederkehrend: wiederkehrend.checked };
       try {
         const saved = isNew ? await api('POST', `/api/admin/ausgaben?year=${S.kasseYear}`, data) : await api('PUT', `/api/admin/ausgaben/${a.id}?year=${S.kasseYear}`, data);
         if (fileInput.files.length) {
@@ -1446,7 +1452,9 @@ function adminKassenbericht(pruefMode) {
   };
   const tbody = h('tbody');
   for (const x of gezeigt) {
-    tbody.append(h('tr', null, h('td', null, deDate(x.datum)), h('td', null, x.beschreibung), h('td', null, x.kategorie),
+    tbody.append(h('tr', null, h('td', null, deDate(x.datum)),
+      h('td', null, x.beschreibung, x.wiederkehrend ? h('span', { title: 'Jährlich wiederkehrend', style: 'margin-left:4px;cursor:help' }, '🔁') : null),
+      h('td', null, x.kategorie),
       h('td', { class: 'r' }, eur(x.betrag)),
       h('td', null, x.beleg ? h('a', { href: `/api/admin/beleg/${x.id}?year=${S.kasseYear}`, target: '_blank', title: 'Beleg ansehen' }, '📎') : null),
       h('td', { title: x.geprueft ? `Geprüft am ${deDate(x.geprueftAm)}` : 'Von der Kassenprüfung abhaken' },

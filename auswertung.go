@@ -165,6 +165,11 @@ type Ausgabe struct {
 	// Geprueft: vom Kassenprüfer abgehakt (z. B. bei der jährlichen Kassenprüfung).
 	Geprueft   bool   `json:"geprueft"`
 	GeprueftAm string `json:"geprueftAm,omitempty"` // JJJJ-MM-TT
+	// Wiederkehrend: wird beim Jahreswechsel automatisch als Vorschlag (gleiche
+	// Beschreibung/Kategorie/Betrag, ungeprüft, ohne Beleg) ins neue Jahr
+	// übernommen, z. B. für Kontoführungsgebühren. Muss dort weiterhin von Hand
+	// kontrolliert und bei Bedarf angepasst werden, es wird nichts blind gebucht.
+	Wiederkehrend bool `json:"wiederkehrend,omitempty"`
 }
 
 // AusgabenKategorien sind Vorschläge für die Kategorie-Auswahl. Es ist keine

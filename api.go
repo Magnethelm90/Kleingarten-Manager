@@ -1067,11 +1067,30 @@ func (a *App) handleNextYear(w http.ResponseWriter, r *http.Request) {
 			StromVJ:  carry(o.StromAkt, o.StromVJ),
 		}
 	}
+	// Als wiederkehrend markierte Ausgaben (z. B. Kontoführungsgebühren) werden
+	// als Vorschlag fürs neue Jahr übernommen: gleiche Beschreibung, Kategorie
+	// und Betrag, aber ungeprüft und ohne den alten Beleg, damit nichts blind
+	// durchgewunken wird und der Vorstand jede noch von Hand bestätigt.
+	wiederkehrend := 0
+	for _, x := range old.Ausgaben {
+		if !x.Wiederkehrend {
+			continue
+		}
+		nj.Ausgaben = append(nj.Ausgaben, Ausgabe{
+			ID: newID(), Datum: addYear(x.Datum), Beschreibung: x.Beschreibung, Kategorie: x.Kategorie,
+			Betrag: x.Betrag, Wiederkehrend: true,
+		})
+		wiederkehrend++
+	}
 	d.Jahre[yearKey(next)] = nj
 	d.Settings.Jahr = next
 	d.Settings.Rechnungsdatum = addYear(d.Settings.Rechnungsdatum)
 	d.Settings.Zahlungsziel = addYear(d.Settings.Zahlungsziel)
-	a.st.audit("Jahreswechsel: %d abgeschlossen, %d begonnen", cur, next)
+	if wiederkehrend > 0 {
+		a.st.audit("Jahreswechsel: %d abgeschlossen, %d begonnen (%d wiederkehrende Ausgabe(n) übernommen)", cur, next, wiederkehrend)
+	} else {
+		a.st.audit("Jahreswechsel: %d abgeschlossen, %d begonnen", cur, next)
+	}
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return

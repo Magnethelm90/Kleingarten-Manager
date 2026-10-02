@@ -1598,3 +1598,48 @@ func TestSicherungBeschaedigtWirdErkannt(t *testing.T) {
 		t.Error("beschädigte Sicherung hätte gemeldet werden müssen")
 	}
 }
+
+func TestWiederkehrendeAusgaben(t *testing.T) {
+	_, h := newTestApp(t)
+	wk := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025",
+		Ausgabe{Datum: "2026-03-01", Beschreibung: "Kontoführung", Kategorie: "Verwaltung", Betrag: 24, Wiederkehrend: true}))
+	einmal := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025",
+		Ausgabe{Datum: "2026-05-01", Beschreibung: "Rasenmäher", Kategorie: "Anschaffung", Betrag: 199}))
+	// die wiederkehrende als geprüft markieren, sollte im neuen Jahr NICHT übernommen werden
+	do(h, "PUT", "/api/admin/ausgaben/"+wk.ID+"/geprueft?year=2025", map[string]bool{"geprueft": true})
+	_ = einmal
+
+	do(h, "POST", "/api/admin/jahreswechsel", nil)
+
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2026", nil))
+	if len(k.Ausgaben) != 1 {
+		t.Fatalf("erwartet genau 1 übernommene Ausgabe im neuen Jahr: %+v", k.Ausgaben)
+	}
+	n := k.Ausgaben[0]
+	if n.Beschreibung != "Kontoführung" || n.Kategorie != "Verwaltung" || n.Betrag != 24 || !n.Wiederkehrend {
+		t.Errorf("übernommene Ausgabe stimmt nicht: %+v", n)
+	}
+	if n.Geprueft || n.GeprueftAm != "" {
+		t.Errorf("übernommene Ausgabe sollte ungeprüft starten: %+v", n)
+	}
+	if n.Beleg != "" {
+		t.Errorf("übernommene Ausgabe sollte keinen Beleg übernehmen: %+v", n)
+	}
+	if n.ID == wk.ID {
+		t.Error("übernommene Ausgabe sollte eine eigene ID haben")
+	}
+	if n.Datum != "2027-03-01" {
+		t.Errorf("Datum sollte um ein Jahr verschoben sein: %q", n.Datum)
+	}
+
+	log := decode[[]AuditEntry](t, do(h, "GET", "/api/admin/audit-log", nil))
+	found := false
+	for _, e := range log {
+		if strings.Contains(e.Aktion, "1 wiederkehrende Ausgabe(n) übernommen") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Übernahme sollte im Protokoll stehen: %+v", log)
+	}
+}

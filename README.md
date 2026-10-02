@@ -35,9 +35,10 @@ gibt keine Konten, Schlüssel oder Cloud-Anbindung.
 - **Kassenbericht** (Admin-Bereich, eigene Jahresauswahl): fasst die Abrechnung aller Pächter zusammen, vergleicht
   Wasser- und Stromverbrauch mit der Rechnung des Versorgers, verwaltet sonstige Ausgaben der Vereinskasse
   (Kontoführung, Anschaffungen, Reparaturen – jede Ausgabe einzeln, mit Kategorie, optionalem Beleg-Foto/PDF und
-  Kassenprüfer-Haken) und führt mit einem Anfangsbestand einen echten Kassenbestand (wird beim Jahreswechsel
-  automatisch fortgeschrieben); dazu ein Verlauf über die Jahre für den Verein insgesamt; als Excel-Datei für
-  die Kassenprüfung exportierbar
+  Kassenprüfer-Haken, optional als jährlich wiederkehrend markierbar – wird dann beim Jahreswechsel automatisch
+  als Vorschlag fürs neue Jahr übernommen, z. B. Kontoführungsgebühren) und führt mit einem Anfangsbestand einen
+  echten Kassenbestand (wird beim Jahreswechsel automatisch fortgeschrieben); dazu ein Verlauf über die Jahre für
+  den Verein insgesamt; als Excel-Datei für die Kassenprüfung exportierbar
 - Beim Öffnen ein Hinweis, wenn noch Rechnungen offen oder überfällig sind
 - **Jahreswechsel**, Import der Mitglieder aus Excel/CSV, Excel-Export, automatische Sicherungen
 - **Lageplan:** Kachelübersicht aller Gärten mit Status-Farbcode (unvollständig/berechnet/offen/bezahlt), Klick
