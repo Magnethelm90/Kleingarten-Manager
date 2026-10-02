@@ -37,7 +37,7 @@ const (
 	appName     = "Kleingarten-Manager"
 	appID       = "kleingarten-manager"
 	repoOwner   = "Magnethelm90"
-	repoName    = "kleingarten-manager"
+	repoName    = "Kleingarten-Manager"
 	repoURLBase = "https://github.com/" + repoOwner + "/" + repoName + "/"
 )
 

@@ -1901,7 +1901,12 @@ function updateCheckCard() {
       h('button', { class: 'btn', disabled: S.updateChecking, onclick: checkUpdate }, S.updateChecking ? 'Prüfe …' : 'Nach Updates suchen')),
     r ? (r.available
       ? h('div', { class: 'banner info', style: 'margin-top:10px' }, `Version ${r.version} ist verfügbar. `,
-          h('a', { href: r.url, target: '_blank', rel: 'noopener' }, 'Release-Seite öffnen'))
+          h('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer', onclick: (e) => {
+            // Im eigenen Programmfenster über den Systembrowser öffnen statt im Fenster selbst.
+            if (typeof window.kgmOpenExternal !== 'function') return;
+            e.preventDefault();
+            window.kgmOpenExternal(r.url).catch(() => toast('Die Release-Seite konnte nicht geöffnet werden.', 'err'));
+          } }, 'Release-Seite öffnen'))
       : r.hinweis
         ? h('p', { class: 'hint', style: 'margin-top:10px' }, r.hinweis)
         : h('p', { class: 'hint', style: 'margin-top:10px' }, 'Du hast die aktuelle Version.')) : null);
