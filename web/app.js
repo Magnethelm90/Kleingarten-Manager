@@ -284,7 +284,7 @@ async function quitApp() {
   try { await api('POST', '/api/quit'); } catch (e) { /* Programm ist weg */ }
   document.getElementById('app').replaceChildren(
     h('div', { class: 'center card' }, h('h2', null, 'Programm beendet'),
-      h('p', null, 'Du kannst dieses Browserfenster jetzt schließen. Zum erneuten Starten die Kleingarten-Manager.exe öffnen.')));
+      h('p', null, 'Das Fenster schließt sich gleich von selbst. Zum erneuten Starten den Kleingarten-Manager wieder öffnen.')));
 }
 
 // ------------------------------------------------------------------ Tab: Übersicht

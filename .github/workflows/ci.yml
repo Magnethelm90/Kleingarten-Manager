@@ -22,22 +22,36 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
 
-  build:
+  build-windows:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Windows-Programm bauen
+      - uses: egor-tensin/setup-mingw@v2
+        with:
+          platform: x64
+      - name: Windows-Programm bauen (eigenes Fenster, CGO/WebView2)
         env:
-          GOOS: windows
-          GOARCH: amd64
-          CGO_ENABLED: "0"
-        run: go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager.exe .
+          CGO_ENABLED: "1"
+        run: go build -trimpath -ldflags "-s -w -H windowsgui" -o Kleingarten-Manager.exe .
       - uses: actions/upload-artifact@v4
         with:
           name: Kleingarten-Manager
           path: Kleingarten-Manager.exe
           if-no-files-found: error
+
+  build-macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: macOS-Programme bauen (Apple Silicon + Intel, eigenes Fenster)
+        run: |
+          CGO_ENABLED=1 GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager-arm64 .
+          CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64" go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager-amd64 .
