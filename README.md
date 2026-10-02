@@ -1,4 +1,4 @@
-# Gartenabrechnung
+# Kleingarten-Manager
 
 Kleines Windows-Programm für Kleingartenvereine: Pächter einmal anlegen, jedes Jahr nur noch die Zählerstände
 eintragen, daraus werden die Rechnungen als PDF erzeugt. Die Zahlungen lassen sich abhaken, offene Posten
