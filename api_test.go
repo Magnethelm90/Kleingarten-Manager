@@ -1359,6 +1359,58 @@ func TestMahnung(t *testing.T) {
 	}
 }
 
+func TestSessionInvalidierungBeiPasswortaenderung(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]string{"new": "altespasswort1"})
+	loginRec := do(h, "POST", "/api/admin/login", map[string]string{"password": "altespasswort1"})
+	var oldCookie *http.Cookie
+	for _, c := range loginRec.Result().Cookies() {
+		if c.Name == "ga_session" {
+			oldCookie = c
+		}
+	}
+	if oldCookie == nil {
+		t.Fatal("keine Admin-Sitzung erhalten")
+	}
+	if rec := do(h, "GET", "/api/admin/audit-log", nil, oldCookie); rec.Code != 200 {
+		t.Fatalf("alte Sitzung sollte vor der Änderung noch gültig sein: %d", rec.Code)
+	}
+	// Passwort ändern: die alte Sitzung (von einem anderen Gerät/Browser) muss sofort ungültig werden
+	if rec := do(h, "POST", "/api/admin/password", map[string]string{"old": "altespasswort1", "new": "neuespasswort1"}, oldCookie); rec.Code != 200 {
+		t.Fatalf("Passwort ändern: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(h, "GET", "/api/admin/audit-log", nil, oldCookie); rec.Code != http.StatusUnauthorized {
+		t.Errorf("alte Sitzung sollte nach Passwortänderung ungültig sein: %d", rec.Code)
+	}
+
+	// dasselbe für den Kassenprüfer-Zugang
+	adminRec := do(h, "POST", "/api/admin/login", map[string]string{"password": "neuespasswort1"})
+	var adminCookie *http.Cookie
+	for _, c := range adminRec.Result().Cookies() {
+		if c.Name == "ga_session" {
+			adminCookie = c
+		}
+	}
+	do(h, "POST", "/api/admin/pruef-password", map[string]string{"new": "pruefalt1234"}, adminCookie)
+	pruefRec := do(h, "POST", "/api/pruef/login", map[string]string{"password": "pruefalt1234"})
+	var pruefCookie *http.Cookie
+	for _, c := range pruefRec.Result().Cookies() {
+		if c.Name == "ga_pruef_session" {
+			pruefCookie = c
+		}
+	}
+	if pruefCookie == nil {
+		t.Fatal("keine Kassenprüfer-Sitzung erhalten")
+	}
+	if rec := do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, pruefCookie); rec.Code != 200 {
+		t.Fatalf("Prüfer-Sitzung sollte vor der Änderung gültig sein: %d", rec.Code)
+	}
+	do(h, "POST", "/api/admin/pruef-password", map[string]string{"new": "pruefneu1234"}, adminCookie)
+	if rec := do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, pruefCookie); rec.Code != http.StatusUnauthorized {
+		t.Errorf("alte Kassenprüfer-Sitzung sollte nach Passwortänderung ungültig sein: %d", rec.Code)
+	}
+}
+
 func TestVersionNewer(t *testing.T) {
 	cases := []struct {
 		a, b string

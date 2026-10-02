@@ -325,6 +325,12 @@ func (a *App) handlePruefPassword(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	// Bestehende Kassenprüfer-Sitzungen sofort ungültig machen, nicht erst nach
+	// Ablauf der 4 Stunden (z. B. wenn der Zugang einer ausgeschiedenen Person
+	// entzogen werden soll).
+	a.pmu.Lock()
+	a.psessions = map[string]time.Time{}
+	a.pmu.Unlock()
 	writeJSON(w, 200, map[string]bool{"ok": true, "hasPruefPassword": in.New != ""})
 }
 
@@ -478,6 +484,11 @@ func (a *App) handlePassword(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	// Alle bestehenden Admin-Sitzungen (auch auf anderen Geräten) werden mit der
+	// Passwortänderung sofort ungültig, nicht erst nach Ablauf der 4 Stunden.
+	a.smu.Lock()
+	a.sessions = map[string]time.Time{}
+	a.smu.Unlock()
 	if in.New != "" {
 		a.startSession(w)
 	}
