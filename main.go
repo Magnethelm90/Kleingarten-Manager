@@ -40,6 +40,11 @@ func dataDir(flagDir string) string {
 	if flagDir != "" {
 		return flagDir
 	}
+	// KLEINGARTEN_MANAGER_DATEN ist der aktuelle Name; GARTENABRECHNUNG_DATEN wird
+	// aus der Zeit vor der Umbenennung weiterhin unterstützt.
+	if env := os.Getenv("KLEINGARTEN_MANAGER_DATEN"); env != "" {
+		return env
+	}
 	if env := os.Getenv("GARTENABRECHNUNG_DATEN"); env != "" {
 		return env
 	}
@@ -53,7 +58,7 @@ func dataDir(flagDir string) string {
 		}
 	}
 	if cfg, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(cfg, "Gartenabrechnung")
+		return filepath.Join(cfg, appName)
 	}
 	return "."
 }
@@ -70,7 +75,7 @@ func alreadyRunning(port int) bool {
 	if json.NewDecoder(resp.Body).Decode(&m) != nil {
 		return false
 	}
-	return m["app"] == "gartenabrechnung"
+	return m["app"] == appID
 }
 
 func main() {
@@ -105,7 +110,7 @@ func main() {
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
 	if err != nil {
 		if alreadyRunning(*port) {
-			fmt.Println("Gartenabrechnung laeuft bereits - oeffne den Browser.")
+			fmt.Println(appName, "laeuft bereits - oeffne den Browser.")
 			if !*noBrowser {
 				openBrowser(fmt.Sprintf("http://127.0.0.1:%d/", *port))
 			}
@@ -138,7 +143,7 @@ func main() {
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/", actual)
 	fmt.Println("==============================================================")
-	fmt.Println(" Gartenabrechnung", appVersion, "- Copyright (c)", time.Now().Year(), appAutor)
+	fmt.Println(" "+appName, appVersion, "- Copyright (c)", time.Now().Year(), appAutor)
 	fmt.Println("==============================================================")
 	fmt.Println(" Das Programm laeuft. Dieses Fenster bitte offen lassen.")
 	fmt.Println(" Adresse im Browser:", url)

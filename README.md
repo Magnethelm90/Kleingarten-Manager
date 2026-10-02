@@ -1,8 +1,9 @@
-# Gartenabrechnung
+# Kleingarten-Manager
 
 Kleines Programm für Kleingartenvereine (Windows und macOS): Pächter einmal anlegen, jedes Jahr nur noch die
-Zählerstände eintragen, daraus werden die Rechnungen als PDF erzeugt. Die Zahlungen lassen sich abhaken, offene
-Posten werden aufgelistet.
+Zählerstände eintragen, daraus werden die Rechnungen als PDF erzeugt. Daneben auch Lageplan, Kassenbericht mit
+Kassenprüfer-Zugang, Mahnungen und mehr – daher der Name: es ist inzwischen mehr als reine Abrechnung
+(früher hieß das Programm „Gartenabrechnung“).
 
 Unter Windows ist das Programm eine einzelne `.exe` ohne Installation, unter macOS eine normale `.app` zum
 Reinziehen in den Programme-Ordner. Es startet einen kleinen Webserver, der **nur auf dem eigenen Rechner**
@@ -70,55 +71,58 @@ Alle Namen, Adressen und die Bankverbindung in den Voreinstellungen sind Platzha
 
 ### Windows
 
-`Gartenabrechnung.exe` in einen eigenen Ordner legen und doppelklicken. Das Konsolenfenster offen lassen.
+`Kleingarten-Manager.exe` in einen eigenen Ordner legen und doppelklicken. Das Konsolenfenster offen lassen.
 Die Daten liegen im selben Ordner:
 
 | Datei / Ordner | Inhalt |
 | --- | --- |
-| `gartenabrechnung-daten.json` | alle Daten (Pächter, Zählerstände, Rechnungsarchiv, Zahlungen) |
+| `kleingarten-manager-daten.json` | alle Daten (Pächter, Zählerstände, Rechnungsarchiv, Zahlungen) |
 | `Rechnungen/<Jahr>/` | fertige PDF-Rechnungen |
 | `Sicherungen/` | automatische Tages- und Ereignissicherungen |
 
 ### macOS
 
-`Gartenabrechnung.app` in den Programme-Ordner ziehen und per Doppelklick starten (läuft nativ auf Apple
+`Kleingarten-Manager.app` in den Programme-Ordner ziehen und per Doppelklick starten (läuft nativ auf Apple
 Silicon und Intel). Da die App nicht mit einem kostenpflichtigen Apple-Entwicklerzertifikat signiert ist,
 meldet macOS beim allerersten Start „nicht verifizierter Entwickler": per Rechtsklick (bzw. Ctrl-Klick) auf
 die App → „Öffnen" → im Dialog nochmal „Öffnen" bestätigen. Danach startet sie ganz normal per Doppelklick.
 
 Da der Programme-Ordner nicht beschreibbar ist, legt die App ihre Daten unter
-`~/Library/Application Support/Gartenabrechnung/` an (gleiche Dateien wie oben).
+`~/Library/Application Support/Kleingarten-Manager/` an (gleiche Dateien wie oben).
 
 Beide Systeme: Optionen `--data <Ordner>`, `--port <Zahl>`, `--no-browser`, `--reset-admin` (Admin-Passwort entfernen).
+
+**Update von „Gartenabrechnung“:** eine vorhandene `gartenabrechnung-daten.json` wird beim ersten Start
+automatisch in `kleingarten-manager-daten.json` umbenannt, es ist nichts von Hand zu tun.
 
 ## Selbst bauen
 
 Benötigt [Go](https://go.dev/dl/) 1.24 oder neuer.
 
 Bei jedem Push auf `main` und jedem Pull Request prüft GitHub Actions Formatierung, `go vet` und die Tests
-und baut die `Gartenabrechnung.exe`. Sie liegt beim jeweiligen Lauf unter »Artifacts« zum Herunterladen.
+und baut die `Kleingarten-Manager.exe`. Sie liegt beim jeweiligen Lauf unter »Artifacts« zum Herunterladen.
 
 Neue Version veröffentlichen: `git tag v1.1 && git push origin v1.1`. GitHub baut dann die `.exe` mit dieser
 Versionsnummer und stellt sie unter »Releases« zum Download bereit.
 
 ```
 go test ./...
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Gartenabrechnung.exe .
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager.exe .
 ```
 
 Unter Windows (PowerShell):
 
 ```
 go test ./...
-go build -trimpath -ldflags "-s -w" -o Gartenabrechnung.exe .
+go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager.exe .
 ```
 
 macOS-Build (als `.app`, läuft ohne Installation von Zusatzsoftware):
 
 ```
-GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Gartenabrechnung-arm64 .
-GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Gartenabrechnung-amd64 .
-# beide Binaries in Gartenabrechnung.app/Contents/MacOS/ legen, Startskript wählt per `uname -m` die passende aus
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager-arm64 .
+GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager-amd64 .
+# beide Binaries in Kleingarten-Manager.app/Contents/MacOS/ legen, Startskript wählt per `uname -m` die passende aus
 ```
 
 ## Sicherheit

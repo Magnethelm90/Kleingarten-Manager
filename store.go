@@ -14,7 +14,13 @@ import (
 	"time"
 )
 
-const dataFileName = "gartenabrechnung-daten.json"
+const dataFileName = "kleingarten-manager-daten.json"
+
+// legacyDataFileName war der Dateiname vor der Umbenennung von
+// "Gartenabrechnung". Beim ersten Start nach einem Update wird eine
+// vorhandene alte Datendatei automatisch übernommen, damit niemand von Hand
+// etwas umbenennen muss.
+const legacyDataFileName = "gartenabrechnung-daten.json"
 
 // Store hält den Datenbestand im Speicher und schreibt ihn sicher in eine Datei.
 type Store struct {
@@ -42,6 +48,14 @@ func openStore(dir string) (*Store, error) {
 	_ = os.Remove(probe)
 
 	s := &Store{dir: dir, path: filepath.Join(dir, dataFileName)}
+	// Umstieg von der alten Datendatei (vor der Umbenennung): einmalig übernehmen,
+	// falls noch keine neue Datei existiert.
+	if _, err := os.Stat(s.path); errors.Is(err, os.ErrNotExist) {
+		legacy := filepath.Join(dir, legacyDataFileName)
+		if _, lerr := os.Stat(legacy); lerr == nil {
+			_ = os.Rename(legacy, s.path)
+		}
+	}
 	raw, err := os.ReadFile(s.path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
@@ -236,7 +250,7 @@ func (s *Store) dailyBackup() {
 	if os.MkdirAll(dir, 0o700) != nil {
 		return
 	}
-	base := "gartenabrechnung-daten-" + time.Now().Format("2006-01-02") + ".json"
+	base := backupPrefix + time.Now().Format("2006-01-02") + ".json"
 	name := filepath.Join(dir, base)
 	if _, err := os.Stat(name); err == nil {
 		return // heute schon gesichert
@@ -246,11 +260,23 @@ func (s *Store) dailyBackup() {
 	s.mirrorToSecondary(base, old)
 }
 
-// isDailyBackup erkennt Tagessicherungen (gartenabrechnung-daten-JJJJ-MM-TT.json).
+// backupPrefix ist der aktuelle Dateiname-Präfix für Sicherungen.
+// legacyBackupPrefix (vor der Umbenennung) wird beim Aufräumen weiterhin
+// erkannt, damit alte Sicherungen nicht als Datenmüll liegen bleiben, der
+// nie mitgezählt oder aufgeräumt wird.
+const (
+	backupPrefix       = "kleingarten-manager-daten-"
+	legacyBackupPrefix = "gartenabrechnung-daten-"
+)
+
+// isDailyBackup erkennt Tagessicherungen (…-daten-JJJJ-MM-TT.json).
 func isDailyBackup(name string) bool {
-	d, ok := strings.CutPrefix(name, "gartenabrechnung-daten-")
+	d, ok := strings.CutPrefix(name, backupPrefix)
 	if !ok {
-		return false
+		d, ok = strings.CutPrefix(name, legacyBackupPrefix)
+		if !ok {
+			return false
+		}
 	}
 	d, ok = strings.CutSuffix(d, ".json")
 	if !ok {
@@ -291,10 +317,10 @@ func (s *Store) snapshotBackup(label string) {
 	if os.MkdirAll(dir, 0o700) != nil {
 		return
 	}
-	name := fmt.Sprintf("gartenabrechnung-daten-%s-%s.json", time.Now().Format("2006-01-02_150405"), label)
+	name := fmt.Sprintf("%s%s-%s.json", backupPrefix, time.Now().Format("2006-01-02_150405"), label)
 	_ = os.WriteFile(filepath.Join(dir, name), old, 0o600)
 	pruneBackups(dir, func(n string) bool {
-		return strings.HasPrefix(n, "gartenabrechnung-daten-") && strings.HasSuffix(n, ".json") && !isDailyBackup(n)
+		return (strings.HasPrefix(n, backupPrefix) || strings.HasPrefix(n, legacyBackupPrefix)) && strings.HasSuffix(n, ".json") && !isDailyBackup(n)
 	}, 60)
 	s.mirrorToSecondary(name, old)
 }

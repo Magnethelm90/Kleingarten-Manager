@@ -1,4 +1,4 @@
-module gartenabrechnung
+module kleingarten-manager
 
 go 1.24
 

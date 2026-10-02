@@ -29,6 +29,18 @@ var appVersion = "1.0"
 // appAutor erscheint in der Fußzeile der Oberfläche und im Konsolenfenster.
 const appAutor = "Derek"
 
+// appName ist der Programmname (früher "Gartenabrechnung", seit das Programm
+// mehr als reine Abrechnung kann: Lageplan, Kassenbericht, Kassenprüfer-Zugang
+// usw.). appID ist die interne, versionsunabhängige Kennung für das
+// Selbst-Erkennen beim Start (alreadyRunning) und die Update-Prüfung.
+const (
+	appName     = "Kleingarten-Manager"
+	appID       = "kleingarten-manager"
+	repoOwner   = "Magnethelm90"
+	repoName    = "kleingarten-manager"
+	repoURLBase = "https://github.com/" + repoOwner + "/" + repoName + "/"
+)
+
 type App struct {
 	st   *Store
 	port int
@@ -1331,7 +1343,7 @@ func (a *App) handleBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", `attachment; filename="gartenabrechnung-sicherung-`+time.Now().Format("2006-01-02")+`.json"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+appID+`-sicherung-`+time.Now().Format("2006-01-02")+`.json"`)
 	_, _ = w.Write(raw)
 }
 
@@ -1353,7 +1365,7 @@ func (a *App) handleAuditLog(w http.ResponseWriter, r *http.Request) {
 // Antwort wird in der Größe begrenzt und nur zwei einfache Textfelder werden
 // ausgelesen. Es wird nichts heruntergeladen oder ausgeführt, nur ein Link
 // zur Release-Seite angezeigt, den die Person selbst anklicken kann.
-const updateCheckURL = "https://api.github.com/repos/Magnethelm90/gartenabrechnung/releases/latest"
+const updateCheckURL = "https://api.github.com/repos/" + repoOwner + "/" + repoName + "/releases/latest"
 
 type updateInfo struct {
 	Available bool   `json:"available"`
@@ -1393,7 +1405,7 @@ func (a *App) handleCheckUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "Gartenabrechnung/"+appVersion)
+	req.Header.Set("User-Agent", appName+"/"+appVersion)
 	resp, err := client.Do(req)
 	if err != nil {
 		writeJSON(w, 200, updateInfo{Hinweis: "Keine Verbindung zu GitHub möglich"})
@@ -1413,7 +1425,7 @@ func (a *App) handleCheckUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	latest := strings.TrimPrefix(strings.TrimSpace(rel.TagName), "v")
-	if latest == "" || !strings.HasPrefix(rel.HTMLURL, "https://github.com/Magnethelm90/gartenabrechnung/") {
+	if latest == "" || !strings.HasPrefix(rel.HTMLURL, repoURLBase) {
 		writeJSON(w, 200, updateInfo{Hinweis: "Keine Release-Information verfügbar"})
 		return
 	}
@@ -1484,7 +1496,7 @@ func (a *App) handleQuit(w http.ResponseWriter, r *http.Request) {
 func (a *App) routes(static http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]string{"app": "gartenabrechnung", "version": appVersion})
+		writeJSON(w, 200, map[string]string{"app": appID, "version": appVersion})
 	})
 	mux.HandleFunc("GET /api/state", a.handleState)
 	mux.HandleFunc("PUT /api/ablesung/{id}", a.handleAblesung)

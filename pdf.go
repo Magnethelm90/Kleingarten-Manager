@@ -64,7 +64,7 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	pdf.SetAutoPageBreak(false, 0)
 	pdf.SetTitle(tr("Rechnung "+invoiceNumber(s, p)), true)
 	pdf.SetAuthor(tr(s.VereinName), true)
-	pdf.SetCreator("Gartenabrechnung", true)
+	pdf.SetCreator(appName, true)
 	pdf.AddPage()
 
 	y := 0.0
@@ -354,7 +354,7 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	pdf.SetAutoPageBreak(false, 0)
 	pdf.SetTitle(tr("Zahlungserinnerung "+invoiceNumber(s, p)), true)
 	pdf.SetAuthor(tr(s.VereinName), true)
-	pdf.SetCreator("Gartenabrechnung", true)
+	pdf.SetCreator(appName, true)
 	pdf.AddPage()
 
 	y := 0.0

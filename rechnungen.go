@@ -531,7 +531,7 @@ func (a *App) handleICSExport(w http.ResponseWriter, r *http.Request) {
 	sort.SliceStable(list, func(i, j int) bool { return natLess(list[i].Paechter.Mitgliedsnr, list[j].Paechter.Mitgliedsnr) })
 
 	var b strings.Builder
-	b.WriteString("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Gartenabrechnung//DE\r\nCALSCALE:GREGORIAN\r\n")
+	fmt.Fprintf(&b, "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//%s//DE\r\nCALSCALE:GREGORIAN\r\n", appName)
 	now := time.Now().UTC().Format("20060102T150405Z")
 	for _, x := range list {
 		due := strings.ReplaceAll(x.Settings.Zahlungsziel, "-", "")
@@ -539,7 +539,7 @@ func (a *App) handleICSExport(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		b.WriteString("BEGIN:VEVENT\r\n")
-		fmt.Fprintf(&b, "UID:%s@gartenabrechnung\r\n", x.ID)
+		fmt.Fprintf(&b, "UID:%s@%s\r\n", x.ID, appID)
 		fmt.Fprintf(&b, "DTSTAMP:%s\r\n", now)
 		fmt.Fprintf(&b, "DTSTART;VALUE=DATE:%s\r\n", due)
 		fmt.Fprintf(&b, "SUMMARY:%s\r\n", icsEscape(fmt.Sprintf("Zahlungsziel %s %s (%s)", x.Paechter.Mitgliedsnr, x.Paechter.Name, fmtEUR(openAmount(x)))))

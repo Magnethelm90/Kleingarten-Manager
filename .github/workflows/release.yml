@@ -23,41 +23,41 @@ jobs:
           GOOS: windows
           GOARCH: amd64
           CGO_ENABLED: "0"
-        run: go build -trimpath -ldflags "-s -w -X main.appVersion=${GITHUB_REF_NAME#v}" -o Gartenabrechnung.exe .
+        run: go build -trimpath -ldflags "-s -w -X main.appVersion=${GITHUB_REF_NAME#v}" -o Kleingarten-Manager.exe .
       - name: macOS-Programme bauen (Apple Silicon + Intel)
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Gartenabrechnung-arm64 .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Gartenabrechnung-amd64 .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-arm64 .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-amd64 .
       - name: macOS-App bündeln
         run: |
-          APP=Gartenabrechnung.app
+          APP=Kleingarten-Manager.app
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-          mv Gartenabrechnung-arm64 Gartenabrechnung-amd64 "$APP/Contents/MacOS/"
-          chmod +x "$APP/Contents/MacOS/Gartenabrechnung-arm64" "$APP/Contents/MacOS/Gartenabrechnung-amd64"
-          cat > "$APP/Contents/MacOS/Gartenabrechnung" <<'SH'
+          mv Kleingarten-Manager-arm64 Kleingarten-Manager-amd64 "$APP/Contents/MacOS/"
+          chmod +x "$APP/Contents/MacOS/Kleingarten-Manager-arm64" "$APP/Contents/MacOS/Kleingarten-Manager-amd64"
+          cat > "$APP/Contents/MacOS/Kleingarten-Manager" <<'SH'
           #!/bin/bash
           DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-          if [ "$(uname -m)" = "arm64" ]; then exec "$DIR/Gartenabrechnung-arm64" "$@"; else exec "$DIR/Gartenabrechnung-amd64" "$@"; fi
+          if [ "$(uname -m)" = "arm64" ]; then exec "$DIR/Kleingarten-Manager-arm64" "$@"; else exec "$DIR/Kleingarten-Manager-amd64" "$@"; fi
           SH
-          chmod +x "$APP/Contents/MacOS/Gartenabrechnung"
+          chmod +x "$APP/Contents/MacOS/Kleingarten-Manager"
           cat > "$APP/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
-            <key>CFBundleName</key><string>Gartenabrechnung</string>
-            <key>CFBundleDisplayName</key><string>Gartenabrechnung</string>
-            <key>CFBundleIdentifier</key><string>de.gartenabrechnung.app</string>
+            <key>CFBundleName</key><string>Kleingarten-Manager</string>
+            <key>CFBundleDisplayName</key><string>Kleingarten-Manager</string>
+            <key>CFBundleIdentifier</key><string>de.kleingarten-manager.app</string>
             <key>CFBundleVersion</key><string>${GITHUB_REF_NAME#v}</string>
             <key>CFBundleShortVersionString</key><string>${GITHUB_REF_NAME#v}</string>
             <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleExecutable</key><string>Gartenabrechnung</string>
+            <key>CFBundleExecutable</key><string>Kleingarten-Manager</string>
             <key>LSMinimumSystemVersion</key><string>11.0</string>
             <key>NSHighResolutionCapable</key><true/>
           </dict></plist>
           EOF
-          zip -r -y Gartenabrechnung-mac.zip "$APP"
+          zip -r -y Kleingarten-Manager-mac.zip "$APP"
       - name: Release anlegen
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" Gartenabrechnung.exe Gartenabrechnung-mac.zip --title "Gartenabrechnung $GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" Kleingarten-Manager.exe Kleingarten-Manager-mac.zip --title "Kleingarten-Manager $GITHUB_REF_NAME" --generate-notes

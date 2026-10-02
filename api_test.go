@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -1188,6 +1189,33 @@ func TestArchivAlleJahre(t *testing.T) {
 		if e.Mitgliedsnr != "1" || e.Name != "Verlauf" {
 			t.Errorf("Eintrag: %+v", e)
 		}
+	}
+}
+
+// TestAlteDatendateiWirdUebernommen stellt sicher, dass eine Datendatei aus
+// der Zeit vor der Umbenennung (Gartenabrechnung -> Kleingarten-Manager)
+// automatisch übernommen wird, statt dass das Programm einfach neu anfängt.
+func TestAlteDatendateiWirdUebernommen(t *testing.T) {
+	dir := t.TempDir()
+	alt := newData()
+	alt.Paechter = []Paechter{{ID: "p1", Mitgliedsnr: "1", Name: "Alter Bestand", Gartengroesse: 300}}
+	alt.Jahre[yearKey(alt.Settings.Jahr)].Ablesungen["p1"] = Ablesung{}
+	raw, _ := json.Marshal(alt)
+	if err := os.WriteFile(filepath.Join(dir, legacyDataFileName), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := openStore(dir)
+	if err != nil {
+		t.Fatalf("openStore: %v", err)
+	}
+	if len(st.d.Paechter) != 1 || st.d.Paechter[0].Name != "Alter Bestand" {
+		t.Fatalf("alte Daten wurden nicht übernommen: %+v", st.d.Paechter)
+	}
+	if _, err := os.Stat(filepath.Join(dir, dataFileName)); err != nil {
+		t.Error("neue Datendatei sollte jetzt existieren")
+	}
+	if _, err := os.Stat(filepath.Join(dir, legacyDataFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Error("alte Datendatei sollte umbenannt (nicht kopiert) worden sein")
 	}
 }
 

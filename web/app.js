@@ -1,5 +1,5 @@
 'use strict';
-/* Gartenabrechnung – Oberfläche. Alle Texte aus Daten werden nur über textContent/DOM-Knoten
+/* Kleingarten-Manager – Oberfläche. Alle Texte aus Daten werden nur über textContent/DOM-Knoten
    eingefügt (kein innerHTML), damit Namen o. Ä. nie als Code ausgeführt werden können. */
 
 const S = { state: null, year: null, tab: 'uebersicht', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false, nurUnvollstaendig: false, archivSuche: '', archivAlle: null, archivAlleLoading: false, papierkorb: null, papierkorbLoading: false, papierkorbOffen: false, dashKasse: null, dashKasseLoading: false,
@@ -89,7 +89,7 @@ async function api(method, url, body, isForm) {
   try {
     r = await fetch(url, opt);
   } catch (e) {
-    const err = new Error('Keine Verbindung zum Programm. Läuft das Fenster mit der Gartenabrechnung noch?');
+    const err = new Error('Keine Verbindung zum Programm. Läuft das Fenster mit dem Kleingarten-Manager noch?');
     err.network = true;
     throw err;
   }
@@ -186,7 +186,7 @@ function render() {
 
   app.append(
     h('header', { class: 'top' },
-      h('div', { class: 'brand' }, h('b', null, 'Gartenabrechnung'), h('span', null, st.settings.vereinName)),
+      h('div', { class: 'brand' }, h('b', null, 'Kleingarten-Manager'), h('span', null, st.settings.vereinName)),
       h('nav', { class: 'tabs' }, tabBtn('uebersicht', 'Übersicht'), tabBtn('eingabe', 'Zählerstände'), tabBtn('lageplan', 'Lageplan'), tabBtn('rechnungen', 'Rechnungen'), tabBtn('zahlungen', 'Zahlungen'), tabBtn('admin', 'Admin')),
       h('div', { class: 'spacer' }),
       h('div', null, h('label', null, 'Jahr'), yearSel),
@@ -199,7 +199,7 @@ function render() {
         : null,
       S.tab === 'uebersicht' ? viewUebersicht() : S.tab === 'eingabe' ? viewEingabe() : S.tab === 'lageplan' ? viewLageplan()
         : S.tab === 'rechnungen' ? viewRechnungen() : S.tab === 'zahlungen' ? viewZahlungen() : viewAdmin(),
-      h('div', { class: 'footer' }, `Gartenabrechnung ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir)),
+      h('div', { class: 'footer' }, `Kleingarten-Manager ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir)),
     ),
   );
 }
@@ -224,7 +224,7 @@ async function quitApp() {
   try { await api('POST', '/api/quit'); } catch (e) { /* Programm ist weg */ }
   document.getElementById('app').replaceChildren(
     h('div', { class: 'center card' }, h('h2', null, 'Programm beendet'),
-      h('p', null, 'Du kannst dieses Browserfenster jetzt schließen. Zum erneuten Starten die Gartenabrechnung.exe öffnen.')));
+      h('p', null, 'Du kannst dieses Browserfenster jetzt schließen. Zum erneuten Starten die Kleingarten-Manager.exe öffnen.')));
 }
 
 // ------------------------------------------------------------------ Tab: Übersicht
@@ -260,7 +260,7 @@ function viewUebersicht() {
   }
 
   return h('div', null,
-    h('h2', null, `Willkommen bei der Gartenabrechnung ${st.currentYear}`),
+    h('h2', null, `Willkommen beim Kleingarten-Manager ${st.currentYear}`),
     h('p', { class: 'hint' }, `${st.settings.vereinName}. Kurzer Überblick über den aktuellen Stand.`),
     h('div', { class: 'cards' }, cards),
     h('div', { class: 'actions', style: 'margin-top:6px' },
@@ -1073,7 +1073,7 @@ function viewPruefShell() {
     st.years.map((y) => h('option', { value: y, selected: y === st.year }, y === st.currentYear ? `${y} (aktuell)` : `${y} (abgeschlossen)`)));
   app.append(
     h('header', { class: 'top' },
-      h('div', { class: 'brand' }, h('b', null, 'Gartenabrechnung'), h('span', null, st.settings.vereinName + ' · Kassenprüfer-Zugang')),
+      h('div', { class: 'brand' }, h('b', null, 'Kleingarten-Manager'), h('span', null, st.settings.vereinName + ' · Kassenprüfer-Zugang')),
       h('div', { class: 'spacer' }),
       h('div', null, h('label', null, 'Jahr'), yearSel),
       h('button', { class: 'btn', onclick: async () => { try { await api('POST', '/api/pruef/logout'); } catch (e) { /* egal */ } await reload(); } }, 'Abmelden')),
@@ -1530,7 +1530,7 @@ function adminData() {
   wrap.append(
     h('div', { class: 'card', style: 'margin-bottom:16px' },
       h('h3', { style: 'margin-top:0' }, 'Pächter aus Excel oder CSV importieren'),
-      h('p', { class: 'hint' }, 'Die Datei braucht eine Kopfzeile mit mindestens »Mitgliedsnr.« und »Name«. Weitere Spalten werden automatisch erkannt: Gartennr., Anrede, Straße, PLZ Ort, Versandart, Gartengröße, Umlage abweichend, Wasserzähler-Nr., Stromzähler-Nr., Wasser/Energie Stand Vorjahr und aktuell, Arbeitsstunden, Versicherung, Grundsteuer, Auslagen, Hinweis, Abschlag. Die Excel-Vorlage »Gartenabrechnung.xlsx« (Blatt »Mitglieder«) funktioniert direkt.'),
+      h('p', { class: 'hint' }, 'Die Datei braucht eine Kopfzeile mit mindestens »Mitgliedsnr.« und »Name«. Weitere Spalten werden automatisch erkannt: Gartennr., Anrede, Straße, PLZ Ort, Versandart, Gartengröße, Umlage abweichend, Wasserzähler-Nr., Stromzähler-Nr., Wasser/Energie Stand Vorjahr und aktuell, Arbeitsstunden, Versicherung, Grundsteuer, Auslagen, Hinweis, Abschlag. Eine passend aufgebaute Excel-Vorlage (Blatt »Mitglieder«) funktioniert direkt.'),
       file, previewBox),
     h('div', { class: 'card', style: 'margin-bottom:16px' },
       h('h3', { style: 'margin-top:0' }, 'Export'),
@@ -1538,7 +1538,7 @@ function adminData() {
       h('a', { class: 'btn', href: `/api/export?year=${st.year}` }, `Jahresübersicht ${st.year} als Excel`)),
     h('div', { class: 'card' },
       h('h3', { style: 'margin-top:0' }, 'Datensicherung'),
-      h('p', { class: 'hint' }, 'Das Programm legt bei Änderungen automatisch eine Tagessicherung an (die letzten 60 Tage) und vor dem Jahreswechsel, Löschen und Import zusätzlich eine eigene. Du kannst außerdem den gesamten Datenbestand herunterladen. Zum Wiederherstellen die gewünschte Sicherungsdatei in »gartenabrechnung-daten.json« umbenennen und im Datenordner ersetzen (Programm vorher beenden).'),
+      h('p', { class: 'hint' }, 'Das Programm legt bei Änderungen automatisch eine Tagessicherung an (die letzten 60 Tage) und vor dem Jahreswechsel, Löschen und Import zusätzlich eine eigene. Du kannst außerdem den gesamten Datenbestand herunterladen. Zum Wiederherstellen die gewünschte Sicherungsdatei in »kleingarten-manager-daten.json« umbenennen und im Datenordner ersetzen (Programm vorher beenden).'),
       h('div', { class: 'actions', style: 'margin-top:8px' },
         h('a', { class: 'btn', href: '/api/admin/backup' }, 'Gesamten Datenbestand herunterladen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'sicherungen' }).catch(handleErr) }, 'Sicherungsordner öffnen'),
@@ -1550,7 +1550,7 @@ function adminData() {
 function zweiteSicherungField() {
   const st = S.state;
   const inp = h('input', { type: 'text', value: st.settings.zweiteSicherung || '', style: 'width:100%', autocomplete: 'off',
-    placeholder: 'z. B. D:\\Sicherung-Gartenabrechnung oder ein Netzlaufwerk-Pfad' });
+    placeholder: 'z. B. D:\\Sicherung-Kleingarten-Manager oder ein Netzlaufwerk-Pfad' });
   const save = async () => {
     try {
       await api('PUT', '/api/admin/settings', { ...st.settings, zweiteSicherung: inp.value.trim() });
@@ -1616,7 +1616,7 @@ function adminSecurity() {
       h('div', { class: 'actions' },
         h('button', { class: 'btn primary', onclick: save }, 'Speichern'),
         st.hasPassword ? h('button', { class: 'btn', onclick: async () => { try { await api('POST', '/api/admin/logout'); await reload(); } catch (e) { handleErr(e); } } }, 'Abmelden') : null),
-      h('p', { class: 'hint', style: 'margin-top:16px' }, 'Passwort vergessen? Das Programm mit dem Zusatz "--reset-admin" starten (in der Eingabeaufforderung: Gartenabrechnung.exe --reset-admin). Dann ist der Passwortschutz entfernt und du kannst ein neues Passwort festlegen.')),
+      h('p', { class: 'hint', style: 'margin-top:16px' }, 'Passwort vergessen? Das Programm mit dem Zusatz "--reset-admin" starten (in der Eingabeaufforderung: Kleingarten-Manager.exe --reset-admin). Dann ist der Passwortschutz entfernt und du kannst ein neues Passwort festlegen.')),
     pruefPasswortCard(),
     updateCheckCard());
 }
