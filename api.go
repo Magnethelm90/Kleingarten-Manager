@@ -533,6 +533,8 @@ type stateResp struct {
 	Hinweise         map[string][]string    `json:"hinweise"`
 	// LetzteSicherung: JJJJ-MM-TT der jüngsten Sicherungsdatei, leer wenn keine existiert.
 	LetzteSicherung string `json:"letzteSicherung,omitempty"`
+	// SicherungFehler: Hinweistext, falls die jüngste Sicherung beschädigt ist (leer = alles gut).
+	SicherungFehler string `json:"sicherungFehler,omitempty"`
 }
 
 func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
@@ -569,6 +571,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	if t := a.st.letzteSicherung(); !t.IsZero() {
 		res.LetzteSicherung = t.Format("2006-01-02")
 	}
+	res.SicherungFehler = a.st.pruefeSicherung()
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
 	a.st.mu.Unlock()
@@ -804,6 +807,10 @@ func (a *App) handlePaechterUpdate(w http.ResponseWriter, r *http.Request) {
 			in.ID = id
 			a.st.d.Paechter[i] = in
 			a.st.gartenWechsel(id, alt.Gartennr, in.Gartennr, in.Mitgliedsnr, in.Name)
+			if alt.Gartengroesse != in.Gartengroesse {
+				a.st.audit("Gartengröße geändert: Garten %s (%s %s): %s m² → %s m²",
+					in.Gartennr, in.Mitgliedsnr, in.Name, fmtFlex(alt.Gartengroesse), fmtFlex(in.Gartengroesse))
+			}
 			a.st.audit("Pächter geändert: %s %s", in.Mitgliedsnr, in.Name)
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)

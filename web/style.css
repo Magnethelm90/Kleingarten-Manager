@@ -247,3 +247,8 @@ td.diffwarn { color: var(--err); font-weight: 600; }
 .barchart .bar.neg { fill: var(--err); }
 .barchart .barval { font-size: 10px; text-anchor: middle; fill: currentColor; }
 .barchart .barlabel { font-size: 10px; text-anchor: middle; fill: currentColor; opacity: .7; }
+
+.checklist { list-style: none; margin: 0; padding: 0; }
+.checklist li { padding: 3px 0; }
+.checklist li.ok { color: var(--ok); }
+.checklist li.warn { color: var(--warn); }

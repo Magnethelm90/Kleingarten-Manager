@@ -1529,3 +1529,72 @@ func TestICSExport(t *testing.T) {
 		t.Errorf("bezahlte Rechnung sollte nicht mehr im ICS stehen: %s", rec.Body.String())
 	}
 }
+
+func TestGartengroesseImProtokoll(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Teiler Theo", "gartennr": "7", "gartengroesse": 300}))
+	do(h, "PUT", "/api/admin/paechter/"+p.ID, map[string]any{"mitgliedsnr": "1", "name": "Teiler Theo", "gartennr": "7", "gartengroesse": 220})
+
+	log := decode[[]AuditEntry](t, do(h, "GET", "/api/admin/audit-log", nil))
+	found := false
+	for _, e := range log {
+		if strings.Contains(e.Aktion, "Gartengröße geändert") && strings.Contains(e.Aktion, "300") && strings.Contains(e.Aktion, "220") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Gartengrößen-Änderung fehlt im Protokoll: %+v", log)
+	}
+
+	// unveränderte Gartengröße erzeugt keinen zusätzlichen Eintrag
+	before := len(log)
+	do(h, "PUT", "/api/admin/paechter/"+p.ID, map[string]any{"mitgliedsnr": "1", "name": "Teiler Theo", "gartennr": "7", "gartengroesse": 220})
+	log = decode[[]AuditEntry](t, do(h, "GET", "/api/admin/audit-log", nil))
+	gg := 0
+	for _, e := range log {
+		if strings.Contains(e.Aktion, "Gartengröße geändert") {
+			gg++
+		}
+	}
+	if gg != 1 {
+		t.Errorf("sollte nur einen Gartengrößen-Eintrag geben, auch nach einem Speichern ohne Änderung: %d (vor dem zweiten Speichern %d Einträge insgesamt)", gg, before)
+	}
+}
+
+func TestSicherungIntegritaetspruefung(t *testing.T) {
+	_, h := newTestApp(t)
+	// frisch angelegt: noch keine Sicherung, also auch kein Fehler
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if st.SicherungFehler != "" {
+		t.Fatalf("ohne Sicherung sollte es keinen Fehler geben: %q", st.SicherungFehler)
+	}
+	// erste echte Tagessicherung entsteht bei der zweiten Speicherung
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "X", "gartengroesse": 100})
+	st = decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if st.LetzteSicherung == "" || st.SicherungFehler != "" {
+		t.Fatalf("intakte Sicherung sollte keinen Fehler melden: letzte=%q fehler=%q", st.LetzteSicherung, st.SicherungFehler)
+	}
+}
+
+func TestSicherungBeschaedigtWirdErkannt(t *testing.T) {
+	dir := t.TempDir()
+	st, err := openStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &App{st: st, port: testPort, sessions: map[string]time.Time{}}
+	h := app.routes(http.NotFoundHandler())
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "X", "gartengroesse": 100})
+
+	_, name := st.letzteSicherungMitName()
+	if name == "" {
+		t.Fatal("es sollte eine Sicherung existieren")
+	}
+	if err := os.WriteFile(filepath.Join(st.backupDir(), name), []byte("das ist kein JSON"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resp := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if resp.SicherungFehler == "" {
+		t.Error("beschädigte Sicherung hätte gemeldet werden müssen")
+	}
+}

@@ -28,6 +28,11 @@ type Store struct {
 	dir  string
 	path string
 	d    *Data
+
+	// Cache für pruefeSicherung, damit nicht bei jedem Seitenaufruf erneut die
+	// komplette jüngste Sicherungsdatei gelesen und geparst wird.
+	sicherungGeprueft string // Dateiname der zuletzt geprüften Sicherung
+	sicherungFehler   string
 }
 
 func newID() string {
@@ -224,21 +229,53 @@ func checkWritableDir(dir string) error {
 // letzteSicherung liefert den Zeitpunkt der jüngsten Sicherungsdatei (leer,
 // wenn noch keine existiert). Für die Übersicht auf der Startseite.
 func (s *Store) letzteSicherung() time.Time {
+	t, _ := s.letzteSicherungMitName()
+	return t
+}
+
+func (s *Store) letzteSicherungMitName() (time.Time, string) {
 	entries, err := os.ReadDir(s.backupDir())
 	if err != nil {
-		return time.Time{}
+		return time.Time{}, ""
 	}
 	var newest time.Time
+	var name string
 	for _, e := range entries {
 		info, err := e.Info()
 		if err != nil {
 			continue
 		}
 		if info.ModTime().After(newest) {
-			newest = info.ModTime()
+			newest, name = info.ModTime(), e.Name()
 		}
 	}
-	return newest
+	return newest, name
+}
+
+// pruefeSicherung liest die jüngste Sicherungsdatei probeweise ein und meldet
+// einen kurzen Hinweistext zurück, falls sie beschädigt ist (z. B. durch einen
+// Festplattenfehler oder einen abgebrochenen Schreibvorgang). Leer = alles gut
+// oder noch keine Sicherung vorhanden.
+func (s *Store) pruefeSicherung() string {
+	_, name := s.letzteSicherungMitName()
+	if name == "" {
+		return ""
+	}
+	if name == s.sicherungGeprueft {
+		return s.sicherungFehler // schon geprüft, nicht erneut von der Platte lesen
+	}
+	fehler := ""
+	raw, err := os.ReadFile(filepath.Join(s.backupDir(), name))
+	if err != nil {
+		fehler = "Die jüngste Sicherung (" + name + ") konnte nicht gelesen werden"
+	} else {
+		var d Data
+		if err := json.Unmarshal(raw, &d); err != nil {
+			fehler = "Die jüngste Sicherung (" + name + ") ist beschädigt und sollte geprüft werden"
+		}
+	}
+	s.sicherungGeprueft, s.sicherungFehler = name, fehler
+	return fehler
 }
 
 func (s *Store) dailyBackup() {

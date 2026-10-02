@@ -57,6 +57,15 @@ gibt keine Konten, Schlüssel oder Cloud-Anbindung.
   und über einen Gartenwechsel oder eine endgültige Löschung hinweg abrufbar (über das Uhr-Symbol im Lageplan)
 - **Update-Prüfung auf Knopfdruck:** fragt nur bei Klick einmalig die GitHub-Release-Seite dieses Projekts ab, ob
   eine neuere Version verfügbar ist – nie automatisch, es läuft sonst keine Internetverbindung im Hintergrund
+- **Jahresabschluss-Checkliste:** vor dem Jahreswechsel ein Überblick, was noch offen ist (Zählerstände,
+  ausgestellte Rechnungen, offene Zahlungen, geprüfte Ausgaben, Kassenbestand) – nur ein Hinweis, blockiert nichts
+- **Vorjahresvergleich im Kassenbericht:** Kassenbestand, Einnahmen und Ausgaben zeigen die Veränderung gegenüber
+  dem Vorjahr direkt mit an (Betrag und Prozent)
+- **Gartengröße im Änderungsprotokoll:** wird die Gartengröße eines Pächters geändert (z. B. bei Teilung oder
+  Zusammenlegung), steht die alte und neue Größe im Änderungsprotokoll
+- **Sicherungs-Integritätsprüfung:** die jüngste Sicherung wird beim Öffnen probeweise eingelesen; ist sie
+  beschädigt (z. B. durch einen Festplattenfehler), erscheint sofort ein Warnhinweis statt eines bösen Erwachens
+  im Ernstfall
 
 ## Abrechnungsregeln (Beispielwerte, im Admin-Bereich änderbar)
 

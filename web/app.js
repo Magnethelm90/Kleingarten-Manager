@@ -3,7 +3,8 @@
    eingefügt (kein innerHTML), damit Namen o. Ä. nie als Code ausgeführt werden können. */
 
 const S = { state: null, year: null, tab: 'uebersicht', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false, nurUnvollstaendig: false, archivSuche: '', archivAlle: null, archivAlleLoading: false, papierkorb: null, papierkorbLoading: false, papierkorbOffen: false, dashKasse: null, dashKasseLoading: false,
-  mahnSel: new Set(), pruefLoginMode: false, protokoll: null, protokollLoading: false, updateCheck: null, updateChecking: false };
+  mahnSel: new Set(), pruefLoginMode: false, protokoll: null, protokollLoading: false, updateCheck: null, updateChecking: false,
+  sicherungDismissed: false, abschlussCheck: null, abschlussLoading: false };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
 
@@ -193,6 +194,7 @@ function render() {
       h('button', { class: 'quit', onclick: quitApp, title: 'Programm beenden' }, 'Beenden'),
     ),
     h('main', null,
+      sicherungBanner(st),
       openRechnungenBanner(st),
       st.readOnly && S.tab !== 'admin' && S.tab !== 'zahlungen'
         ? h('div', { class: 'banner info' }, `Das Jahr ${st.year} ist abgeschlossen. Du kannst es ansehen und Rechnungen neu ausdrucken, aber nichts mehr ändern.`)
@@ -206,6 +208,16 @@ function render() {
 
 // Erinnerung an offene Rechnungen des laufenden Jahres, direkt nach dem Öffnen sichtbar.
 // Bleibt bis zum nächsten Programmstart ausgeblendet, sobald sie einmal weggeklickt wurde.
+// Warnt, falls die jüngste Sicherung beim Programmstart nicht lesbar war
+// (z. B. Festplattenfehler, abgebrochener Schreibvorgang). Sehr selten, aber
+// sicherheitsrelevant genug, um auf jedem Tab zu erscheinen.
+function sicherungBanner(st) {
+  if (S.sicherungDismissed || !st.sicherungFehler) return null;
+  return h('div', { class: 'banner err' },
+    `⚠ ${st.sicherungFehler}.`, ' ',
+    h('button', { class: 'btn small', onclick: () => { S.sicherungDismissed = true; render(); } }, 'Ausblenden'));
+}
+
 function openRechnungenBanner(st) {
   if (S.remindDismissed || S.tab === 'zahlungen' || S.tab === 'uebersicht' || st.year !== st.currentYear) return null;
   const all = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt >= 0);
@@ -250,7 +262,9 @@ function viewUebersicht() {
   const cards = [
     card('Offene Rechnungen', String(open.length), open.length ? `${eur(open.reduce((a, e) => a + payOpen(e), 0))} · ${overdue.length} überfällig` : 'alles bezahlt', open.length ? 'warn' : 'ok'),
     card('Unvollständige Pächter', String(unvollstaendig.length), `von ${st.paechter.length} in ${st.currentYear}`, unvollstaendig.length ? 'warn' : 'ok'),
-    card('Letzte Sicherung', st.letzteSicherung ? deDate(st.letzteSicherung) : 'noch keine', 'automatisch bei jeder Änderung', st.letzteSicherung ? 'ok' : 'warn'),
+    card('Letzte Sicherung', st.letzteSicherung ? deDate(st.letzteSicherung) : 'noch keine',
+      st.sicherungFehler ? 'beschädigt!' : 'automatisch bei jeder Änderung',
+      st.sicherungFehler ? 'err' : st.letzteSicherung ? 'ok' : 'warn'),
   ];
   if (istAdmin) {
     if (S.dashKasse === null) { if (!S.dashKasseLoading) loadDashKasse(st.currentYear); }
@@ -1260,11 +1274,50 @@ function adminSettings() {
 
 // ---- Jahreswechsel
 
+async function loadAbschlussCheck(year) {
+  if (S.abschlussLoading) return;
+  S.abschlussLoading = true;
+  try { S.abschlussCheck = await api('GET', `/api/admin/kassenbericht?year=${year}`); } catch (e) { S.abschlussCheck = false; }
+  S.abschlussLoading = false;
+  render();
+}
+
+// Geführter Überblick vor dem Jahreswechsel: zeigt, was noch offen ist. Ist
+// nur ein Hinweis, blockiert den Jahreswechsel nicht (wie die übrigen
+// Plausibilitätshinweise im Programm auch).
+function abschlussChecklist(st) {
+  if (S.abschlussCheck == null || (S.abschlussCheck && S.abschlussCheck.jahr !== st.currentYear)) {
+    if (!S.abschlussLoading) loadAbschlussCheck(st.currentYear);
+  }
+  const total = st.paechter.length;
+  const done = st.paechter.filter((p) => st.results[p.id] && st.results[p.id].vollstaendig).length;
+  const issued = Object.keys(st.issued || {}).length;
+  const offenePosten = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt >= 0 && payIsOpen(e)).length;
+  const k = S.abschlussCheck || null;
+  const ungeprueft = k ? k.ausgaben.filter((x) => !x.geprueft).length : null;
+
+  const item = (ok, label) => h('li', { class: ok ? 'ok' : 'warn' }, ok ? '✓ ' : '⚠ ', label);
+  const items = [
+    item(done === total, `Zählerstände vollständig: ${done} von ${total} Pächtern`),
+    item(issued >= done, `Rechnungen ausgestellt: ${issued} von ${done} vollständigen Pächtern`),
+    item(offenePosten === 0, offenePosten === 0 ? 'Keine offenen Zahlungen mehr' : `${offenePosten} Rechnung(en) noch offen`),
+  ];
+  if (k) {
+    items.push(item(ungeprueft === 0, ungeprueft === 0 ? 'Alle sonstigen Ausgaben sind geprüft' : `${ungeprueft} sonstige Ausgabe(n) noch ohne Geprüft-Haken`));
+    items.push(item(k.kassenbestand >= 0, k.kassenbestand >= 0 ? `Kassenbestand positiv (${eur(k.kassenbestand)})` : `Kassenbestand negativ (${eur(k.kassenbestand)})`));
+  }
+  return h('div', { class: 'card narrow', style: 'max-width:760px;margin-bottom:16px' },
+    h('h3', { style: 'margin-top:0' }, 'Vor dem Abschluss prüfen'),
+    h('ul', { class: 'checklist' }, items),
+    h('p', { class: 'hint', style: 'margin-bottom:0' }, 'Nur ein Hinweis – der Jahreswechsel lässt sich trotzdem durchführen, offene Punkte bleiben danach weiter bearbeitbar.'));
+}
+
 function adminYear() {
   const st = S.state;
   const total = st.paechter.length;
   const done = st.paechter.filter((p) => st.results[p.id] && st.results[p.id].vollstaendig).length;
   return h('div', null,
+    abschlussChecklist(st),
     h('div', { class: 'card narrow', style: 'max-width:760px' },
       h('h3', { style: 'margin-top:0' }, `Abrechnungsjahr ${st.currentYear} abschließen`),
       h('p', null, 'Am Ende der Abrechnung schließt du das Jahr ab. Dabei passiert Folgendes:'),
@@ -1276,7 +1329,7 @@ function adminYear() {
       done < total ? h('div', { class: 'banner warn', style: 'margin-top:12px' }, `Achtung: Bei ${total - done} von ${total} Pächtern fehlen noch Angaben.`) : null,
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: async () => {
         if (!(await confirmBox(`Jahr ${st.currentYear} jetzt abschließen und ${st.currentYear + 1} beginnen? Das kann nicht rückgängig gemacht werden (die Sicherung vorher bleibt aber erhalten).`, 'Jahr abschließen', true))) return;
-        try { await api('POST', '/api/admin/jahreswechsel'); toast('Neues Jahr gestartet', 'ok'); S.year = null; S.dashKasse = null; S.kasse = null; S.kasseVerlauf = null; await reload(); } catch (e) { handleErr(e); }
+        try { await api('POST', '/api/admin/jahreswechsel'); toast('Neues Jahr gestartet', 'ok'); S.year = null; S.dashKasse = null; S.kasse = null; S.kasseVerlauf = null; S.abschlussCheck = null; await reload(); } catch (e) { handleErr(e); }
       } }, `Jahr ${st.currentYear} abschließen`))));
 }
 
@@ -1359,12 +1412,22 @@ function adminKassenbericht(pruefMode) {
     return h('div', null, h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), yearSel), h('p', { class: 'hint' }, 'Wird geladen …'));
   }
   const k = S.kasse;
+  if (!S.kasseVerlauf && !S.kasseVerlaufLoading) loadKasseVerlauf();
+  const vorjahr = (S.kasseVerlauf || []).find((j) => j.jahr === S.kasseYear - 1);
+  const vjDelta = (cur, prev) => {
+    if (prev == null) return '';
+    const diff = cur - prev;
+    if (Math.abs(diff) < 0.005) return ` · = Vorjahr (${S.kasseYear - 1})`;
+    const pct = prev !== 0 ? Math.round((diff / Math.abs(prev)) * 1000) / 10 : null;
+    const pctTxt = pct == null ? '' : ` (${pct > 0 ? '+' : ''}${nfFlex.format(pct)} %)`;
+    return ` · ${diff > 0 ? '▲' : '▼'} ${eur(Math.abs(diff))}${pctTxt} ggü. ${S.kasseYear - 1}`;
+  };
   const card = (t, big, small, cls) => h('div', { class: 'card stat ' + (cls || '') }, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small));
   const cards = h('div', { class: 'cards' },
-    card('Kassenbestand', eur(k.kassenbestand), `Anfangsbestand ${eur(k.anfangsbestand)} + Zahlungen − Ausgaben`, k.kassenbestand >= 0 ? 'ok' : 'err'),
-    card('Von Pächtern eingegangen', eur(k.einnahmenBezahlt), 'tatsächlich gezahlt, nach heutigem Stand', 'ok'),
+    card('Kassenbestand', eur(k.kassenbestand), `Anfangsbestand ${eur(k.anfangsbestand)} + Zahlungen − Ausgaben${vorjahr ? vjDelta(k.kassenbestand, vorjahr.kassenbestand) : ''}`, k.kassenbestand >= 0 ? 'ok' : 'err'),
+    card('Von Pächtern eingegangen', `${eur(k.einnahmenBezahlt)}`, `tatsächlich gezahlt, nach heutigem Stand${vorjahr ? vjDelta(k.einnahmenBezahlt, vorjahr.einnahmenBezahlt) : ''}`, 'ok'),
     k.guthabenAusgezahlt ? card('An Pächter ausgezahlt', eur(k.guthabenAusgezahlt), 'Guthaben') : null,
-    card('Sonstige Ausgaben', eur(k.ausgabenSumme), `${k.ausgaben.length} Buchung(en)`, k.ausgabenSumme ? 'warn' : 'ok'));
+    card('Sonstige Ausgaben', eur(k.ausgabenSumme), `${k.ausgaben.length} Buchung(en)${vorjahr ? vjDelta(k.ausgabenSumme, vorjahr.ausgabenSumme) : ''}`, k.ausgabenSumme ? 'warn' : 'ok'));
 
   const anfInput = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.anfangsbestand), style: 'width:140px', autocomplete: 'off' });
   const saveAnfang = async () => {
