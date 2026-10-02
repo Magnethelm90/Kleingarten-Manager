@@ -27,9 +27,15 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - uses: egor-tensin/setup-mingw@v2
+      - uses: msys2/setup-msys2@v2
+        id: msys2
         with:
-          platform: x64
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc
+      - name: MinGW in den Suchpfad aufnehmen
+        shell: bash
+        run: echo "${{ steps.msys2.outputs.msys2-location }}\\mingw64\\bin" >> "$GITHUB_PATH"
       - name: Windows-Programm bauen (eigenes Fenster, CGO/WebView2)
         env:
           CGO_ENABLED: "1"

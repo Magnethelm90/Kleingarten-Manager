@@ -8,10 +8,12 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -33,6 +35,24 @@ func openBrowser(url string) {
 	if err := cmd.Start(); err == nil {
 		go func() { _ = cmd.Wait() }()
 	}
+}
+
+// externalURLAllowed legt fest, welche Adressen aus dem Programmfenster heraus
+// im Systembrowser geöffnet werden dürfen: nur die eigene GitHub-Projektseite
+// (Release-Link der Update-Prüfung). Alles andere wird abgelehnt, damit die
+// Brücke vom Fenster zum Betriebssystem nicht für beliebige Adressen oder
+// Protokolle (file:, ms-…:, Programmaufrufe) missbraucht werden kann.
+func externalURLAllowed(raw string) bool {
+	if !strings.HasPrefix(raw, repoURLBase) {
+		return false
+	}
+	for _, c := range raw {
+		if c < 0x21 || c == 0x7f || c == '"' || c == '\\' {
+			return false
+		}
+	}
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "https" && u.Host == "github.com" && u.User == nil
 }
 
 // dataDir bestimmt, wo die Daten liegen: neben der .exe, sonst im Benutzerordner.
