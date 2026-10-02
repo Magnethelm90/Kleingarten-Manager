@@ -1204,3 +1204,172 @@ func TestLetzteSicherung(t *testing.T) {
 		t.Fatal("nach der zweiten Speicherung sollte eine Tagessicherung existieren")
 	}
 }
+
+func TestZweiteSicherung(t *testing.T) {
+	_, h := newTestApp(t)
+	secondary := t.TempDir() + "/spiegel"
+	cur := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil)).Settings
+	cur.ZweiteSicherung = secondary
+	if rec := do(h, "PUT", "/api/admin/settings", cur); rec.Code != 200 {
+		t.Fatalf("Settings mit zweitem Sicherungsordner: %d %s", rec.Code, rec.Body)
+	}
+	// nächste Änderung soll sowohl im Hauptordner als auch gespiegelt ankommen
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "X", "gartengroesse": 100})
+	entries, err := os.ReadDir(secondary)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("zweiter Sicherungsordner sollte eine Datei enthalten: %v, %v", err, entries)
+	}
+	// ein nicht erreichbarer Pfad wird abgelehnt, statt still zu versagen: eine
+	// gewöhnliche Datei kann kein Verzeichnis-Bestandteil sein
+	blocker := filepath.Join(t.TempDir(), "datei.txt")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cur.ZweiteSicherung = filepath.Join(blocker, "unterordner")
+	if rec := do(h, "PUT", "/api/admin/settings", cur); rec.Code != http.StatusBadRequest {
+		t.Errorf("nicht beschreibbarer Sicherungsordner sollte abgelehnt werden: %d", rec.Code)
+	}
+}
+
+func TestAenderungsprotokoll(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Neu", "gartengroesse": 100})
+	cur := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil)).Settings
+	cur.WasserPreis = 3.5
+	do(h, "PUT", "/api/admin/settings", cur)
+
+	log := decode[[]AuditEntry](t, do(h, "GET", "/api/admin/audit-log", nil))
+	if len(log) < 2 {
+		t.Fatalf("Protokoll sollte mindestens 2 Einträge haben: %+v", log)
+	}
+	found := map[string]bool{}
+	for _, e := range log {
+		found[e.Aktion] = true
+	}
+	if !found["Pächter angelegt: 1 Neu"] {
+		t.Errorf("Pächter-Anlage fehlt im Protokoll: %+v", log)
+	}
+	hasSettings := false
+	for a := range found {
+		if a == "Preise und Einstellungen geändert" {
+			hasSettings = true
+		}
+	}
+	if !hasSettings {
+		t.Errorf("Einstellungsänderung fehlt im Protokoll: %+v", log)
+	}
+}
+
+func TestKassenpruferZugang(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]string{"new": "admingeheim1"})
+	// ohne eingerichteten Prüfer-Zugang: Login schlägt fehl
+	if rec := do(h, "POST", "/api/pruef/login", map[string]string{"password": "irgendwas"}); rec.Code != http.StatusNotFound {
+		t.Fatalf("Login ohne eingerichteten Zugang: %d", rec.Code)
+	}
+	// Kassenbericht ist für niemanden ohne Anmeldung erreichbar
+	if rec := do(h, "GET", "/api/admin/kassenbericht?year=2025", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Kassenbericht ohne Anmeldung: %d", rec.Code)
+	}
+	// Admin richtet den Prüfer-Zugang ein (braucht dafür eine Admin-Sitzung)
+	loginRec := do(h, "POST", "/api/admin/login", map[string]string{"password": "admingeheim1"})
+	var adminCookie *http.Cookie
+	for _, c := range loginRec.Result().Cookies() {
+		if c.Name == "ga_session" {
+			adminCookie = c
+		}
+	}
+	if adminCookie == nil {
+		t.Fatal("keine Admin-Sitzung erhalten")
+	}
+	if rec := do(h, "POST", "/api/admin/pruef-password", map[string]string{"new": "pruefgeheim1"}, adminCookie); rec.Code != 200 {
+		t.Fatalf("Prüfer-Passwort setzen: %d %s", rec.Code, rec.Body)
+	}
+	// Admin selbst darf weiterhin alles (Ausgabe anlegen)
+	ausg := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2026-01-05", Beschreibung: "Rasenmäher", Betrag: 50}, adminCookie))
+
+	// falsches Prüfer-Passwort
+	if rec := do(h, "POST", "/api/pruef/login", map[string]string{"password": "falsch"}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("falsches Prüfer-Passwort: %d", rec.Code)
+	}
+	loginRec = do(h, "POST", "/api/pruef/login", map[string]string{"password": "pruefgeheim1"})
+	if loginRec.Code != 200 {
+		t.Fatalf("Prüfer-Login: %d %s", loginRec.Code, loginRec.Body)
+	}
+	var pruefCookie *http.Cookie
+	for _, c := range loginRec.Result().Cookies() {
+		if c.Name == "ga_pruef_session" {
+			pruefCookie = c
+		}
+	}
+	if pruefCookie == nil {
+		t.Fatal("keine Prüfer-Sitzung erhalten")
+	}
+	// Prüfer darf den Kassenbericht lesen und den Geprüft-Haken setzen
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, pruefCookie))
+	if len(k.Ausgaben) != 1 {
+		t.Fatalf("Kassenbericht für Prüfer: %+v", k)
+	}
+	if rec := do(h, "PUT", "/api/admin/ausgaben/"+ausg.ID+"/geprueft?year=2025", map[string]bool{"geprueft": true}, pruefCookie); rec.Code != 200 {
+		t.Fatalf("Geprüft-Haken durch Prüfer: %d %s", rec.Code, rec.Body)
+	}
+	// Prüfer darf aber keine Ausgaben anlegen oder Pächter ändern (bleibt Admin-only)
+	if rec := do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2026-01-05", Beschreibung: "X", Betrag: 1}, pruefCookie); rec.Code != http.StatusUnauthorized {
+		t.Errorf("Prüfer sollte keine Ausgaben anlegen dürfen: %d", rec.Code)
+	}
+	if rec := do(h, "PUT", "/api/admin/settings", Settings{}, pruefCookie); rec.Code != http.StatusUnauthorized {
+		t.Errorf("Prüfer sollte keine Einstellungen ändern dürfen: %d", rec.Code)
+	}
+	// Logout beendet den Lesezugriff wieder
+	do(h, "POST", "/api/pruef/logout", nil, pruefCookie)
+	if rec := do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, pruefCookie); rec.Code != http.StatusUnauthorized {
+		t.Errorf("nach Logout sollte der Zugriff verweigert werden: %d", rec.Code)
+	}
+}
+
+func TestMahnung(t *testing.T) {
+	_, h := newTestApp(t)
+	p1 := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Erster", "gartengroesse": 300}))
+	p2 := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "2", "name": "Zweiter", "gartengroesse": 300}))
+	abl := Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)}
+	do(h, "PUT", "/api/ablesung/"+p1.ID+"?year=2025", abl)
+	do(h, "PUT", "/api/ablesung/"+p2.ID+"?year=2025", abl)
+	do(h, "POST", "/api/invoices/issue?year=2025", issueReq{})
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	id1, id2 := st.Issued[p1.ID].ID, st.Issued[p2.ID].ID
+
+	// leere Auswahl
+	if rec := do(h, "POST", "/api/admin/mahnung", map[string]any{"ids": []string{}}); rec.Code != http.StatusBadRequest {
+		t.Errorf("leere Auswahl: %d", rec.Code)
+	}
+	// eine ausgewählte offene Rechnung: einzelnes PDF
+	rec := do(h, "POST", "/api/admin/mahnung", map[string]any{"ids": []string{id1}})
+	if rec.Code != 200 || !bytes.HasPrefix(rec.Body.Bytes(), []byte("%PDF")) {
+		t.Fatalf("einzelne Mahnung: %d, Anfang %q", rec.Code, rec.Body.Bytes()[:min(20, rec.Body.Len())])
+	}
+	// zwei ausgewählte: ZIP
+	rec = do(h, "POST", "/api/admin/mahnung", map[string]any{"ids": []string{id1, id2}})
+	if rec.Code != 200 || !bytes.HasPrefix(rec.Body.Bytes(), []byte("PK")) {
+		t.Fatalf("mehrere Mahnungen (ZIP): %d", rec.Code)
+	}
+	// bereits vollständig bezahlt: keine Mahnung nötig
+	do(h, "PUT", "/api/payment/"+id1, paymentReq{BezahltAm: "2026-01-20"})
+	if rec := do(h, "POST", "/api/admin/mahnung", map[string]any{"ids": []string{id1}}); rec.Code != http.StatusBadRequest {
+		t.Errorf("bezahlte Rechnung sollte abgelehnt werden: %d", rec.Code)
+	}
+}
+
+func TestVersionNewer(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"1.2", "1.1", true}, {"1.1", "1.2", false}, {"1.0", "1.0", false},
+		{"1.10", "1.9", true}, {"2.0", "1.99", true}, {"1", "1.0.1", false}, {"1.0.1", "1", true},
+	}
+	for _, c := range cases {
+		if got := versionNewer(c.a, c.b); got != c.want {
+			t.Errorf("versionNewer(%q,%q) = %v, erwartet %v", c.a, c.b, got, c.want)
+		}
+	}
+}

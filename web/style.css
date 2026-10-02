@@ -226,3 +226,14 @@ td.paycell input[type=checkbox] { width: 20px; height: 20px; vertical-align: mid
 td.paycell input[type=date] { font: inherit; padding: 3px 6px; }
 td.note { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 td.diffwarn { color: var(--err); font-weight: 600; }
+
+.kachelgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.kachel { border-radius: 8px; padding: 10px 8px; cursor: pointer; border: 1px solid rgba(0,0,0,.08); transition: transform .1s; }
+.kachel:hover { transform: scale(1.03); }
+.kachel-nr { font-weight: 700; font-size: 15px; }
+.kachel-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kachel-unvollstaendig { background: var(--err-bg); color: var(--err); }
+.kachel-berechnet { background: #eef1f8; color: #44506b; }
+.kachel-offen { background: var(--warn-bg); color: var(--warn); }
+.kachel-bezahlt { background: var(--ok-bg); color: var(--ok); }
+.kachel-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }

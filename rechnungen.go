@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -415,6 +417,95 @@ func (a *App) handlePayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeErr(w, notFound("Rechnung nicht gefunden"))
+}
+
+// handleMahnung erzeugt eine Zahlungserinnerung (Mahnung) für ausgewählte
+// offene Rechnungen. Es wird nie automatisch nach einer festen Frist gemahnt,
+// sondern immer nur für die Rechnungen, die der Vorstand selbst anhakt und
+// auswählt. Bei genau einer Auswahl kommt ein einzelnes PDF zurück, bei
+// mehreren ein ZIP mit einer Mahnung pro Pächter.
+func (a *App) handleMahnung(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		IDs []string `json:"ids"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if len(in.IDs) == 0 {
+		writeErr(w, bad("Bitte mindestens eine Rechnung auswählen"))
+		return
+	}
+	type mahnJob struct {
+		settings Settings
+		p        Paechter
+		rec      *Rechnung
+	}
+	var jobs []mahnJob
+	a.st.mu.Lock()
+	for _, id := range in.IDs {
+		for _, x := range a.st.d.Rechnungen {
+			if x.ID != id {
+				continue
+			}
+			if x.Status != statusGueltig {
+				continue
+			}
+			if x.Result.Gesamt < 0 || openAmount(x) <= 0 {
+				continue // Guthaben oder schon vollständig bezahlt: keine Mahnung nötig
+			}
+			jobs = append(jobs, mahnJob{settings: x.Settings, p: x.Paechter, rec: x})
+		}
+	}
+	a.st.mu.Unlock()
+	if len(jobs) == 0 {
+		writeErr(w, bad("Für die Auswahl gibt es keine offene Forderung, die gemahnt werden kann"))
+		return
+	}
+	sort.SliceStable(jobs, func(i, j int) bool { return natLess(jobs[i].p.Mitgliedsnr, jobs[j].p.Mitgliedsnr) })
+
+	type built struct {
+		name string
+		pdf  []byte
+	}
+	var out []built
+	for _, j := range jobs {
+		pdf, err := buildMahnung(j.settings, j.p, j.rec)
+		if err != nil {
+			writeErr(w, bad(j.p.Name+": "+err.Error()))
+			return
+		}
+		out = append(out, built{safeName("Mahnung_"+invoiceNumber(j.settings, j.p)+"_"+j.p.Name, 80) + ".pdf", pdf})
+	}
+
+	if len(out) == 1 {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", `inline; filename="`+out[0].name+`"`)
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(out[0].pdf)
+		return
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, f := range out {
+		zf, err := zw.Create(f.name)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if _, err := zf.Write(f.pdf); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
+	if err := zw.Close(); err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="Mahnungen.zip"`)
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(buf.Bytes())
 }
 
 // handlePaymentsExport liefert die Zahlungsübersicht des Jahres als Excel-Datei.

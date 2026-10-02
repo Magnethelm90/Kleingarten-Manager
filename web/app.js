@@ -2,7 +2,8 @@
 /* Gartenabrechnung – Oberfläche. Alle Texte aus Daten werden nur über textContent/DOM-Knoten
    eingefügt (kein innerHTML), damit Namen o. Ä. nie als Code ausgeführt werden können. */
 
-const S = { state: null, year: null, tab: 'uebersicht', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false, nurUnvollstaendig: false, archivSuche: '', archivAlle: null, archivAlleLoading: false, papierkorb: null, papierkorbLoading: false, papierkorbOffen: false, dashKasse: null, dashKasseLoading: false };
+const S = { state: null, year: null, tab: 'uebersicht', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false, nurUnvollstaendig: false, archivSuche: '', archivAlle: null, archivAlleLoading: false, papierkorb: null, papierkorbLoading: false, papierkorbOffen: false, dashKasse: null, dashKasseLoading: false,
+  mahnSel: new Set(), pruefLoginMode: false, protokoll: null, protokollLoading: false, updateCheck: null, updateChecking: false };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
 
@@ -129,6 +130,10 @@ function render() {
   const app = document.getElementById('app');
   app.replaceChildren();
 
+  const istVollAdmin = !st.hasPassword || st.loggedIn;
+  if (S.pruefLoginMode && !istVollAdmin) { app.append(viewPruefLogin()); return; }
+  if (st.pruefLoggedIn && !istVollAdmin) { app.append(viewPruefShell()); return; }
+
   const yearSel = h('select', {
     onchange: async (e) => { S.year = Number(e.target.value); await reload(); },
     title: 'Abrechnungsjahr',
@@ -148,7 +153,7 @@ function render() {
   app.append(
     h('header', { class: 'top' },
       h('div', { class: 'brand' }, h('b', null, 'Gartenabrechnung'), h('span', null, st.settings.vereinName)),
-      h('nav', { class: 'tabs' }, tabBtn('uebersicht', 'Übersicht'), tabBtn('eingabe', 'Zählerstände'), tabBtn('rechnungen', 'Rechnungen'), tabBtn('zahlungen', 'Zahlungen'), tabBtn('admin', 'Admin')),
+      h('nav', { class: 'tabs' }, tabBtn('uebersicht', 'Übersicht'), tabBtn('eingabe', 'Zählerstände'), tabBtn('lageplan', 'Lageplan'), tabBtn('rechnungen', 'Rechnungen'), tabBtn('zahlungen', 'Zahlungen'), tabBtn('admin', 'Admin')),
       h('div', { class: 'spacer' }),
       h('div', null, h('label', null, 'Jahr'), yearSel),
       h('button', { class: 'quit', onclick: quitApp, title: 'Programm beenden' }, 'Beenden'),
@@ -158,7 +163,8 @@ function render() {
       st.readOnly && S.tab !== 'admin' && S.tab !== 'zahlungen'
         ? h('div', { class: 'banner info' }, `Das Jahr ${st.year} ist abgeschlossen. Du kannst es ansehen und Rechnungen neu ausdrucken, aber nichts mehr ändern.`)
         : null,
-      S.tab === 'uebersicht' ? viewUebersicht() : S.tab === 'eingabe' ? viewEingabe() : S.tab === 'rechnungen' ? viewRechnungen() : S.tab === 'zahlungen' ? viewZahlungen() : viewAdmin(),
+      S.tab === 'uebersicht' ? viewUebersicht() : S.tab === 'eingabe' ? viewEingabe() : S.tab === 'lageplan' ? viewLageplan()
+        : S.tab === 'rechnungen' ? viewRechnungen() : S.tab === 'zahlungen' ? viewZahlungen() : viewAdmin(),
       h('div', { class: 'footer' }, `Gartenabrechnung ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir)),
     ),
   );
@@ -623,6 +629,47 @@ async function issue(ids, replace) {
   await reload();
 }
 
+// ------------------------------------------------------------------ Tab: Lageplan
+
+// Kachelübersicht aller Gärten mit Status-Farbcode, sortiert nach Gartennummer
+// (natürliche Sortierung, z. B. 2 vor 10). Ein echter geometrischer Lageplan
+// bräuchte Koordinaten, die es nicht gibt – die Kacheln geben trotzdem auf
+// einen Blick den Überblick, welcher Garten noch offen, unvollständig oder
+// erledigt ist.
+function viewLageplan() {
+  const st = S.state;
+  const issuedOf = (p) => (st.issued || {})[p.id];
+  const list = [...st.paechter].sort((a, b) =>
+    (a.gartennr || a.mitgliedsnr).localeCompare(b.gartennr || b.mitgliedsnr, 'de', { numeric: true }));
+
+  const statusOf = (p) => {
+    const res = st.results[p.id];
+    if (!res || !res.vollstaendig) return 'unvollstaendig';
+    const inf = issuedOf(p);
+    if (!inf) return 'berechnet';
+    const e = (st.archive || []).find((x) => x.id === inf.id);
+    if (e && e.gesamt >= 0 && payIsOpen(e)) return 'offen';
+    return 'bezahlt';
+  };
+  const labels = { unvollstaendig: 'Angaben fehlen', berechnet: 'berechnet, noch nicht ausgestellt', offen: 'Rechnung offen', bezahlt: 'bezahlt / kein offener Betrag' };
+  const counts = { unvollstaendig: 0, berechnet: 0, offen: 0, bezahlt: 0 };
+  const tiles = list.map((p) => {
+    const s = statusOf(p);
+    counts[s]++;
+    return h('div', { class: 'kachel kachel-' + s, title: `${p.name}${p.notiz ? ' · 📝 ' + p.notiz : ''} – ${labels[s]}`,
+      onclick: () => { S.tab = 'eingabe'; S.eingabeMode = 'schnell'; S.quickId = p.id; render(); } },
+      h('div', { class: 'kachel-nr' }, p.gartennr || p.mitgliedsnr), h('div', { class: 'kachel-name' }, p.name));
+  });
+  const legend = (cls, label) => h('span', { class: 'hint', style: 'margin-right:14px' },
+    h('span', { class: 'kachel-dot kachel-' + cls }), ` ${label} (${counts[cls]})`);
+
+  return h('div', null,
+    h('h2', null, `Lageplan ${st.year}`),
+    h('p', { class: 'hint' }, 'Kachel pro Garten, sortiert nach Gartennummer. Farbe zeigt den Abrechnungsstatus, Klick auf eine Kachel springt zur Schnelleingabe dieses Pächters.'),
+    h('div', { style: 'margin-bottom:12px' }, legend('unvollstaendig', 'Angaben fehlen'), legend('berechnet', 'berechnet'), legend('offen', 'Rechnung offen'), legend('bezahlt', 'bezahlt')),
+    list.length ? h('div', { class: 'kachelgrid' }, tiles) : h('div', { class: 'card empty' }, 'Noch keine Pächter angelegt.'));
+}
+
 function viewRechnungen() {
   const st = S.state;
   const sub = h('div', { class: 'subtabs' },
@@ -807,6 +854,19 @@ async function paymentDialog(e) {
   ].filter(Boolean));
 }
 
+async function mahnungErzeugen(ids) {
+  if (!ids.length) { toast('Bitte mindestens eine offene Rechnung auswählen.', 'err'); return; }
+  try {
+    const r = await fetch('/api/admin/mahnung', { method: 'POST', headers: { 'X-GA-Request': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+    if (!r.ok) { const d = await r.json().catch(() => null); throw new Error((d && d.error) || `Fehler ${r.status}`); }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    if ((r.headers.get('content-type') || '').includes('pdf')) window.open(url, '_blank');
+    else { const a = h('a', { href: url, download: 'Mahnungen.zip' }); document.body.append(a); a.click(); a.remove(); }
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (e) { handleErr(e); }
+}
+
 function viewZahlungen() {
   const st = S.state;
   const all = (st.archive || []).filter((e) => e.status === 'gueltig');
@@ -814,6 +874,8 @@ function viewZahlungen() {
   const summary = h('div', { class: 'cards' });
   const tbody = h('tbody');
   const filters = h('div', { class: 'subtabs' });
+  const mahnBar = h('div', { class: 'toolbar' });
+  S.mahnSel = S.mahnSel instanceof Set ? S.mahnSel : new Set();
 
   const draw = () => {
     const sum = (arr, f) => arr.reduce((a, e) => a + f(e), 0);
@@ -826,6 +888,11 @@ function viewZahlungen() {
       card('Noch offen', eur(sum(openClaims, payOpen)), `${openClaims.length} Rechnungen`, openClaims.length ? 'warn' : 'ok'),
       card('Überfällig', String(overdue.length), overdue.length ? eur(sum(overdue, payOpen)) : 'nichts überfällig', overdue.length ? 'err' : 'ok'),
       credits.length ? card('Guthaben auszuzahlen', eur(sum(credits.filter(payIsOpen), payOpen)), `${credits.filter(payIsOpen).length} von ${credits.length} noch offen`) : null].filter(Boolean));
+
+    mahnBar.replaceChildren(
+      h('button', { class: 'btn', disabled: !S.mahnSel.size, onclick: () => mahnungErzeugen([...S.mahnSel]) },
+        `Mahnung erzeugen${S.mahnSel.size ? ` (${S.mahnSel.size})` : ''}`),
+      h('span', { class: 'hint' }, 'Haken bei den gewünschten offenen Rechnungen setzen, dann »Mahnung erzeugen«. Es wird nie automatisch gemahnt.'));
 
     const nOpen = all.filter(payIsOpen).length;
     filters.replaceChildren(
@@ -854,7 +921,11 @@ function viewZahlungen() {
           if (!ev.target.value) { ev.target.value = e.bezahltAm; return; }
           try { await savePayment(e, { bezahltAm: ev.target.value }); draw(); } catch (er) { handleErr(er); }
         } });
+      const mahnbar = open && e.gesamt >= 0;
+      const mchk = h('input', { type: 'checkbox', checked: S.mahnSel.has(e.id), disabled: !mahnbar, title: mahnbar ? 'für Mahnung auswählen' : 'nicht offen oder ein Guthaben',
+        onchange: (ev) => { if (ev.target.checked) S.mahnSel.add(e.id); else S.mahnSel.delete(e.id); draw(); } });
       tbody.append(h('tr', { class: late ? 'late' : '' },
+        h('td', null, mchk),
         h('td', null, e.mitgliedsnr), h('td', null, e.name), h('td', { class: 'mono' }, e.nummer),
         h('td', { class: 'r' }, (e.gesamt < 0 ? '−' : '') + eur(payTotal(e))),
         h('td', null, deDate(e.faellig)),
@@ -864,7 +935,7 @@ function viewZahlungen() {
         h('td', { class: 'note', title: e.notiz || '' }, e.notiz || ''),
         h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await paymentDialog(e); if (r !== false && r !== undefined) draw(); } }, 'Details'))));
     }
-    if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 9, class: 'empty' },
+    if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 10, class: 'empty' },
       !all.length ? `Für ${st.year} wurde noch keine Rechnung ausgestellt. Das machst du im Tab »Rechnungen«.` : S.payFilter === 'offen' && !q ? 'Alles bezahlt – nichts mehr offen.' : 'Keine Treffer.')));
   };
   draw();
@@ -881,8 +952,9 @@ function viewZahlungen() {
       h('a', { class: 'btn', href: `/api/export-payments?year=${st.year}&nur=offen` }, 'Offene Posten als Excel'),
       h('a', { class: 'btn', href: `/api/export-payments?year=${st.year}` }, 'Alle Zahlungen als Excel')),
     filters,
+    mahnBar,
     h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
-      h('thead', null, h('tr', null, ['Nr.', 'Name', 'Rechnungs-Nr.', 'Betrag', 'Fällig am', 'Status', 'Bezahlt / am', 'Notiz', ''].map((t) => h('th', null, t)))),
+      h('thead', null, h('tr', null, ['', 'Nr.', 'Name', 'Rechnungs-Nr.', 'Betrag', 'Fällig am', 'Status', 'Bezahlt / am', 'Notiz', ''].map((t) => h('th', null, t)))),
       tbody)));
 }
 
@@ -892,20 +964,21 @@ function viewAdmin() {
   const st = S.state;
   if (st.hasPassword && !st.loggedIn) return viewLogin();
   const subs = [['paechter', 'Pächter'], ['einstellungen', 'Preise & Einstellungen'], ['jahreswechsel', 'Jahreswechsel'],
-    ['kassenbericht', 'Kassenbericht'], ['daten', 'Import / Export / Sicherung'], ['sicherheit', 'Passwort']];
+    ['kassenbericht', 'Kassenbericht'], ['daten', 'Import / Export / Sicherung'], ['protokoll', 'Änderungsprotokoll'], ['sicherheit', 'Passwort']];
   const body = S.adminTab === 'paechter' ? adminPaechter() : S.adminTab === 'einstellungen' ? adminSettings()
-    : S.adminTab === 'jahreswechsel' ? adminYear() : S.adminTab === 'kassenbericht' ? adminKassenbericht()
-      : S.adminTab === 'daten' ? adminData() : adminSecurity();
+    : S.adminTab === 'jahreswechsel' ? adminYear() : S.adminTab === 'kassenbericht' ? adminKassenbericht(false)
+      : S.adminTab === 'daten' ? adminData() : S.adminTab === 'protokoll' ? adminProtokoll() : adminSecurity();
   return h('div', null,
     h('h2', null, 'Admin-Bereich'),
     !st.hasPassword ? h('div', { class: 'banner warn' }, 'Für den Admin-Bereich ist noch kein Passwort gesetzt – jeder kann hier Pächter und Preise ändern. ',
       h('button', { class: 'btn small', onclick: () => { S.adminTab = 'sicherheit'; render(); } }, 'Passwort festlegen')) : null,
     h('div', { class: 'subtabs' }, subs.map(([id, label]) => h('button', { class: S.adminTab === id ? 'active' : '',
-      onclick: () => { S.adminTab = id; S.importPreview = null; render(); } }, label))),
+      onclick: () => { S.adminTab = id; S.importPreview = null; if (id === 'protokoll') S.protokoll = null; render(); } }, label))),
     body);
 }
 
 function viewLogin() {
+  const st = S.state;
   const pw = h('input', { type: 'password', autocomplete: 'current-password', style: 'width:100%', autofocus: true });
   const go = async () => {
     try { await api('POST', '/api/admin/login', { password: pw.value }); await reload(); } catch (e) { handleErr(e); pw.select(); }
@@ -914,7 +987,41 @@ function viewLogin() {
   setTimeout(() => pw.focus(), 50);
   return h('div', { class: 'center card' }, h('h2', null, 'Admin-Anmeldung'),
     h('p', { class: 'hint' }, 'Der Admin-Bereich ist durch ein Passwort geschützt.'), pw,
-    h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: go }, 'Anmelden')));
+    h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: go }, 'Anmelden')),
+    st.hasPruefPassword ? h('p', { style: 'margin-top:18px' },
+      h('button', { class: 'btn', onclick: () => { S.pruefLoginMode = true; render(); } }, 'Als Kassenprüfer anmelden')) : null);
+}
+
+function viewPruefLogin() {
+  const pw = h('input', { type: 'password', autocomplete: 'current-password', style: 'width:100%', autofocus: true });
+  const go = async () => {
+    try { await api('POST', '/api/pruef/login', { password: pw.value }); S.pruefLoginMode = false; await reload(); } catch (e) { handleErr(e); pw.select(); }
+  };
+  pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  setTimeout(() => pw.focus(), 50);
+  return h('div', { class: 'center card' }, h('h2', null, 'Kassenprüfer-Anmeldung'),
+    h('p', { class: 'hint' }, 'Lesezugriff auf den Kassenbericht, ohne die übrigen Admin-Rechte.'), pw,
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn primary', onclick: go }, 'Anmelden'),
+      h('button', { class: 'btn', onclick: () => { S.pruefLoginMode = false; render(); } }, 'Zurück')));
+}
+
+// Eigenständige, schmale Oberfläche für den Kassenprüfer-Zugang: nur Lesezugriff
+// auf den Kassenbericht (inkl. Geprüft-Haken), kein Zugriff auf die übrigen Tabs.
+function viewPruefShell() {
+  const st = S.state;
+  if (S.kasseYear == null) S.kasseYear = st.year;
+  const app = h('div');
+  const yearSel = h('select', { onchange: async (e) => { S.year = Number(e.target.value); S.kasse = null; S.kasseYear = S.year; await reload(); } },
+    st.years.map((y) => h('option', { value: y, selected: y === st.year }, y === st.currentYear ? `${y} (aktuell)` : `${y} (abgeschlossen)`)));
+  app.append(
+    h('header', { class: 'top' },
+      h('div', { class: 'brand' }, h('b', null, 'Gartenabrechnung'), h('span', null, st.settings.vereinName + ' · Kassenprüfer-Zugang')),
+      h('div', { class: 'spacer' }),
+      h('div', null, h('label', null, 'Jahr'), yearSel),
+      h('button', { class: 'btn', onclick: async () => { try { await api('POST', '/api/pruef/logout'); } catch (e) { /* egal */ } await reload(); } }, 'Abmelden')),
+    h('main', null, h('h2', null, 'Kassenbericht'), adminKassenbericht(true)));
+  return app;
 }
 
 // ---- Pächter verwalten
@@ -1185,7 +1292,7 @@ function ausgabeDialog(a) {
   ].filter(Boolean));
 }
 
-function adminKassenbericht() {
+function adminKassenbericht(pruefMode) {
   const st = S.state;
   if (S.kasseYear == null) S.kasseYear = st.currentYear;
   const yearSel = h('select', { onchange: (e) => { S.kasseYear = Number(e.target.value); S.kasse = null; render(); } },
@@ -1224,7 +1331,7 @@ function adminKassenbericht() {
       h('td', null, x.beleg ? h('a', { href: `/api/admin/beleg/${x.id}?year=${S.kasseYear}`, target: '_blank', title: 'Beleg ansehen' }, '📎') : null),
       h('td', { title: x.geprueft ? `Geprüft am ${deDate(x.geprueftAm)}` : 'Von der Kassenprüfung abhaken' },
         h('input', { type: 'checkbox', checked: x.geprueft, onchange: (e) => toggleGeprueft(x, e.target.checked) })),
-      h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await ausgabeDialog(x); if (r !== false && r !== undefined) await refreshKasse(); } }, 'Bearbeiten'))));
+      h('td', null, pruefMode ? null : h('button', { class: 'btn small', onclick: async () => { const r = await ausgabeDialog(x); if (r !== false && r !== undefined) await refreshKasse(); } }, 'Bearbeiten'))));
   }
   if (!gezeigt.length) tbody.append(h('tr', null, h('td', { colspan: 7, class: 'empty' },
     k.ausgaben.length ? 'Alle Ausgaben haben einen Beleg.' : 'Noch keine sonstigen Ausgaben erfasst.')));
@@ -1235,10 +1342,10 @@ function adminKassenbericht() {
         h('tbody', null, k.ausgabenKategorie.map((kat) => h('tr', null, h('td', null, kat.kategorie), h('td', { class: 'r' }, eur(kat.summe)))))))
     : null;
 
-  const vW3 = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.wasserM3), autocomplete: 'off' });
-  const vWE = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.wasserEUR), autocomplete: 'off' });
-  const vSK = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.stromKWh), autocomplete: 'off' });
-  const vSE = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.stromEUR), autocomplete: 'off' });
+  const vW3 = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.wasserM3), autocomplete: 'off', disabled: !!pruefMode });
+  const vWE = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.wasserEUR), autocomplete: 'off', disabled: !!pruefMode });
+  const vSK = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.stromKWh), autocomplete: 'off', disabled: !!pruefMode });
+  const vSE = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.versorger.stromEUR), autocomplete: 'off', disabled: !!pruefMode });
   const diffRow = (label, total, vInput, unit) => {
     const v = parseNum(vInput.value);
     const diff = v == null || Number.isNaN(v) ? null : Math.round((v - total) * 100) / 100;
@@ -1267,14 +1374,15 @@ function adminKassenbericht() {
     k.unvollstaendig.length ? h('div', { class: 'banner warn' }, `Nicht enthalten (Angaben fehlen): ${k.unvollstaendig.join(', ')}`) : null,
     h('div', { class: 'card', style: 'margin-bottom:14px' },
       h('div', { class: 'toolbar' },
-        h('label', null, 'Anfangsbestand der Kasse'), h('div', { class: 'inputunit' }, anfInput, h('span', null, '€')),
-        h('button', { class: 'btn small primary', onclick: saveAnfang }, 'Speichern'),
-        h('span', { class: 'hint' }, 'wird beim Jahreswechsel automatisch aus dem Kassenbestand des Vorjahres übernommen, ist hier aber jederzeit änderbar'))),
+        h('label', null, 'Anfangsbestand der Kasse'),
+        pruefMode ? h('b', null, eur(k.anfangsbestand)) : h('div', { class: 'inputunit' }, anfInput, h('span', null, '€')),
+        pruefMode ? null : h('button', { class: 'btn small primary', onclick: saveAnfang }, 'Speichern'),
+        pruefMode ? null : h('span', { class: 'hint' }, 'wird beim Jahreswechsel automatisch aus dem Kassenbestand des Vorjahres übernommen, ist hier aber jederzeit änderbar'))),
     cards,
     h('h3', null, 'Sonstige Ausgaben der Vereinskasse'),
     h('div', { class: 'card' },
       h('div', { class: 'toolbar' },
-        h('button', { class: 'btn primary', onclick: async () => { const r = await ausgabeDialog(null); if (r !== false && r !== undefined) await refreshKasse(); } }, '+ Ausgabe erfassen'),
+        pruefMode ? null : h('button', { class: 'btn primary', onclick: async () => { const r = await ausgabeDialog(null); if (r !== false && r !== undefined) await refreshKasse(); } }, '+ Ausgabe erfassen'),
         h('div', { class: 'spacer' }),
         h('label', { class: 'hint' }, belegFilter, ` nur ohne Beleg${ohneBeleg ? ` (${ohneBeleg})` : ''}`)),
       h('div', { class: 'tablewrap', style: 'max-height:360px' }, h('table', { class: 'data' },
@@ -1284,7 +1392,7 @@ function adminKassenbericht() {
     h('div', { class: 'card' },
       h('p', { class: 'hint' }, 'Trage hier die Werte der Hauptzähler bzw. der Versorgerrechnung ein, um sie mit der Summe der Pächterabrechnung zu vergleichen. Eine größere Abweichung kann auf einen Zählerfehler, Schwund oder eine falsche Ablesung hindeuten.'),
       h('div', { class: 'tablewrap' }, versorgerTable),
-      h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: saveVersorger }, 'Werte speichern'))),
+      pruefMode ? null : h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: saveVersorger }, 'Werte speichern'))),
     h('div', { class: 'actions', style: 'margin-top:16px;margin-bottom:22px' },
       h('a', { class: 'btn', href: `/api/admin/export-kassenbericht?year=${S.kasseYear}` }, `Kassenbericht ${S.kasseYear} als Excel`)),
     h('h3', null, 'Verlauf über die Jahre'),
@@ -1374,8 +1482,50 @@ function adminData() {
       h('div', { class: 'actions', style: 'margin-top:8px' },
         h('a', { class: 'btn', href: '/api/admin/backup' }, 'Gesamten Datenbestand herunterladen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'sicherungen' }).catch(handleErr) }, 'Sicherungsordner öffnen'),
-        h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'daten' }).catch(handleErr) }, 'Datenordner öffnen'))));
+        h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'daten' }).catch(handleErr) }, 'Datenordner öffnen')),
+      zweiteSicherungField()));
   return wrap;
+}
+
+function zweiteSicherungField() {
+  const st = S.state;
+  const inp = h('input', { type: 'text', value: st.settings.zweiteSicherung || '', style: 'width:100%', autocomplete: 'off',
+    placeholder: 'z. B. D:\\Sicherung-Gartenabrechnung oder ein Netzlaufwerk-Pfad' });
+  const save = async () => {
+    try {
+      await api('PUT', '/api/admin/settings', { ...st.settings, zweiteSicherung: inp.value.trim() });
+      toast('Gespeichert', 'ok');
+      await reload();
+    } catch (e) { handleErr(e); }
+  };
+  return h('div', { style: 'margin-top:16px;border-top:1px solid var(--line,#ddd);padding-top:12px' },
+    h('div', { class: 'field wide' }, h('label', null, 'Zweiter Sicherungsordner (optional, z. B. USB-Stick oder Netzlaufwerk)'), inp,
+      h('span', { class: 'fhint' }, 'Leer lassen = deaktiviert. Ist der Pfad gerade nicht erreichbar (USB-Stick nicht eingesteckt), läuft das Programm trotzdem normal weiter, es wird nur dort nicht zusätzlich gesichert.')),
+    h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: save }, 'Speichern')));
+}
+
+// ---- Änderungsprotokoll
+
+async function loadProtokoll() {
+  if (S.protokollLoading) return;
+  S.protokollLoading = true;
+  try { S.protokoll = await api('GET', '/api/admin/audit-log'); } catch (e) { handleErr(e); S.protokoll = []; }
+  S.protokollLoading = false;
+  render();
+}
+
+function adminProtokoll() {
+  if (!S.protokoll) {
+    if (!S.protokollLoading) loadProtokoll();
+    return h('p', { class: 'hint' }, 'Wird geladen …');
+  }
+  const fmtZeit = (iso) => { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString('de-DE'); };
+  const rows = S.protokoll.map((e) => h('tr', null, h('td', { class: 'mono', style: 'white-space:nowrap' }, fmtZeit(e.zeit)), h('td', null, e.aktion)));
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Wer wann welchen Pächter oder welche Preise geändert hat. Da es nur ein gemeinsames Admin-Passwort gibt, wird nicht festgehalten, welche Person es war – nur Zeitpunkt und Art der Änderung. Die letzten 1000 Einträge bleiben erhalten.'),
+    h('div', { class: 'card tablewrap', style: 'max-height:520px' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, h('th', null, 'Zeitpunkt'), h('th', null, 'Änderung'))),
+      h('tbody', null, rows.length ? rows : h('tr', null, h('td', { colspan: 2, class: 'empty' }, 'Noch keine Einträge.'))))));
 }
 
 // ---- Passwort
@@ -1395,17 +1545,70 @@ function adminSecurity() {
       await reload();
     } catch (e) { handleErr(e); }
   };
-  return h('div', { class: 'card narrow' },
-    h('h3', { style: 'margin-top:0' }, st.hasPassword ? 'Admin-Passwort ändern oder entfernen' : 'Admin-Passwort festlegen'),
-    h('p', { class: 'hint' }, 'Das Passwort schützt Pächter, Preise, Jahreswechsel und Import. Die Zählerstände kann weiterhin jeder eintragen, der das Programm öffnet.'),
+  return h('div', null,
+    h('div', { class: 'card narrow' },
+      h('h3', { style: 'margin-top:0' }, st.hasPassword ? 'Admin-Passwort ändern oder entfernen' : 'Admin-Passwort festlegen'),
+      h('p', { class: 'hint' }, 'Das Passwort schützt Pächter, Preise, Jahreswechsel und Import. Die Zählerstände kann weiterhin jeder eintragen, der das Programm öffnet.'),
+      h('div', { class: 'form', style: 'grid-template-columns:1fr' },
+        st.hasPassword ? fld('Bisheriges Passwort', old) : null,
+        fld('Neues Passwort', n1, st.hasPassword ? 'Leer lassen, um den Passwortschutz zu entfernen' : 'Mindestens 8 Zeichen'),
+        fld('Neues Passwort wiederholen', n2)),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn primary', onclick: save }, 'Speichern'),
+        st.hasPassword ? h('button', { class: 'btn', onclick: async () => { try { await api('POST', '/api/admin/logout'); await reload(); } catch (e) { handleErr(e); } } }, 'Abmelden') : null),
+      h('p', { class: 'hint', style: 'margin-top:16px' }, 'Passwort vergessen? Das Programm mit dem Zusatz "--reset-admin" starten (in der Eingabeaufforderung: Gartenabrechnung.exe --reset-admin). Dann ist der Passwortschutz entfernt und du kannst ein neues Passwort festlegen.')),
+    pruefPasswortCard(),
+    updateCheckCard());
+}
+
+// ---- Kassenprüfer-Zugang verwalten (nur der Admin kann ihn einrichten)
+
+function pruefPasswortCard() {
+  const st = S.state;
+  const n1 = h('input', { type: 'password', autocomplete: 'new-password' });
+  const n2 = h('input', { type: 'password', autocomplete: 'new-password' });
+  const fld = (label, input, hint) => h('div', { class: 'field' }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  const save = async () => {
+    if (n1.value !== n2.value) { toast('Die beiden Passwörter sind nicht gleich.', 'err'); return; }
+    try {
+      await api('POST', '/api/admin/pruef-password', { new: n1.value });
+      toast(n1.value ? 'Kassenprüfer-Zugang gespeichert' : 'Kassenprüfer-Zugang entfernt', 'ok');
+      await reload();
+    } catch (e) { handleErr(e); }
+  };
+  return h('div', { class: 'card narrow', style: 'margin-top:16px' },
+    h('h3', { style: 'margin-top:0' }, 'Kassenprüfer-Zugang'),
+    h('p', { class: 'hint' }, `Eigenes, optionales Passwort für den Kassenprüfer: Lesezugriff auf den Kassenbericht (inkl. Geprüft-Haken für die sonstigen Ausgaben), aber ohne die übrigen Admin-Rechte. ${st.hasPruefPassword ? 'Zugang ist eingerichtet.' : 'Zugang ist nicht eingerichtet.'}`),
     h('div', { class: 'form', style: 'grid-template-columns:1fr' },
-      st.hasPassword ? fld('Bisheriges Passwort', old) : null,
-      fld('Neues Passwort', n1, st.hasPassword ? 'Leer lassen, um den Passwortschutz zu entfernen' : 'Mindestens 8 Zeichen'),
-      fld('Neues Passwort wiederholen', n2)),
+      fld('Passwort', n1, st.hasPruefPassword ? 'Leer lassen, um den Zugang zu entfernen' : 'Mindestens 8 Zeichen'),
+      fld('Passwort wiederholen', n2)),
+    h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern')));
+}
+
+// ---- Update-Prüfung (nur auf Knopfdruck, nie automatisch)
+
+async function checkUpdate() {
+  if (S.updateChecking) return;
+  S.updateChecking = true;
+  try { S.updateCheck = await api('GET', '/api/admin/check-update'); } catch (e) { S.updateCheck = { hinweis: e.message }; }
+  S.updateChecking = false;
+  render();
+}
+
+function updateCheckCard() {
+  const st = S.state;
+  const r = S.updateCheck;
+  return h('div', { class: 'card narrow', style: 'margin-top:16px' },
+    h('h3', { style: 'margin-top:0' }, 'Nach Updates suchen'),
+    h('p', { class: 'hint' }, `Installierte Version: ${st.version}. Die Prüfung fragt nur auf Knopfdruck einmalig die öffentliche GitHub-Release-Seite dieses Projekts ab, es läuft sonst keine Internetverbindung im Hintergrund.`),
     h('div', { class: 'actions' },
-      h('button', { class: 'btn primary', onclick: save }, 'Speichern'),
-      st.hasPassword ? h('button', { class: 'btn', onclick: async () => { try { await api('POST', '/api/admin/logout'); await reload(); } catch (e) { handleErr(e); } } }, 'Abmelden') : null),
-    h('p', { class: 'hint', style: 'margin-top:16px' }, 'Passwort vergessen? Das Programm mit dem Zusatz "--reset-admin" starten (in der Eingabeaufforderung: Gartenabrechnung.exe --reset-admin). Dann ist der Passwortschutz entfernt und du kannst ein neues Passwort festlegen.'));
+      h('button', { class: 'btn', disabled: S.updateChecking, onclick: checkUpdate }, S.updateChecking ? 'Prüfe …' : 'Nach Updates suchen')),
+    r ? (r.available
+      ? h('div', { class: 'banner info', style: 'margin-top:10px' }, `Version ${r.version} ist verfügbar. `,
+          h('a', { href: r.url, target: '_blank', rel: 'noopener' }, 'Release-Seite öffnen'))
+      : r.hinweis
+        ? h('p', { class: 'hint', style: 'margin-top:10px' }, r.hinweis)
+        : h('p', { class: 'hint', style: 'margin-top:10px' }, 'Du hast die aktuelle Version.')) : null);
 }
 
 // ------------------------------------------------------------------ Start

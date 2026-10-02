@@ -37,6 +37,11 @@ type Settings struct {
 	Vereinsbeitrag     float64 `json:"vereinsbeitrag"`
 	Territorialverband float64 `json:"territorialverband"`
 	UmlageStandard     float64 `json:"umlageStandard"`
+
+	// ZweiteSicherung: optionaler zweiter Ordner (z. B. USB-Stick, Netzlaufwerk),
+	// in den Sicherungen zusätzlich gespiegelt werden. Leer = deaktiviert. Der
+	// Pfad wird frei vom Vorstand gewählt, es gibt keinen fest einprogrammierten Ort.
+	ZweiteSicherung string `json:"zweiteSicherung,omitempty"`
 }
 
 // Paechter sind die Stammdaten eines Pächters (ändern sich selten).
@@ -110,11 +115,19 @@ type Jahr struct {
 	Anfangsbestand *float64 `json:"anfangsbestand,omitempty"`
 }
 
-// AdminAuth speichert das Admin-Passwort nur als Hash.
+// AdminAuth speichert ein Passwort nur als Hash (für Admin und Kassenprüfer).
 type AdminAuth struct {
 	Salt string `json:"salt,omitempty"`
 	Hash string `json:"hash,omitempty"`
 	Iter int    `json:"iter,omitempty"`
+}
+
+// AuditEntry ist ein Eintrag im Änderungsprotokoll. Da es nur ein gemeinsames
+// Admin-Passwort gibt (keine einzelnen Benutzerkonten), wird nicht festgehalten
+// wer etwas geändert hat, nur wann und was.
+type AuditEntry struct {
+	Zeit   string `json:"zeit"` // RFC3339
+	Aktion string `json:"aktion"`
 }
 
 // Data ist der komplette Datenbestand (eine JSON-Datei).
@@ -124,9 +137,16 @@ type Data struct {
 	Paechter []Paechter       `json:"paechter"`
 	Jahre    map[string]*Jahr `json:"jahre"`
 	Admin    AdminAuth        `json:"admin"`
+	// PruefAuth: eigenes, optionales Passwort für einen Kassenprüfer-Zugang mit
+	// Lesezugriff auf den Kassenbericht (inkl. Geprüft-Haken), aber ohne die
+	// übrigen Admin-Rechte. Leer = Rolle nicht eingerichtet.
+	PruefAuth AdminAuth `json:"pruefAuth,omitempty"`
 	// Rechnungen ist das Archiv aller ausgestellten Rechnungen. Jeder Eintrag
 	// enthält eine vollständige Kopie der damaligen Werte.
 	Rechnungen []*Rechnung `json:"rechnungen"`
+	// AuditLog: Änderungsprotokoll (Pächter, Preise, Jahreswechsel, ...), auf die
+	// letzten 1000 Einträge begrenzt.
+	AuditLog []AuditEntry `json:"auditLog,omitempty"`
 }
 
 func defaultSettings() Settings {

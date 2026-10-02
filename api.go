@@ -36,6 +36,10 @@ type App struct {
 	smu      sync.Mutex
 	sessions map[string]time.Time
 
+	// Sitzungen des Kassenprüfer-Zugangs (eigenes, optionales Passwort, nur Lesezugriff).
+	pmu       sync.Mutex
+	psessions map[string]time.Time
+
 	// imu sorgt dafür, dass Rechnungen nacheinander ausgestellt werden
 	// (sonst könnten zwei Anfragen dieselbe Versionsnummer vergeben).
 	imu sync.Mutex
@@ -165,6 +169,165 @@ func (a *App) sessionValid(r *http.Request) bool {
 	return true
 }
 
+// ---------------------------------------------------------------- Kassenprüfer-Anmeldung
+//
+// Eigener, optionaler Zugang mit Lesezugriff auf den Kassenbericht (inkl. des
+// Geprüft-Hakens), aber ohne die übrigen Admin-Rechte. Ist kein Kassenprüfer-
+// Passwort eingerichtet (Standard), gibt es diesen Zugang schlicht nicht.
+
+func (a *App) hasPruefPassword() bool { return a.st.d.PruefAuth.Hash != "" }
+
+func (a *App) pruefSessionValid(r *http.Request) bool {
+	c, err := r.Cookie("ga_pruef_session")
+	if err != nil {
+		return false
+	}
+	a.pmu.Lock()
+	defer a.pmu.Unlock()
+	if a.psessions == nil {
+		a.psessions = map[string]time.Time{}
+	}
+	exp, ok := a.psessions[c.Value]
+	if !ok || time.Now().After(exp) {
+		delete(a.psessions, c.Value)
+		return false
+	}
+	a.psessions[c.Value] = time.Now().Add(4 * time.Hour)
+	return true
+}
+
+func (a *App) isPruef(r *http.Request) bool {
+	a.st.mu.Lock()
+	has := a.hasPruefPassword()
+	a.st.mu.Unlock()
+	return has && a.pruefSessionValid(r)
+}
+
+func (a *App) startPruefSession(w http.ResponseWriter) {
+	b := make([]byte, 24)
+	_, _ = rand.Read(b)
+	tok := hex.EncodeToString(b)
+	a.pmu.Lock()
+	if a.psessions == nil {
+		a.psessions = map[string]time.Time{}
+	}
+	a.psessions[tok] = time.Now().Add(4 * time.Hour)
+	a.pmu.Unlock()
+	http.SetCookie(w, &http.Cookie{Name: "ga_pruef_session", Value: tok, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
+}
+
+// adminOrPruef lässt sowohl den Admin als auch den (falls eingerichteten)
+// Kassenprüfer-Zugang zu, z. B. für den lesenden Zugriff auf den Kassenbericht.
+func (a *App) adminOrPruef(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if a.isAdmin(r) || a.isPruef(r) {
+			h(w, r)
+			return
+		}
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Bitte anmelden"})
+	}
+}
+
+func (a *App) handlePruefLogin(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Password string `json:"password"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	a.st.mu.Lock()
+	has := a.hasPruefPassword()
+	a.lmu.Lock()
+	if time.Now().Before(a.lockUntil) {
+		wait := time.Until(a.lockUntil).Round(time.Second)
+		a.lmu.Unlock()
+		a.st.mu.Unlock()
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": fmt.Sprintf("Zu viele Fehlversuche. Bitte %s warten.", wait)})
+		return
+	}
+	a.lmu.Unlock()
+	if !has {
+		a.st.mu.Unlock()
+		writeErr(w, notFound("Der Kassenprüfer-Zugang ist nicht eingerichtet"))
+		return
+	}
+	ok := checkPasswordAgainst(a.st.d.PruefAuth, in.Password)
+	a.st.mu.Unlock()
+	if !ok {
+		a.lmu.Lock()
+		a.failures++
+		if a.failures >= 5 {
+			d := 30 * time.Second << a.strikes
+			if d > 15*time.Minute {
+				d = 15 * time.Minute
+			}
+			if a.strikes < 10 {
+				a.strikes++
+			}
+			a.lockUntil = time.Now().Add(d)
+			a.failures = 0
+		}
+		a.lmu.Unlock()
+		time.Sleep(700 * time.Millisecond)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Falsches Passwort"})
+		return
+	}
+	a.lmu.Lock()
+	a.failures, a.strikes = 0, 0
+	a.lmu.Unlock()
+	a.startPruefSession(w)
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (a *App) handlePruefLogout(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie("ga_pruef_session"); err == nil {
+		a.pmu.Lock()
+		delete(a.psessions, c.Value)
+		a.pmu.Unlock()
+	}
+	http.SetCookie(w, &http.Cookie{Name: "ga_pruef_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// handlePruefPassword setzt, ändert oder entfernt das Kassenprüfer-Passwort.
+// Das verwaltet ausschließlich der Admin, ein bisheriges Prüfer-Passwort wird
+// dafür nicht benötigt.
+func (a *App) handlePruefPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		New string `json:"new"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	if in.New == "" {
+		a.st.d.PruefAuth = AdminAuth{}
+		a.st.audit("Kassenprüfer-Passwort entfernt")
+	} else {
+		if len([]rune(in.New)) < 8 {
+			writeErr(w, bad("Das Passwort muss mindestens 8 Zeichen haben"))
+			return
+		}
+		if len(in.New) > 200 {
+			writeErr(w, bad("Das Passwort ist zu lang"))
+			return
+		}
+		salt := make([]byte, 16)
+		_, _ = rand.Read(salt)
+		const iter = 600000
+		a.st.d.PruefAuth = AdminAuth{Salt: hex.EncodeToString(salt), Iter: iter, Hash: hashPassword(in.New, salt, iter)}
+		a.st.audit("Kassenprüfer-Passwort gesetzt oder geändert")
+	}
+	if err := a.st.saveLocked(); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true, "hasPruefPassword": in.New != ""})
+}
+
 func (a *App) isAdmin(r *http.Request) bool {
 	a.st.mu.Lock()
 	has := a.hasPassword()
@@ -185,15 +348,16 @@ func (a *App) admin(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (a *App) checkPassword(pw string) bool {
-	adm := a.st.d.Admin
-	salt, err := hex.DecodeString(adm.Salt)
-	if err != nil || adm.Hash == "" {
+func checkPasswordAgainst(auth AdminAuth, pw string) bool {
+	salt, err := hex.DecodeString(auth.Salt)
+	if err != nil || auth.Hash == "" {
 		return false
 	}
-	got := hashPassword(pw, salt, adm.Iter)
-	return subtle.ConstantTimeCompare([]byte(got), []byte(adm.Hash)) == 1
+	got := hashPassword(pw, salt, auth.Iter)
+	return subtle.ConstantTimeCompare([]byte(got), []byte(auth.Hash)) == 1
 }
+
+func (a *App) checkPassword(pw string) bool { return checkPasswordAgainst(a.st.d.Admin, pw) }
 
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var in struct {
@@ -305,6 +469,11 @@ func (a *App) handlePassword(w http.ResponseWriter, r *http.Request) {
 		const iter = 600000
 		a.st.d.Admin = AdminAuth{Salt: hex.EncodeToString(salt), Iter: iter, Hash: hashPassword(in.New, salt, iter)}
 	}
+	if in.New == "" {
+		a.st.audit("Admin-Passwort entfernt")
+	} else {
+		a.st.audit("Admin-Passwort geändert")
+	}
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return
@@ -318,23 +487,27 @@ func (a *App) handlePassword(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- Zustand
 
 type stateResp struct {
-	Autor       string                 `json:"autor"`
-	Version     string                 `json:"version"`
-	DataDir     string                 `json:"dataDir"`
-	CurrentYear int                    `json:"currentYear"`
-	Years       []int                  `json:"years"`
-	Year        int                    `json:"year"`
-	ReadOnly    bool                   `json:"readOnly"`
-	Settings    Settings               `json:"settings"`
-	Paechter    []Paechter             `json:"paechter"`
-	Ablesungen  map[string]Ablesung    `json:"ablesungen"`
-	Results     map[string]Result      `json:"results"`
-	HasPassword bool                   `json:"hasPassword"`
-	LoggedIn    bool                   `json:"loggedIn"`
-	Issued      map[string]issuedInfo  `json:"issued"`
-	Archive     []archiveEntry         `json:"archive"`
-	History     map[string][]histEntry `json:"history"`
-	Hinweise    map[string][]string    `json:"hinweise"`
+	Autor       string              `json:"autor"`
+	Version     string              `json:"version"`
+	DataDir     string              `json:"dataDir"`
+	CurrentYear int                 `json:"currentYear"`
+	Years       []int               `json:"years"`
+	Year        int                 `json:"year"`
+	ReadOnly    bool                `json:"readOnly"`
+	Settings    Settings            `json:"settings"`
+	Paechter    []Paechter          `json:"paechter"`
+	Ablesungen  map[string]Ablesung `json:"ablesungen"`
+	Results     map[string]Result   `json:"results"`
+	HasPassword bool                `json:"hasPassword"`
+	LoggedIn    bool                `json:"loggedIn"`
+	// Kassenprüfer-Zugang: eigenes, optionales Passwort mit Lesezugriff auf den
+	// Kassenbericht, getrennt vom Admin-Passwort.
+	HasPruefPassword bool                   `json:"hasPruefPassword"`
+	PruefLoggedIn    bool                   `json:"pruefLoggedIn"`
+	Issued           map[string]issuedInfo  `json:"issued"`
+	Archive          []archiveEntry         `json:"archive"`
+	History          map[string][]histEntry `json:"history"`
+	Hinweise         map[string][]string    `json:"hinweise"`
 	// LetzteSicherung: JJJJ-MM-TT der jüngsten Sicherungsdatei, leer wenn keine existiert.
 	LetzteSicherung string `json:"letzteSicherung,omitempty"`
 }
@@ -343,8 +516,10 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	year := a.yearParam(r)
 	a.st.mu.Lock()
 	has := a.hasPassword()
+	hasPruef := a.hasPruefPassword()
 	a.st.mu.Unlock()
 	loggedIn := has && a.sessionValid(r)
+	pruefLoggedIn := hasPruef && a.pruefSessionValid(r)
 
 	a.st.mu.Lock()
 	v, ok := a.st.viewLocked(year)
@@ -357,6 +532,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		Autor: appAutor, Version: appVersion, DataDir: a.st.dir, CurrentYear: a.st.d.Settings.Jahr, Years: a.st.years(),
 		Year: year, ReadOnly: v.ReadOnly, Settings: v.Settings, Paechter: v.Paechter,
 		Ablesungen: v.Ablesungen, Results: map[string]Result{}, HasPassword: has, LoggedIn: loggedIn,
+		HasPruefPassword: hasPruef, PruefLoggedIn: pruefLoggedIn,
 	}
 	if res.Paechter == nil {
 		res.Paechter = []Paechter{}
@@ -572,6 +748,7 @@ func (a *App) handlePaechterCreate(w http.ResponseWriter, r *http.Request) {
 	in.ID = newID()
 	a.st.d.Paechter = append(a.st.d.Paechter, in)
 	a.st.ensureYear(a.st.d.Settings.Jahr).Ablesungen[in.ID] = Ablesung{}
+	a.st.audit("Pächter angelegt: %s %s", in.Mitgliedsnr, in.Name)
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return
@@ -601,6 +778,7 @@ func (a *App) handlePaechterUpdate(w http.ResponseWriter, r *http.Request) {
 		if a.st.d.Paechter[i].ID == id && !a.st.d.Paechter[i].Geloescht {
 			in.ID = id
 			a.st.d.Paechter[i] = in
+			a.st.audit("Pächter geändert: %s %s", in.Mitgliedsnr, in.Name)
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
 				return
@@ -624,6 +802,7 @@ func (a *App) handlePaechterDelete(w http.ResponseWriter, r *http.Request) {
 			a.st.snapshotBackup("vor-Loeschen")
 			a.st.d.Paechter[i].Geloescht = true
 			a.st.d.Paechter[i].GeloeschtAm = time.Now().Format("2006-01-02")
+			a.st.audit("Pächter in den Papierkorb gelegt: %s %s", a.st.d.Paechter[i].Mitgliedsnr, a.st.d.Paechter[i].Name)
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
 				return
@@ -663,6 +842,7 @@ func (a *App) handlePaechterWiederherstellen(w http.ResponseWriter, r *http.Requ
 			}
 			a.st.d.Paechter[i].Geloescht = false
 			a.st.d.Paechter[i].GeloeschtAm = ""
+			a.st.audit("Pächter aus dem Papierkorb wiederhergestellt: %s %s", a.st.d.Paechter[i].Mitgliedsnr, a.st.d.Paechter[i].Name)
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
 				return
@@ -691,6 +871,7 @@ func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.st.snapshotBackup("vor-endgueltigem-Loeschen")
+		a.st.audit("Pächter endgültig gelöscht: %s %s", a.st.d.Paechter[i].Mitgliedsnr, a.st.d.Paechter[i].Name)
 		a.st.d.Paechter = append(a.st.d.Paechter[:i], a.st.d.Paechter[i+1:]...)
 		for _, j := range a.st.d.Jahre {
 			if !j.Abgeschlossen {
@@ -718,6 +899,7 @@ func cleanSettings(in, cur Settings) (Settings, error) {
 	in.BankName = trim(in.BankName, 80)
 	in.IBAN = trim(in.IBAN, 42)
 	in.BIC = trim(in.BIC, 15)
+	in.ZweiteSicherung = trim(in.ZweiteSicherung, 250)
 	if in.VereinName == "" {
 		return in, bad("Bitte einen Vereinsnamen eintragen")
 	}
@@ -757,7 +939,14 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	if in.ZweiteSicherung != "" && in.ZweiteSicherung != a.st.d.Settings.ZweiteSicherung {
+		if err := checkWritableDir(in.ZweiteSicherung); err != nil {
+			writeErr(w, bad(err.Error()))
+			return
+		}
+	}
 	a.st.d.Settings = in
+	a.st.audit("Preise und Einstellungen geändert")
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return
@@ -829,6 +1018,7 @@ func (a *App) handleNextYear(w http.ResponseWriter, r *http.Request) {
 	d.Settings.Jahr = next
 	d.Settings.Rechnungsdatum = addYear(d.Settings.Rechnungsdatum)
 	d.Settings.Zahlungsziel = addYear(d.Settings.Zahlungsziel)
+	a.st.audit("Jahreswechsel: %d abgeschlossen, %d begonnen", cur, next)
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return
@@ -1111,6 +1301,95 @@ func (a *App) handleBackup(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(raw)
 }
 
+// handleAuditLog liefert das Änderungsprotokoll, neueste Einträge zuerst.
+func (a *App) handleAuditLog(w http.ResponseWriter, r *http.Request) {
+	a.st.mu.Lock()
+	out := make([]AuditEntry, len(a.st.d.AuditLog))
+	copy(out, a.st.d.AuditLog)
+	a.st.mu.Unlock()
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Zeit > out[j].Zeit })
+	writeJSON(w, 200, out)
+}
+
+// ---------------------------------------------------------------- Update-Prüfung
+//
+// Rein manuell (Admin klickt auf »Nach Updates suchen«), nie automatisch beim
+// Start: das Programm ruft sonst nie nach Hause. Es wird ausschließlich die
+// öffentliche, feste GitHub-Release-Adresse dieses Projekts abgefragt, die
+// Antwort wird in der Größe begrenzt und nur zwei einfache Textfelder werden
+// ausgelesen. Es wird nichts heruntergeladen oder ausgeführt, nur ein Link
+// zur Release-Seite angezeigt, den die Person selbst anklicken kann.
+const updateCheckURL = "https://api.github.com/repos/Magnethelm90/gartenabrechnung/releases/latest"
+
+type updateInfo struct {
+	Available bool   `json:"available"`
+	Version   string `json:"version,omitempty"`
+	URL       string `json:"url,omitempty"`
+	Hinweis   string `json:"hinweis,omitempty"`
+}
+
+// versionNewer vergleicht zwei Versionsnummern der Form "1.2.3" (fehlende
+// Teile zählen als 0). Ungültige Teile werden wie 0 behandelt.
+func versionNewer(a, b string) bool {
+	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
+	n := len(pa)
+	if len(pb) > n {
+		n = len(pb)
+	}
+	num := func(parts []string, i int) int {
+		if i >= len(parts) {
+			return 0
+		}
+		v, _ := strconv.Atoi(strings.TrimSpace(parts[i]))
+		return v
+	}
+	for i := 0; i < n; i++ {
+		if x, y := num(pa, i), num(pb, i); x != y {
+			return x > y
+		}
+	}
+	return false
+}
+
+func (a *App) handleCheckUpdate(w http.ResponseWriter, r *http.Request) {
+	client := &http.Client{Timeout: 6 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, updateCheckURL, nil)
+	if err != nil {
+		writeJSON(w, 200, updateInfo{Hinweis: "Update-Prüfung konnte nicht gestartet werden"})
+		return
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "Gartenabrechnung/"+appVersion)
+	resp, err := client.Do(req)
+	if err != nil {
+		writeJSON(w, 200, updateInfo{Hinweis: "Keine Verbindung zu GitHub möglich"})
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		writeJSON(w, 200, updateInfo{Hinweis: "Keine Release-Information verfügbar"})
+		return
+	}
+	var rel struct {
+		TagName string `json:"tag_name"`
+		HTMLURL string `json:"html_url"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&rel); err != nil {
+		writeJSON(w, 200, updateInfo{Hinweis: "Antwort von GitHub konnte nicht gelesen werden"})
+		return
+	}
+	latest := strings.TrimPrefix(strings.TrimSpace(rel.TagName), "v")
+	if latest == "" || !strings.HasPrefix(rel.HTMLURL, "https://github.com/Magnethelm90/gartenabrechnung/") {
+		writeJSON(w, 200, updateInfo{Hinweis: "Keine Release-Information verfügbar"})
+		return
+	}
+	if versionNewer(latest, appVersion) {
+		writeJSON(w, 200, updateInfo{Available: true, Version: latest, URL: rel.HTMLURL})
+		return
+	}
+	writeJSON(w, 200, updateInfo{Available: false})
+}
+
 func openPath(p string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
@@ -1189,6 +1468,9 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/login", a.handleLogin)
 	mux.HandleFunc("POST /api/admin/logout", a.handleLogout)
 	mux.HandleFunc("POST /api/admin/password", a.handlePassword)
+	mux.HandleFunc("POST /api/pruef/login", a.handlePruefLogin)
+	mux.HandleFunc("POST /api/pruef/logout", a.handlePruefLogout)
+	mux.HandleFunc("POST /api/admin/pruef-password", a.admin(a.handlePruefPassword))
 	mux.HandleFunc("POST /api/admin/paechter", a.admin(a.handlePaechterCreate))
 	mux.HandleFunc("PUT /api/admin/paechter/{id}", a.admin(a.handlePaechterUpdate))
 	mux.HandleFunc("DELETE /api/admin/paechter/{id}", a.admin(a.handlePaechterDelete))
@@ -1200,18 +1482,21 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/import/preview", a.admin(a.handleImportPreview))
 	mux.HandleFunc("POST /api/admin/import/apply", a.admin(a.handleImportApply))
 	mux.HandleFunc("GET /api/admin/backup", a.admin(a.handleBackup))
-	mux.HandleFunc("GET /api/admin/kassenbericht", a.admin(a.handleKassenbericht))
+	mux.HandleFunc("GET /api/admin/audit-log", a.admin(a.handleAuditLog))
+	mux.HandleFunc("GET /api/admin/check-update", a.admin(a.handleCheckUpdate))
+	mux.HandleFunc("GET /api/admin/kassenbericht", a.adminOrPruef(a.handleKassenbericht))
 	mux.HandleFunc("PUT /api/admin/versorger", a.admin(a.handleVersorger))
 	mux.HandleFunc("PUT /api/admin/anfangsbestand", a.admin(a.handleAnfangsbestand))
-	mux.HandleFunc("GET /api/admin/export-kassenbericht", a.admin(a.handleKassenberichtExport))
-	mux.HandleFunc("GET /api/admin/kassenbericht-verlauf", a.admin(a.handleKassenberichtVerlauf))
+	mux.HandleFunc("GET /api/admin/export-kassenbericht", a.adminOrPruef(a.handleKassenberichtExport))
+	mux.HandleFunc("GET /api/admin/kassenbericht-verlauf", a.adminOrPruef(a.handleKassenberichtVerlauf))
 	mux.HandleFunc("POST /api/admin/ausgaben", a.admin(a.handleAusgabeCreate))
 	mux.HandleFunc("PUT /api/admin/ausgaben/{id}", a.admin(a.handleAusgabeUpdate))
 	mux.HandleFunc("DELETE /api/admin/ausgaben/{id}", a.admin(a.handleAusgabeDelete))
-	mux.HandleFunc("PUT /api/admin/ausgaben/{id}/geprueft", a.admin(a.handleAusgabeGeprueft))
+	mux.HandleFunc("PUT /api/admin/ausgaben/{id}/geprueft", a.adminOrPruef(a.handleAusgabeGeprueft))
 	mux.HandleFunc("POST /api/admin/ausgaben/{id}/beleg", a.admin(a.handleBelegUpload))
 	mux.HandleFunc("DELETE /api/admin/ausgaben/{id}/beleg", a.admin(a.handleBelegDelete))
-	mux.HandleFunc("GET /api/admin/beleg/{id}", a.admin(a.handleBelegServe))
+	mux.HandleFunc("GET /api/admin/beleg/{id}", a.adminOrPruef(a.handleBelegServe))
+	mux.HandleFunc("POST /api/admin/mahnung", a.admin(a.handleMahnung))
 	mux.Handle("/", static)
 	return a.guard(mux)
 }

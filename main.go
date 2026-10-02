@@ -128,7 +128,7 @@ func main() {
 		w.Header().Set("Cache-Control", "no-cache")
 		static.ServeHTTP(w, r)
 	})
-	app := &App{st: st, port: actual, sessions: map[string]time.Time{}}
+	app := &App{st: st, port: actual, sessions: map[string]time.Time{}, psessions: map[string]time.Time{}}
 	srv := &http.Server{
 		Handler:           app.routes(noCache),
 		ReadHeaderTimeout: 10 * time.Second,

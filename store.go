@@ -101,6 +101,49 @@ func (s *Store) saveLocked() error {
 
 func (s *Store) backupDir() string { return filepath.Join(s.dir, "Sicherungen") }
 
+// audit hängt einen Eintrag ans Änderungsprotokoll an (höchstens 1000 behalten).
+// Der Aufrufer hält s.mu; speichert nicht selbst, das übernimmt der anschließende saveLocked.
+func (s *Store) audit(format string, args ...any) {
+	s.d.AuditLog = append(s.d.AuditLog, AuditEntry{Zeit: time.Now().Format(time.RFC3339), Aktion: fmt.Sprintf(format, args...)})
+	if n := len(s.d.AuditLog); n > 1000 {
+		s.d.AuditLog = s.d.AuditLog[n-1000:]
+	}
+}
+
+// mirrorToSecondary kopiert eine Sicherungsdatei zusätzlich in den (optionalen,
+// vom Vorstand frei gewählten) zweiten Sicherungsordner, z. B. einen USB-Stick
+// oder ein Netzlaufwerk. Fehler (Ordner nicht erreichbar, USB-Stick nicht
+// eingesteckt, ...) werden bewusst nur ins Konsolenfenster geschrieben, damit
+// das Hauptprogramm trotzdem normal weiterläuft.
+func (s *Store) mirrorToSecondary(name string, data []byte) {
+	dir := strings.TrimSpace(s.d.Settings.ZweiteSicherung)
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		fmt.Fprintln(os.Stderr, "Zweiter Sicherungsordner nicht erreichbar:", err)
+		return
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+		fmt.Fprintln(os.Stderr, "Sicherung konnte nicht in den zweiten Ordner geschrieben werden:", err)
+	}
+}
+
+// checkWritableDir prüft, ob in einen Ordner geschrieben werden kann (legt ihn
+// bei Bedarf an). Für die Validierung eines vom Benutzer eingetragenen Pfades,
+// z. B. des zweiten Sicherungsordners, damit Tippfehler sofort auffallen.
+func checkWritableDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("Ordner %s kann nicht angelegt werden: %w", dir, err)
+	}
+	probe := filepath.Join(dir, ".schreibtest")
+	if err := os.WriteFile(probe, []byte("x"), 0o644); err != nil {
+		return fmt.Errorf("Ordner %s ist nicht beschreibbar: %w", dir, err)
+	}
+	_ = os.Remove(probe)
+	return nil
+}
+
 // letzteSicherung liefert den Zeitpunkt der jüngsten Sicherungsdatei (leer,
 // wenn noch keine existiert). Für die Übersicht auf der Startseite.
 func (s *Store) letzteSicherung() time.Time {
@@ -130,12 +173,14 @@ func (s *Store) dailyBackup() {
 	if os.MkdirAll(dir, 0o700) != nil {
 		return
 	}
-	name := filepath.Join(dir, "gartenabrechnung-daten-"+time.Now().Format("2006-01-02")+".json")
+	base := "gartenabrechnung-daten-" + time.Now().Format("2006-01-02") + ".json"
+	name := filepath.Join(dir, base)
 	if _, err := os.Stat(name); err == nil {
 		return // heute schon gesichert
 	}
 	_ = os.WriteFile(name, old, 0o600)
 	pruneBackups(dir, isDailyBackup, 60)
+	s.mirrorToSecondary(base, old)
 }
 
 // isDailyBackup erkennt Tagessicherungen (gartenabrechnung-daten-JJJJ-MM-TT.json).
@@ -188,6 +233,7 @@ func (s *Store) snapshotBackup(label string) {
 	pruneBackups(dir, func(n string) bool {
 		return strings.HasPrefix(n, "gartenabrechnung-daten-") && strings.HasSuffix(n, ".json") && !isDailyBackup(n)
 	}, 60)
+	s.mirrorToSecondary(name, old)
 }
 
 // yearView liefert Einstellungen, Pächter und Ablesungen für ein Jahr.

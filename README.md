@@ -39,6 +39,18 @@ gibt keine Konten, Schlüssel oder Cloud-Anbindung.
   die Kassenprüfung exportierbar
 - Beim Öffnen ein Hinweis, wenn noch Rechnungen offen oder überfällig sind
 - **Jahreswechsel**, Import der Mitglieder aus Excel/CSV, Excel-Export, automatische Sicherungen
+- **Lageplan:** Kachelübersicht aller Gärten mit Status-Farbcode (unvollständig/berechnet/offen/bezahlt), Klick
+  auf eine Kachel springt direkt zur Schnelleingabe dieses Pächters
+- **Zahlungserinnerung (Mahnung):** bei den Zahlungen gezielt offene Rechnungen anhaken und eine Mahnung als PDF
+  erzeugen (mit GiroCode); es wird nie automatisch nach einer festen Frist gemahnt, immer nur die ausgewählten
+- **Zweiter Sicherungsordner** (optional, frei wählbarer Pfad, z. B. USB-Stick oder Netzlaufwerk): Sicherungen
+  werden zusätzlich dorthin gespiegelt; nicht erreichbar (Stick nicht eingesteckt) ⇒ das Programm läuft trotzdem normal weiter
+- **Änderungsprotokoll:** hält fest, wann welcher Pächter oder welche Preise geändert wurden (Zeitpunkt und Art
+  der Änderung; es gibt nur ein gemeinsames Admin-Passwort, daher keine Zuordnung zu einer Person)
+- **Kassenprüfer-Zugang:** eigenes, optionales Passwort mit Lesezugriff auf den Kassenbericht (inkl.
+  Geprüft-Haken für die sonstigen Ausgaben), getrennt vom Admin-Passwort und ohne dessen übrige Rechte
+- **Update-Prüfung auf Knopfdruck:** fragt nur bei Klick einmalig die GitHub-Release-Seite dieses Projekts ab, ob
+  eine neuere Version verfügbar ist – nie automatisch, es läuft sonst keine Internetverbindung im Hintergrund
 
 ## Abrechnungsregeln (Beispielwerte, im Admin-Bereich änderbar)
 
