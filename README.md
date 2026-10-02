@@ -1,12 +1,13 @@
 # Gartenabrechnung
 
-Kleines Windows-Programm für Kleingartenvereine: Pächter einmal anlegen, jedes Jahr nur noch die Zählerstände
-eintragen, daraus werden die Rechnungen als PDF erzeugt. Die Zahlungen lassen sich abhaken, offene Posten
-werden aufgelistet.
+Kleines Programm für Kleingartenvereine (Windows und macOS): Pächter einmal anlegen, jedes Jahr nur noch die
+Zählerstände eintragen, daraus werden die Rechnungen als PDF erzeugt. Die Zahlungen lassen sich abhaken, offene
+Posten werden aufgelistet.
 
-Das Programm ist eine einzelne `.exe` ohne Installation. Es startet einen kleinen Webserver, der **nur auf dem
-eigenen Rechner** (`127.0.0.1`) lauscht, und öffnet die Oberfläche im Browser. Es werden keine Daten ins
-Internet gesendet, es gibt keine Konten, Schlüssel oder Cloud-Anbindung.
+Unter Windows ist das Programm eine einzelne `.exe` ohne Installation, unter macOS eine normale `.app` zum
+Reinziehen in den Programme-Ordner. Es startet einen kleinen Webserver, der **nur auf dem eigenen Rechner**
+(`127.0.0.1`) lauscht, und öffnet die Oberfläche im Browser. Es werden keine Daten ins Internet gesendet, es
+gibt keine Konten, Schlüssel oder Cloud-Anbindung.
 
 ## Funktionen
 
@@ -50,6 +51,8 @@ Alle Namen, Adressen und die Bankverbindung in den Voreinstellungen sind Platzha
 
 ## Starten
 
+### Windows
+
 `Gartenabrechnung.exe` in einen eigenen Ordner legen und doppelklicken. Das Konsolenfenster offen lassen.
 Die Daten liegen im selben Ordner:
 
@@ -59,7 +62,17 @@ Die Daten liegen im selben Ordner:
 | `Rechnungen/<Jahr>/` | fertige PDF-Rechnungen |
 | `Sicherungen/` | automatische Tages- und Ereignissicherungen |
 
-Optionen: `--data <Ordner>`, `--port <Zahl>`, `--no-browser`, `--reset-admin` (Admin-Passwort entfernen).
+### macOS
+
+`Gartenabrechnung.app` in den Programme-Ordner ziehen und per Doppelklick starten (läuft nativ auf Apple
+Silicon und Intel). Da die App nicht mit einem kostenpflichtigen Apple-Entwicklerzertifikat signiert ist,
+meldet macOS beim allerersten Start „nicht verifizierter Entwickler": per Rechtsklick (bzw. Ctrl-Klick) auf
+die App → „Öffnen" → im Dialog nochmal „Öffnen" bestätigen. Danach startet sie ganz normal per Doppelklick.
+
+Da der Programme-Ordner nicht beschreibbar ist, legt die App ihre Daten unter
+`~/Library/Application Support/Gartenabrechnung/` an (gleiche Dateien wie oben).
+
+Beide Systeme: Optionen `--data <Ordner>`, `--port <Zahl>`, `--no-browser`, `--reset-admin` (Admin-Passwort entfernen).
 
 ## Selbst bauen
 
@@ -81,6 +94,14 @@ Unter Windows (PowerShell):
 ```
 go test ./...
 go build -trimpath -ldflags "-s -w" -o Gartenabrechnung.exe .
+```
+
+macOS-Build (als `.app`, läuft ohne Installation von Zusatzsoftware):
+
+```
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Gartenabrechnung-arm64 .
+GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Gartenabrechnung-amd64 .
+# beide Binaries in Gartenabrechnung.app/Contents/MacOS/ legen, Startskript wählt per `uname -m` die passende aus
 ```
 
 ## Sicherheit
