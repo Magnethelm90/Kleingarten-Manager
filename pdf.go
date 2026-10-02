@@ -64,7 +64,7 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	pdf.SetAutoPageBreak(false, 0)
 	pdf.SetTitle(tr("Rechnung "+invoiceNumber(s, p)), true)
 	pdf.SetAuthor(tr(s.VereinName), true)
-	pdf.SetCreator("Gartenabrechnung", true)
+	pdf.SetCreator(appName, true)
 	pdf.AddPage()
 
 	y := 0.0
@@ -330,6 +330,157 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 
 	if y > 290 {
 		return nil, errors.New("Rechnung passt nicht auf eine Seite (Hinweistext zu lang?)")
+	}
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// buildMahnung erzeugt eine einfache Zahlungserinnerung für eine offene,
+// bereits ausgestellte Rechnung (nutzt dieselbe Kopfzeile und denselben
+// GiroCode wie die Rechnung selbst).
+func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
+	offen := openAmount(rec)
+	if offen <= 0 {
+		return nil, errors.New("diese Rechnung ist bereits vollständig bezahlt")
+	}
+	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf.AddUTF8FontFromBytes("lib", "", fontRegular)
+	pdf.AddUTF8FontFromBytes("lib", "B", fontBold)
+	tr := func(s string) string { return s }
+	pdf.SetMargins(leftX, 12, 20)
+	pdf.SetAutoPageBreak(false, 0)
+	pdf.SetTitle(tr("Zahlungserinnerung "+invoiceNumber(s, p)), true)
+	pdf.SetAuthor(tr(s.VereinName), true)
+	pdf.SetCreator(appName, true)
+	pdf.AddPage()
+
+	y := 0.0
+	font := func(style string, size float64) { pdf.SetFont("lib", style, size) }
+	text := func(x, w float64, txt, align string) {
+		pdf.SetXY(x, y)
+		pdf.CellFormat(w, rowH, tr(txt), "", 0, align, false, 0, "")
+	}
+	hline := func(at float64, width float64) {
+		pdf.SetLineWidth(width)
+		pdf.SetDrawColor(90, 90, 90)
+		pdf.Line(leftX, at, rightX, at)
+	}
+	next := func(h float64) { y += h }
+
+	pdf.SetLineWidth(0.7)
+	pdf.SetDrawColor(0, 0, 0)
+	pdf.Line(leftX, 14, rightX, 14)
+	y = 17
+	font("B", 14)
+	pdf.SetXY(leftX, y)
+	pdf.CellFormat(rightX-leftX, 8, tr(s.VereinName+" "+s.Ort), "", 0, "C", false, 0, "")
+	hline(27, 0.25)
+
+	y = 31
+	font("", 7.5)
+	pdf.SetTextColor(60, 60, 60)
+	text(leftX, rightX-leftX, s.Absenderzeile, "L")
+	pdf.SetTextColor(0, 0, 0)
+	next(6)
+	font("B", 10)
+	text(leftX, rightX-leftX, p.Versand, "R")
+
+	next(5)
+	font("", 10)
+	text(leftX, 90, p.Anrede, "L")
+	next(rowH)
+	font("B", 10)
+	text(leftX, 90, p.Name, "L")
+	next(rowH)
+	font("", 10)
+	text(leftX, 90, p.Strasse, "L")
+	next(rowH)
+	text(leftX, 90, p.PLZOrt, "L")
+
+	next(rowH + 4)
+	meta := [][2]string{
+		{"Mitgliedsnr.:", p.Mitgliedsnr},
+		{"Rechnungsnr.:", invoiceNumber(s, p)},
+		{"Rechnungsdatum:", germanDate(s.Rechnungsdatum)},
+		{"Zahlungsziel war:", germanDate(s.Zahlungsziel)},
+	}
+	for _, m := range meta {
+		font("", 10)
+		pdf.SetXY(115, y)
+		pdf.CellFormat(50, rowH, tr(m[0]), "", 0, "R", false, 0, "")
+		font("B", 10)
+		pdf.SetXY(165, y)
+		pdf.CellFormat(25, rowH, tr(m[1]), "", 0, "R", false, 0, "")
+		next(rowH)
+	}
+
+	next(6)
+	font("B", 13)
+	pdf.SetXY(leftX, y)
+	pdf.CellFormat(rightX-leftX, 7, tr("Zahlungserinnerung"), "", 0, "L", false, 0, "")
+	next(9)
+	font("", 10)
+	bezahlt := paidAmount(rec)
+	var body string
+	if bezahlt > 0 {
+		body = fmt.Sprintf("Für die Rechnung %s vom %s ist bislang ein Teilbetrag von %s eingegangen. Der restliche Betrag von %s ist bis heute nicht bei uns eingegangen.",
+			invoiceNumber(s, p), germanDate(s.Rechnungsdatum), fmtEUR(bezahlt), fmtEUR(offen))
+	} else {
+		body = fmt.Sprintf("Für die Rechnung %s vom %s über %s ist bei uns noch kein Zahlungseingang zu verzeichnen.",
+			invoiceNumber(s, p), germanDate(s.Rechnungsdatum), fmtEUR(offen))
+	}
+	pdf.SetXY(leftX, y)
+	pdf.MultiCell(rightX-leftX, 5.2, tr(body), "", "L", false)
+	y = pdf.GetY() + 3
+	hline(y, 0.2)
+	next(3)
+
+	font("B", 11)
+	text(leftX, 90, "Noch offener Betrag:", "L")
+	pdf.SetXY(colX[6]-6, y)
+	pdf.CellFormat(colW[6]+6, 6, tr(fmtEUR(offen)), "TB", 0, "R", false, 0, "")
+	next(6 + 5)
+
+	const qrSize = 24.0
+	textW := rightX - leftX
+	var qrPNG []byte
+	if strings.TrimSpace(s.IBAN) != "" {
+		if png, err := qrcode.Encode(epcQRPayload(s, p, offen), qrcode.Medium, 300); err == nil {
+			qrPNG = png
+			textW = rightX - leftX - qrSize - 5
+		}
+	}
+	pay := fmt.Sprintf("Bitte den offenen Betrag von %s umgehend auf das Konto der %s, IBAN: %s; BIC: %s, Verwendungszweck: %s (*) überweisen. "+
+		"Sollte die Zahlung zwischenzeitlich bereits erfolgt sein, betrachten Sie dieses Schreiben als gegenstandslos.",
+		fmtEUR(offen), s.BankName, s.IBAN, s.BIC, invoiceNumber(s, p))
+	qrTop := y
+	font("", 10)
+	pdf.SetXY(leftX, y)
+	pdf.MultiCell(textW, 4.7, tr(pay), "", "L", false)
+	y = pdf.GetY()
+	if qrPNG != nil {
+		pdf.RegisterImageOptionsReader("girocode", fpdf.ImageOptions{ImageType: "PNG"}, bytes.NewReader(qrPNG))
+		pdf.ImageOptions("girocode", rightX-qrSize, qrTop, qrSize, qrSize, false, fpdf.ImageOptions{ImageType: "PNG"}, 0, "")
+		font("", 6.5)
+		pdf.SetXY(rightX-qrSize, qrTop+qrSize+0.6)
+		pdf.CellFormat(qrSize, 3, tr("GiroCode zum Bezahlen"), "", 0, "C", false, 0, "")
+		if b := qrTop + qrSize + 3; b > y {
+			y = b
+		}
+	}
+	y += 2
+	text(leftX, rightX-leftX, "(*) Bei Zahlungsvorgängen bitte angeben!", "L")
+	next(rowH + 3)
+	text(leftX, rightX-leftX, "Der Vorstand", "L")
+	next(rowH + 3)
+	font("", 8)
+	text(leftX, rightX-leftX, "Die Zahlungserinnerung wird maschinell erstellt und ist ohne Unterschrift gültig.", "L")
+
+	if y > 290 {
+		return nil, errors.New("Mahnung passt nicht auf eine Seite")
 	}
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {

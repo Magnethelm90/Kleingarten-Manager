@@ -1,6 +1,9 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -415,6 +418,139 @@ func (a *App) handlePayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeErr(w, notFound("Rechnung nicht gefunden"))
+}
+
+// handleMahnung erzeugt eine Zahlungserinnerung (Mahnung) für ausgewählte
+// offene Rechnungen. Es wird nie automatisch nach einer festen Frist gemahnt,
+// sondern immer nur für die Rechnungen, die der Vorstand selbst anhakt und
+// auswählt. Bei genau einer Auswahl kommt ein einzelnes PDF zurück, bei
+// mehreren ein ZIP mit einer Mahnung pro Pächter.
+func (a *App) handleMahnung(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		IDs []string `json:"ids"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if len(in.IDs) == 0 {
+		writeErr(w, bad("Bitte mindestens eine Rechnung auswählen"))
+		return
+	}
+	type mahnJob struct {
+		settings Settings
+		p        Paechter
+		rec      *Rechnung
+	}
+	var jobs []mahnJob
+	a.st.mu.Lock()
+	for _, id := range in.IDs {
+		for _, x := range a.st.d.Rechnungen {
+			if x.ID != id {
+				continue
+			}
+			if x.Status != statusGueltig {
+				continue
+			}
+			if x.Result.Gesamt < 0 || openAmount(x) <= 0 {
+				continue // Guthaben oder schon vollständig bezahlt: keine Mahnung nötig
+			}
+			jobs = append(jobs, mahnJob{settings: x.Settings, p: x.Paechter, rec: x})
+		}
+	}
+	a.st.mu.Unlock()
+	if len(jobs) == 0 {
+		writeErr(w, bad("Für die Auswahl gibt es keine offene Forderung, die gemahnt werden kann"))
+		return
+	}
+	sort.SliceStable(jobs, func(i, j int) bool { return natLess(jobs[i].p.Mitgliedsnr, jobs[j].p.Mitgliedsnr) })
+
+	type built struct {
+		name string
+		pdf  []byte
+	}
+	var out []built
+	for _, j := range jobs {
+		pdf, err := buildMahnung(j.settings, j.p, j.rec)
+		if err != nil {
+			writeErr(w, bad(j.p.Name+": "+err.Error()))
+			return
+		}
+		out = append(out, built{safeName("Mahnung_"+invoiceNumber(j.settings, j.p)+"_"+j.p.Name, 80) + ".pdf", pdf})
+	}
+
+	if len(out) == 1 {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", `inline; filename="`+out[0].name+`"`)
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(out[0].pdf)
+		return
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, f := range out {
+		zf, err := zw.Create(f.name)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if _, err := zf.Write(f.pdf); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
+	if err := zw.Close(); err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="Mahnungen.zip"`)
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(buf.Bytes())
+}
+
+// icsEscape maskiert Sonderzeichen nach RFC 5545 (Komma, Semikolon, Backslash,
+// Zeilenumbruch) für Text-Felder in einer .ics-Datei.
+func icsEscape(s string) string {
+	r := strings.NewReplacer("\\", "\\\\", ";", "\\;", ",", "\\,", "\n", "\\n")
+	return r.Replace(s)
+}
+
+// handleICSExport liefert die Fälligkeitstermine der noch offenen Rechnungen
+// eines Jahres als Kalenderdatei (.ics) zum Import in den eigenen Kalender.
+func (a *App) handleICSExport(w http.ResponseWriter, r *http.Request) {
+	year := a.yearParam(r)
+	a.st.mu.Lock()
+	var list []*Rechnung
+	for _, x := range a.st.d.Rechnungen {
+		if x.Jahr == year && x.Status == statusGueltig && x.Result.Gesamt >= 0 && openAmount(x) > 0 {
+			list = append(list, x)
+		}
+	}
+	a.st.mu.Unlock()
+	sort.SliceStable(list, func(i, j int) bool { return natLess(list[i].Paechter.Mitgliedsnr, list[j].Paechter.Mitgliedsnr) })
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//%s//DE\r\nCALSCALE:GREGORIAN\r\n", appName)
+	now := time.Now().UTC().Format("20060102T150405Z")
+	for _, x := range list {
+		due := strings.ReplaceAll(x.Settings.Zahlungsziel, "-", "")
+		if due == "" {
+			continue
+		}
+		b.WriteString("BEGIN:VEVENT\r\n")
+		fmt.Fprintf(&b, "UID:%s@%s\r\n", x.ID, appID)
+		fmt.Fprintf(&b, "DTSTAMP:%s\r\n", now)
+		fmt.Fprintf(&b, "DTSTART;VALUE=DATE:%s\r\n", due)
+		fmt.Fprintf(&b, "SUMMARY:%s\r\n", icsEscape(fmt.Sprintf("Zahlungsziel %s %s (%s)", x.Paechter.Mitgliedsnr, x.Paechter.Name, fmtEUR(openAmount(x)))))
+		fmt.Fprintf(&b, "DESCRIPTION:%s\r\n", icsEscape(fmt.Sprintf("Rechnung %s, offener Betrag %s", x.Nummer, fmtEUR(openAmount(x)))))
+		b.WriteString("END:VEVENT\r\n")
+	}
+	b.WriteString("END:VCALENDAR\r\n")
+
+	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="Faelligkeiten_%d.ics"`, year))
+	_, _ = w.Write([]byte(b.String()))
 }
 
 // handlePaymentsExport liefert die Zahlungsübersicht des Jahres als Excel-Datei.

@@ -14,7 +14,13 @@ import (
 	"time"
 )
 
-const dataFileName = "gartenabrechnung-daten.json"
+const dataFileName = "kleingarten-manager-daten.json"
+
+// legacyDataFileName war der Dateiname vor der Umbenennung von
+// "Gartenabrechnung". Beim ersten Start nach einem Update wird eine
+// vorhandene alte Datendatei automatisch übernommen, damit niemand von Hand
+// etwas umbenennen muss.
+const legacyDataFileName = "gartenabrechnung-daten.json"
 
 // Store hält den Datenbestand im Speicher und schreibt ihn sicher in eine Datei.
 type Store struct {
@@ -22,6 +28,11 @@ type Store struct {
 	dir  string
 	path string
 	d    *Data
+
+	// Cache für pruefeSicherung, damit nicht bei jedem Seitenaufruf erneut die
+	// komplette jüngste Sicherungsdatei gelesen und geparst wird.
+	sicherungGeprueft string // Dateiname der zuletzt geprüften Sicherung
+	sicherungFehler   string
 }
 
 func newID() string {
@@ -42,6 +53,14 @@ func openStore(dir string) (*Store, error) {
 	_ = os.Remove(probe)
 
 	s := &Store{dir: dir, path: filepath.Join(dir, dataFileName)}
+	// Umstieg von der alten Datendatei (vor der Umbenennung): einmalig übernehmen,
+	// falls noch keine neue Datei existiert.
+	if _, err := os.Stat(s.path); errors.Is(err, os.ErrNotExist) {
+		legacy := filepath.Join(dir, legacyDataFileName)
+		if _, lerr := os.Stat(legacy); lerr == nil {
+			_ = os.Rename(legacy, s.path)
+		}
+	}
 	raw, err := os.ReadFile(s.path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
@@ -67,8 +86,31 @@ func openStore(dir string) (*Store, error) {
 		}
 		s.d = &d
 		s.ensureYear(d.Settings.Jahr)
+		if s.migriereBelege() {
+			if err := s.saveLocked(); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return s, nil
+}
+
+// migriereBelege überführt das alte einzelne Beleg-Feld (vor Mehrfach-Belegen)
+// in die neue Belege-Liste. Läuft nur beim Öffnen, bevor andere Anfragen
+// möglich sind, daher ohne zusätzliche Sperre. Meldet zurück, ob sich etwas
+// geändert hat.
+func (s *Store) migriereBelege() bool {
+	changed := false
+	for _, j := range s.d.Jahre {
+		for i := range j.Ausgaben {
+			if j.Ausgaben[i].Beleg != "" {
+				j.Ausgaben[i].Belege = append(j.Ausgaben[i].Belege, j.Ausgaben[i].Beleg)
+				j.Ausgaben[i].Beleg = ""
+				changed = true
+			}
+		}
+	}
+	return changed
 }
 
 func (s *Store) ensureYear(y int) *Jahr {
@@ -101,24 +143,162 @@ func (s *Store) saveLocked() error {
 
 func (s *Store) backupDir() string { return filepath.Join(s.dir, "Sicherungen") }
 
+// audit hängt einen Eintrag ans Änderungsprotokoll an (höchstens 1000 behalten).
+// Der Aufrufer hält s.mu; speichert nicht selbst, das übernimmt der anschließende saveLocked.
+func (s *Store) audit(format string, args ...any) {
+	s.d.AuditLog = append(s.d.AuditLog, AuditEntry{Zeit: time.Now().Format(time.RFC3339), Aktion: fmt.Sprintf(format, args...)})
+	if n := len(s.d.AuditLog); n > 1000 {
+		s.d.AuditLog = s.d.AuditLog[n-1000:]
+	}
+}
+
+// mirrorToSecondary kopiert eine Sicherungsdatei zusätzlich in den (optionalen,
+// vom Vorstand frei gewählten) zweiten Sicherungsordner, z. B. einen USB-Stick
+// oder ein Netzlaufwerk. Fehler (Ordner nicht erreichbar, USB-Stick nicht
+// eingesteckt, ...) werden bewusst nur ins Konsolenfenster geschrieben, damit
+// das Hauptprogramm trotzdem normal weiterläuft.
+func (s *Store) mirrorToSecondary(name string, data []byte) {
+	dir := strings.TrimSpace(s.d.Settings.ZweiteSicherung)
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		fmt.Fprintln(os.Stderr, "Zweiter Sicherungsordner nicht erreichbar:", err)
+		return
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+		fmt.Fprintln(os.Stderr, "Sicherung konnte nicht in den zweiten Ordner geschrieben werden:", err)
+	}
+}
+
+// ---------------------------------------------------------------- Gartenverlauf
+//
+// Die Belegungshistorie wird unabhängig vom Abrechnungsjahr anhand des echten
+// Kalenderdatums geführt. Der Aufrufer hält jeweils s.mu.
+
+// gartenOeffnen trägt einen neuen, noch offenen Abschnitt ein (Bis bleibt leer).
+func (s *Store) gartenOeffnen(id, gartennr, mitgliedsnr, name string) {
+	gartennr = strings.TrimSpace(gartennr)
+	if gartennr == "" {
+		return
+	}
+	s.d.GartenHistorie = append(s.d.GartenHistorie, GartenEintrag{
+		Gartennr: gartennr, PaechterID: id, Mitgliedsnr: mitgliedsnr, Name: name, Seit: time.Now().Format("2006-01-02"),
+	})
+}
+
+// gartenSchliessen beendet den offenen Abschnitt eines Pächters (z. B. bei
+// Gartenwechsel oder Löschung).
+func (s *Store) gartenSchliessen(id, bis string) {
+	for i := range s.d.GartenHistorie {
+		e := &s.d.GartenHistorie[i]
+		if e.PaechterID == id && e.Bis == "" {
+			e.Bis = bis
+		}
+	}
+}
+
+// gartenWiederOeffnen macht eine Schließung rückgängig (Papierkorb wiederhergestellt).
+func (s *Store) gartenWiederOeffnen(id, bis string) {
+	for i := range s.d.GartenHistorie {
+		e := &s.d.GartenHistorie[i]
+		if e.PaechterID == id && e.Bis == bis {
+			e.Bis = ""
+		}
+	}
+}
+
+// gartenAktualisieren hält Name/Mitgliedsnr im offenen Abschnitt aktuell, wenn
+// sich diese ändern, ohne dass der Garten selbst wechselt.
+func (s *Store) gartenAktualisieren(id, mitgliedsnr, name string) {
+	for i := range s.d.GartenHistorie {
+		e := &s.d.GartenHistorie[i]
+		if e.PaechterID == id && e.Bis == "" {
+			e.Mitgliedsnr, e.Name = mitgliedsnr, name
+		}
+	}
+}
+
+// gartenWechsel behandelt einen Garten- oder Stammdatenwechsel beim Speichern
+// eines Pächters: schließt den alten Abschnitt bei Gartenwechsel und eröffnet
+// bei Bedarf einen neuen, sonst werden nur Name/Mitgliedsnr nachgezogen.
+func (s *Store) gartenWechsel(id, altGartennr, neuGartennr, mitgliedsnr, name string) {
+	altGartennr, neuGartennr = strings.TrimSpace(altGartennr), strings.TrimSpace(neuGartennr)
+	if altGartennr == neuGartennr {
+		s.gartenAktualisieren(id, mitgliedsnr, name)
+		return
+	}
+	if altGartennr != "" {
+		s.gartenSchliessen(id, time.Now().Format("2006-01-02"))
+	}
+	s.gartenOeffnen(id, neuGartennr, mitgliedsnr, name)
+}
+
+// checkWritableDir prüft, ob in einen Ordner geschrieben werden kann (legt ihn
+// bei Bedarf an). Für die Validierung eines vom Benutzer eingetragenen Pfades,
+// z. B. des zweiten Sicherungsordners, damit Tippfehler sofort auffallen.
+func checkWritableDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("Ordner %s kann nicht angelegt werden: %w", dir, err)
+	}
+	probe := filepath.Join(dir, ".schreibtest")
+	if err := os.WriteFile(probe, []byte("x"), 0o644); err != nil {
+		return fmt.Errorf("Ordner %s ist nicht beschreibbar: %w", dir, err)
+	}
+	_ = os.Remove(probe)
+	return nil
+}
+
 // letzteSicherung liefert den Zeitpunkt der jüngsten Sicherungsdatei (leer,
 // wenn noch keine existiert). Für die Übersicht auf der Startseite.
 func (s *Store) letzteSicherung() time.Time {
+	t, _ := s.letzteSicherungMitName()
+	return t
+}
+
+func (s *Store) letzteSicherungMitName() (time.Time, string) {
 	entries, err := os.ReadDir(s.backupDir())
 	if err != nil {
-		return time.Time{}
+		return time.Time{}, ""
 	}
 	var newest time.Time
+	var name string
 	for _, e := range entries {
 		info, err := e.Info()
 		if err != nil {
 			continue
 		}
 		if info.ModTime().After(newest) {
-			newest = info.ModTime()
+			newest, name = info.ModTime(), e.Name()
 		}
 	}
-	return newest
+	return newest, name
+}
+
+// pruefeSicherung liest die jüngste Sicherungsdatei probeweise ein und meldet
+// einen kurzen Hinweistext zurück, falls sie beschädigt ist (z. B. durch einen
+// Festplattenfehler oder einen abgebrochenen Schreibvorgang). Leer = alles gut
+// oder noch keine Sicherung vorhanden.
+func (s *Store) pruefeSicherung() string {
+	_, name := s.letzteSicherungMitName()
+	if name == "" {
+		return ""
+	}
+	if name == s.sicherungGeprueft {
+		return s.sicherungFehler // schon geprüft, nicht erneut von der Platte lesen
+	}
+	fehler := ""
+	raw, err := os.ReadFile(filepath.Join(s.backupDir(), name))
+	if err != nil {
+		fehler = "Die jüngste Sicherung (" + name + ") konnte nicht gelesen werden"
+	} else {
+		var d Data
+		if err := json.Unmarshal(raw, &d); err != nil {
+			fehler = "Die jüngste Sicherung (" + name + ") ist beschädigt und sollte geprüft werden"
+		}
+	}
+	s.sicherungGeprueft, s.sicherungFehler = name, fehler
+	return fehler
 }
 
 func (s *Store) dailyBackup() {
@@ -130,19 +310,33 @@ func (s *Store) dailyBackup() {
 	if os.MkdirAll(dir, 0o700) != nil {
 		return
 	}
-	name := filepath.Join(dir, "gartenabrechnung-daten-"+time.Now().Format("2006-01-02")+".json")
+	base := backupPrefix + time.Now().Format("2006-01-02") + ".json"
+	name := filepath.Join(dir, base)
 	if _, err := os.Stat(name); err == nil {
 		return // heute schon gesichert
 	}
 	_ = os.WriteFile(name, old, 0o600)
 	pruneBackups(dir, isDailyBackup, 60)
+	s.mirrorToSecondary(base, old)
 }
 
-// isDailyBackup erkennt Tagessicherungen (gartenabrechnung-daten-JJJJ-MM-TT.json).
+// backupPrefix ist der aktuelle Dateiname-Präfix für Sicherungen.
+// legacyBackupPrefix (vor der Umbenennung) wird beim Aufräumen weiterhin
+// erkannt, damit alte Sicherungen nicht als Datenmüll liegen bleiben, der
+// nie mitgezählt oder aufgeräumt wird.
+const (
+	backupPrefix       = "kleingarten-manager-daten-"
+	legacyBackupPrefix = "gartenabrechnung-daten-"
+)
+
+// isDailyBackup erkennt Tagessicherungen (…-daten-JJJJ-MM-TT.json).
 func isDailyBackup(name string) bool {
-	d, ok := strings.CutPrefix(name, "gartenabrechnung-daten-")
+	d, ok := strings.CutPrefix(name, backupPrefix)
 	if !ok {
-		return false
+		d, ok = strings.CutPrefix(name, legacyBackupPrefix)
+		if !ok {
+			return false
+		}
 	}
 	d, ok = strings.CutSuffix(d, ".json")
 	if !ok {
@@ -183,11 +377,12 @@ func (s *Store) snapshotBackup(label string) {
 	if os.MkdirAll(dir, 0o700) != nil {
 		return
 	}
-	name := fmt.Sprintf("gartenabrechnung-daten-%s-%s.json", time.Now().Format("2006-01-02_150405"), label)
+	name := fmt.Sprintf("%s%s-%s.json", backupPrefix, time.Now().Format("2006-01-02_150405"), label)
 	_ = os.WriteFile(filepath.Join(dir, name), old, 0o600)
 	pruneBackups(dir, func(n string) bool {
-		return strings.HasPrefix(n, "gartenabrechnung-daten-") && strings.HasSuffix(n, ".json") && !isDailyBackup(n)
+		return (strings.HasPrefix(n, backupPrefix) || strings.HasPrefix(n, legacyBackupPrefix)) && strings.HasSuffix(n, ".json") && !isDailyBackup(n)
 	}, 60)
+	s.mirrorToSecondary(name, old)
 }
 
 // yearView liefert Einstellungen, Pächter und Ablesungen für ein Jahr.

@@ -160,11 +160,21 @@ type Ausgabe struct {
 	Beschreibung string  `json:"beschreibung"`
 	Kategorie    string  `json:"kategorie"`
 	Betrag       float64 `json:"betrag"`
-	// Beleg: Pfad einer hochgeladenen Quittung/Rechnung, relativ zum Datenordner.
+	// Belege: Pfade hochgeladener Quittungen/Rechnungen (z. B. Vorder- und
+	// Rückseite, oder mehrere Teilbelege), relativ zum Datenordner.
+	Belege []string `json:"belege,omitempty"`
+	// Beleg: alter Name des Feldes (vor Mehrfach-Belegen). Nur noch für den
+	// automatischen Umstieg beim Öffnen alter Daten gelesen, siehe
+	// Store.migriereBelege; wird sonst nicht mehr befüllt oder gelesen.
 	Beleg string `json:"beleg,omitempty"`
 	// Geprueft: vom Kassenprüfer abgehakt (z. B. bei der jährlichen Kassenprüfung).
 	Geprueft   bool   `json:"geprueft"`
 	GeprueftAm string `json:"geprueftAm,omitempty"` // JJJJ-MM-TT
+	// Wiederkehrend: wird beim Jahreswechsel automatisch als Vorschlag (gleiche
+	// Beschreibung/Kategorie/Betrag, ungeprüft, ohne Beleg) ins neue Jahr
+	// übernommen, z. B. für Kontoführungsgebühren. Muss dort weiterhin von Hand
+	// kontrolliert und bei Bedarf angepasst werden, es wird nichts blind gebucht.
+	Wiederkehrend bool `json:"wiederkehrend,omitempty"`
 }
 
 // AusgabenKategorien sind Vorschläge für die Kategorie-Auswahl. Es ist keine
@@ -243,7 +253,7 @@ func (a *App) handleAusgabeUpdate(w http.ResponseWriter, r *http.Request) {
 	for i := range j.Ausgaben {
 		if j.Ausgaben[i].ID == id {
 			in.ID = id
-			in.Beleg = j.Ausgaben[i].Beleg                                                // wird nur über die eigenen Beleg-Endpunkte geändert
+			in.Belege = j.Ausgaben[i].Belege                                              // wird nur über die eigenen Beleg-Endpunkte geändert
 			in.Geprueft, in.GeprueftAm = j.Ausgaben[i].Geprueft, j.Ausgaben[i].GeprueftAm // nur über den eigenen Endpunkt
 			j.Ausgaben[i] = in
 			if err := a.st.saveLocked(); err != nil {
@@ -269,8 +279,8 @@ func (a *App) handleAusgabeDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	for i := range j.Ausgaben {
 		if j.Ausgaben[i].ID == id {
-			if j.Ausgaben[i].Beleg != "" {
-				_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(j.Ausgaben[i].Beleg)))
+			for _, p := range j.Ausgaben[i].Belege {
+				_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(p)))
 			}
 			j.Ausgaben = append(j.Ausgaben[:i], j.Ausgaben[i+1:]...)
 			if err := a.st.saveLocked(); err != nil {
@@ -328,6 +338,11 @@ var belegExtensions = map[string]bool{".jpg": true, ".jpeg": true, ".png": true,
 
 const maxBelegSize = 12 << 20 // 12 MB
 
+// maxBelegeJeAusgabe begrenzt die Anzahl Belege je Ausgabe (z. B. Vorder- und
+// Rückseite, mehrere Teilbelege) - keine Sicherheitsgrenze, nur eine
+// Plausibilitätsgrenze gegen versehentliches Massen-Hochladen.
+const maxBelegeJeAusgabe = 10
+
 // handleBelegUpload speichert einen Beleg (Foto oder PDF) zu einer Ausgabe.
 func (a *App) handleBelegUpload(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -371,20 +386,21 @@ func (a *App) handleBelegUpload(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, notFound("Ausgabe nicht gefunden"))
 		return
 	}
+	if len(j.Ausgaben[idx].Belege) >= maxBelegeJeAusgabe {
+		writeErr(w, bad(fmt.Sprintf("Höchstens %d Belege je Ausgabe", maxBelegeJeAusgabe)))
+		return
+	}
 	dir := filepath.Join(a.st.dir, "Belege", yearKey(year))
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		writeErr(w, err)
 		return
 	}
-	if old := j.Ausgaben[idx].Beleg; old != "" {
-		_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(old)))
-	}
-	name := safeName(id, 20) + ext
+	name := safeName(id, 20) + "-" + newID() + ext
 	if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
 		writeErr(w, err)
 		return
 	}
-	j.Ausgaben[idx].Beleg = filepath.ToSlash(filepath.Join("Belege", yearKey(year), name))
+	j.Ausgaben[idx].Belege = append(j.Ausgaben[idx].Belege, filepath.ToSlash(filepath.Join("Belege", yearKey(year), name)))
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return
@@ -392,9 +408,16 @@ func (a *App) handleBelegUpload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, j.Ausgaben[idx])
 }
 
+// handleBelegDelete entfernt einen einzelnen Beleg einer Ausgabe (?idx=
+// Position in der Belege-Liste, 0-basiert).
 func (a *App) handleBelegDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	year := a.yearParam(r)
+	idxParam, err := strconv.Atoi(r.URL.Query().Get("idx"))
+	if err != nil || idxParam < 0 {
+		writeErr(w, bad("Ungültiger Beleg"))
+		return
+	}
 	a.st.mu.Lock()
 	defer a.st.mu.Unlock()
 	j := a.st.d.Jahre[yearKey(year)]
@@ -404,10 +427,12 @@ func (a *App) handleBelegDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	for i := range j.Ausgaben {
 		if j.Ausgaben[i].ID == id {
-			if j.Ausgaben[i].Beleg != "" {
-				_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(j.Ausgaben[i].Beleg)))
-				j.Ausgaben[i].Beleg = ""
+			if idxParam >= len(j.Ausgaben[i].Belege) {
+				writeErr(w, notFound("Dieser Beleg existiert nicht"))
+				return
 			}
+			_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(j.Ausgaben[i].Belege[idxParam])))
+			j.Ausgaben[i].Belege = append(j.Ausgaben[i].Belege[:idxParam], j.Ausgaben[i].Belege[idxParam+1:]...)
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
 				return
@@ -419,17 +444,22 @@ func (a *App) handleBelegDelete(w http.ResponseWriter, r *http.Request) {
 	writeErr(w, notFound("Ausgabe nicht gefunden"))
 }
 
-// handleBelegServe liefert die Beleg-Datei einer Ausgabe aus.
+// handleBelegServe liefert eine einzelne Beleg-Datei einer Ausgabe aus
+// (?idx= Position in der Belege-Liste, 0-basiert, Standard 0).
 func (a *App) handleBelegServe(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	year := a.yearParam(r)
+	idxParam, err := strconv.Atoi(r.URL.Query().Get("idx"))
+	if err != nil {
+		idxParam = 0
+	}
 	a.st.mu.Lock()
 	var path string
 	j := a.st.d.Jahre[yearKey(year)]
 	if j != nil {
 		for _, x := range j.Ausgaben {
-			if x.ID == id {
-				path = x.Beleg
+			if x.ID == id && idxParam >= 0 && idxParam < len(x.Belege) {
+				path = x.Belege[idxParam]
 			}
 		}
 	}
@@ -499,7 +529,7 @@ type kassenbericht struct {
 // Pächter ist die gültige ausgestellte Rechnung, sonst die aktuelle Berechnung.
 // Der Aufrufer hält s.mu.
 func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
-	k := kassenbericht{Jahr: v.Jahr, Unvollstaendig: []string{}}
+	k := kassenbericht{Jahr: v.Jahr, Unvollstaendig: []string{}, Ausgaben: []Ausgabe{}, AusgabenKategorie: []kategorieSumme{}}
 	if j := s.d.Jahre[yearKey(v.Jahr)]; j != nil {
 		if j.Versorger != nil {
 			k.Versorger = *j.Versorger
@@ -507,7 +537,7 @@ func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
 		if j.Anfangsbestand != nil {
 			k.Anfangsbestand = *j.Anfangsbestand
 		}
-		k.Ausgaben = append([]Ausgabe(nil), j.Ausgaben...)
+		k.Ausgaben = append(k.Ausgaben, j.Ausgaben...)
 	}
 	sort.SliceStable(k.Ausgaben, func(i, j int) bool { return k.Ausgaben[i].Datum < k.Ausgaben[j].Datum })
 	kat := map[string]float64{}

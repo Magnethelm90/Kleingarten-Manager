@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -968,42 +969,116 @@ func TestBelegAnhang(t *testing.T) {
 		t.Fatalf("Beleg hochladen: %d %s", rec.Code, rec.Body.String())
 	}
 	updated := decode[Ausgabe](t, rec)
-	if updated.Beleg == "" {
-		t.Fatal("Beleg-Pfad fehlt nach Upload")
+	if len(updated.Belege) != 1 {
+		t.Fatalf("Beleg-Pfad fehlt nach Upload: %+v", updated)
 	}
-	if _, err := os.Stat(filepath.Join(app.st.dir, updated.Beleg)); err != nil {
+	if _, err := os.Stat(filepath.Join(app.st.dir, updated.Belege[0])); err != nil {
 		t.Fatalf("Beleg-Datei fehlt auf der Platte: %v", err)
 	}
 
-	// Beleg abrufen
-	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025", nil, cookie); rec.Code != 200 || rec.Body.String() != "%PDF-1.4 Inhalt" {
-		t.Fatalf("Beleg abrufen: %d %q", rec.Code, rec.Body.String())
+	// zweiten Beleg zur selben Ausgabe hochladen (z. B. Vorder- und Rückseite)
+	rec = doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung-rueckseite.jpg", []byte("bildrueckseite"), cookie)
+	if rec.Code != 200 {
+		t.Fatalf("zweiten Beleg hochladen: %d %s", rec.Code, rec.Body.String())
+	}
+	updated = decode[Ausgabe](t, rec)
+	if len(updated.Belege) != 2 {
+		t.Fatalf("es sollten jetzt 2 Belege sein: %+v", updated)
 	}
 
-	// Ausgabe bearbeiten (ohne Beleg-Feld): Beleg bleibt erhalten
+	// Beleg abrufen (Index 0 und 1)
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025&idx=0", nil, cookie); rec.Code != 200 || rec.Body.String() != "%PDF-1.4 Inhalt" {
+		t.Fatalf("ersten Beleg abrufen: %d %q", rec.Code, rec.Body.String())
+	}
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025&idx=1", nil, cookie); rec.Code != 200 || rec.Body.String() != "bildrueckseite" {
+		t.Fatalf("zweiten Beleg abrufen: %d %q", rec.Code, rec.Body.String())
+	}
+	// Index ohne Angabe = 0 (Rückwärtskompatibilität fürs Verlinken)
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025", nil, cookie); rec.Code != 200 || rec.Body.String() != "%PDF-1.4 Inhalt" {
+		t.Fatalf("Beleg ohne idx sollte den ersten liefern: %d %q", rec.Code, rec.Body.String())
+	}
+
+	// Ausgabe bearbeiten (ohne Beleg-Feld): Belege bleiben erhalten
 	do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"?year=2025", Ausgabe{Datum: "2025-03-02", Beschreibung: "Rasenmäher (neu)", Betrag: 55}, cookie)
 	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
-	if k.Ausgaben[0].Beleg == "" {
-		t.Fatalf("Beleg nach Bearbeiten verloren: %+v", k.Ausgaben[0])
+	if len(k.Ausgaben[0].Belege) != 2 {
+		t.Fatalf("Belege nach Bearbeiten verloren: %+v", k.Ausgaben[0])
 	}
 
-	// Beleg löschen
-	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", nil, cookie); rec.Code != 200 {
-		t.Fatalf("Beleg löschen: %d", rec.Code)
+	// nur den ersten Beleg löschen: der zweite bleibt, rückt auf Index 0
+	zweiterPfad := updated.Belege[1]
+	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025&idx=0", nil, cookie); rec.Code != 200 {
+		t.Fatalf("ersten Beleg löschen: %d", rec.Code)
 	}
-	if _, err := os.Stat(filepath.Join(app.st.dir, updated.Beleg)); err == nil {
+	nachLoeschen := decode[Ausgabe](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	_ = nachLoeschen
+	k = decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if len(k.Ausgaben[0].Belege) != 1 || k.Ausgaben[0].Belege[0] != zweiterPfad {
+		t.Fatalf("nach Löschen von Index 0 sollte nur der zweite Beleg übrig sein: %+v", k.Ausgaben[0])
+	}
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025&idx=0", nil, cookie); rec.Code != 200 || rec.Body.String() != "bildrueckseite" {
+		t.Fatalf("verbleibender Beleg sollte jetzt auf Index 0 stehen: %d %q", rec.Code, rec.Body.String())
+	}
+	// ungültiger Index
+	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025&idx=5", nil, cookie); rec.Code != http.StatusNotFound {
+		t.Fatalf("ungültiger Index sollte 404 liefern: %d", rec.Code)
+	}
+	// letzten Beleg löschen
+	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025&idx=0", nil, cookie); rec.Code != 200 {
+		t.Fatalf("letzten Beleg löschen: %d", rec.Code)
+	}
+	if _, err := os.Stat(filepath.Join(app.st.dir, zweiterPfad)); err == nil {
 		t.Fatal("Beleg-Datei sollte nach dem Löschen weg sein")
 	}
 	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025", nil, cookie); rec.Code != http.StatusNotFound {
 		t.Fatalf("Beleg nach Löschen sollte fehlen: %d", rec.Code)
 	}
 
-	// Ausgabe löschen: verbleibender Beleg wird mit entfernt
+	// Ausgabe löschen: verbleibende Belege werden mit entfernt
 	rec2 := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung2.jpg", []byte("bild"), cookie)
 	updated2 := decode[Ausgabe](t, rec2)
 	do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"?year=2025", nil, cookie)
-	if _, err := os.Stat(filepath.Join(app.st.dir, updated2.Beleg)); err == nil {
+	if _, err := os.Stat(filepath.Join(app.st.dir, updated2.Belege[0])); err == nil {
 		t.Fatal("Beleg-Datei sollte nach dem Löschen der Ausgabe weg sein")
+	}
+}
+
+func TestBelegeMaxAnzahl(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Viele Belege", Betrag: 50}, cookie))
+	for i := 0; i < 10; i++ {
+		rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "beleg.jpg", []byte("x"), cookie)
+		if rec.Code != 200 {
+			t.Fatalf("Beleg %d: %d %s", i, rec.Code, rec.Body)
+		}
+	}
+	if rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "beleg.jpg", []byte("x"), cookie); rec.Code != http.StatusBadRequest {
+		t.Fatalf("11. Beleg sollte abgelehnt werden: %d", rec.Code)
+	}
+}
+
+func TestAlteBelegeWerdenMigriert(t *testing.T) {
+	dir := t.TempDir()
+	d := newData()
+	d.Jahre[yearKey(d.Settings.Jahr)].Ausgaben = []Ausgabe{
+		{ID: "a1", Datum: "2025-01-01", Beschreibung: "Alt", Betrag: 10, Beleg: "Belege/2025/alt.jpg"},
+	}
+	raw, _ := json.Marshal(d)
+	if err := os.WriteFile(filepath.Join(dir, dataFileName), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := openStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := st.d.Jahre[yearKey(d.Settings.Jahr)].Ausgaben[0]
+	if a.Beleg != "" {
+		t.Errorf("altes Beleg-Feld sollte geleert sein: %q", a.Beleg)
+	}
+	if len(a.Belege) != 1 || a.Belege[0] != "Belege/2025/alt.jpg" {
+		t.Errorf("alter Beleg sollte in Belege übernommen worden sein: %+v", a.Belege)
 	}
 }
 
@@ -1191,6 +1266,33 @@ func TestArchivAlleJahre(t *testing.T) {
 	}
 }
 
+// TestAlteDatendateiWirdUebernommen stellt sicher, dass eine Datendatei aus
+// der Zeit vor der Umbenennung (Gartenabrechnung -> Kleingarten-Manager)
+// automatisch übernommen wird, statt dass das Programm einfach neu anfängt.
+func TestAlteDatendateiWirdUebernommen(t *testing.T) {
+	dir := t.TempDir()
+	alt := newData()
+	alt.Paechter = []Paechter{{ID: "p1", Mitgliedsnr: "1", Name: "Alter Bestand", Gartengroesse: 300}}
+	alt.Jahre[yearKey(alt.Settings.Jahr)].Ablesungen["p1"] = Ablesung{}
+	raw, _ := json.Marshal(alt)
+	if err := os.WriteFile(filepath.Join(dir, legacyDataFileName), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := openStore(dir)
+	if err != nil {
+		t.Fatalf("openStore: %v", err)
+	}
+	if len(st.d.Paechter) != 1 || st.d.Paechter[0].Name != "Alter Bestand" {
+		t.Fatalf("alte Daten wurden nicht übernommen: %+v", st.d.Paechter)
+	}
+	if _, err := os.Stat(filepath.Join(dir, dataFileName)); err != nil {
+		t.Error("neue Datendatei sollte jetzt existieren")
+	}
+	if _, err := os.Stat(filepath.Join(dir, legacyDataFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Error("alte Datendatei sollte umbenannt (nicht kopiert) worden sein")
+	}
+}
+
 func TestLetzteSicherung(t *testing.T) {
 	_, h := newTestApp(t)
 	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
@@ -1202,5 +1304,416 @@ func TestLetzteSicherung(t *testing.T) {
 	st = decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
 	if st.LetzteSicherung == "" {
 		t.Fatal("nach der zweiten Speicherung sollte eine Tagessicherung existieren")
+	}
+}
+
+func TestZweiteSicherung(t *testing.T) {
+	_, h := newTestApp(t)
+	secondary := t.TempDir() + "/spiegel"
+	cur := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil)).Settings
+	cur.ZweiteSicherung = secondary
+	if rec := do(h, "PUT", "/api/admin/settings", cur); rec.Code != 200 {
+		t.Fatalf("Settings mit zweitem Sicherungsordner: %d %s", rec.Code, rec.Body)
+	}
+	// nächste Änderung soll sowohl im Hauptordner als auch gespiegelt ankommen
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "X", "gartengroesse": 100})
+	entries, err := os.ReadDir(secondary)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("zweiter Sicherungsordner sollte eine Datei enthalten: %v, %v", err, entries)
+	}
+	// ein nicht erreichbarer Pfad wird abgelehnt, statt still zu versagen: eine
+	// gewöhnliche Datei kann kein Verzeichnis-Bestandteil sein
+	blocker := filepath.Join(t.TempDir(), "datei.txt")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cur.ZweiteSicherung = filepath.Join(blocker, "unterordner")
+	if rec := do(h, "PUT", "/api/admin/settings", cur); rec.Code != http.StatusBadRequest {
+		t.Errorf("nicht beschreibbarer Sicherungsordner sollte abgelehnt werden: %d", rec.Code)
+	}
+}
+
+func TestAenderungsprotokoll(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Neu", "gartengroesse": 100})
+	cur := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil)).Settings
+	cur.WasserPreis = 3.5
+	do(h, "PUT", "/api/admin/settings", cur)
+
+	log := decode[[]AuditEntry](t, do(h, "GET", "/api/admin/audit-log", nil))
+	if len(log) < 2 {
+		t.Fatalf("Protokoll sollte mindestens 2 Einträge haben: %+v", log)
+	}
+	found := map[string]bool{}
+	for _, e := range log {
+		found[e.Aktion] = true
+	}
+	if !found["Pächter angelegt: 1 Neu"] {
+		t.Errorf("Pächter-Anlage fehlt im Protokoll: %+v", log)
+	}
+	hasSettings := false
+	for a := range found {
+		if a == "Preise und Einstellungen geändert" {
+			hasSettings = true
+		}
+	}
+	if !hasSettings {
+		t.Errorf("Einstellungsänderung fehlt im Protokoll: %+v", log)
+	}
+}
+
+func TestKassenpruferZugang(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]string{"new": "admingeheim1"})
+	// ohne eingerichteten Prüfer-Zugang: Login schlägt fehl
+	if rec := do(h, "POST", "/api/pruef/login", map[string]string{"password": "irgendwas"}); rec.Code != http.StatusNotFound {
+		t.Fatalf("Login ohne eingerichteten Zugang: %d", rec.Code)
+	}
+	// Kassenbericht ist für niemanden ohne Anmeldung erreichbar
+	if rec := do(h, "GET", "/api/admin/kassenbericht?year=2025", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Kassenbericht ohne Anmeldung: %d", rec.Code)
+	}
+	// Admin richtet den Prüfer-Zugang ein (braucht dafür eine Admin-Sitzung)
+	loginRec := do(h, "POST", "/api/admin/login", map[string]string{"password": "admingeheim1"})
+	var adminCookie *http.Cookie
+	for _, c := range loginRec.Result().Cookies() {
+		if c.Name == "ga_session" {
+			adminCookie = c
+		}
+	}
+	if adminCookie == nil {
+		t.Fatal("keine Admin-Sitzung erhalten")
+	}
+	if rec := do(h, "POST", "/api/admin/pruef-password", map[string]string{"new": "pruefgeheim1"}, adminCookie); rec.Code != 200 {
+		t.Fatalf("Prüfer-Passwort setzen: %d %s", rec.Code, rec.Body)
+	}
+	// Admin selbst darf weiterhin alles (Ausgabe anlegen)
+	ausg := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2026-01-05", Beschreibung: "Rasenmäher", Betrag: 50}, adminCookie))
+
+	// falsches Prüfer-Passwort
+	if rec := do(h, "POST", "/api/pruef/login", map[string]string{"password": "falsch"}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("falsches Prüfer-Passwort: %d", rec.Code)
+	}
+	loginRec = do(h, "POST", "/api/pruef/login", map[string]string{"password": "pruefgeheim1"})
+	if loginRec.Code != 200 {
+		t.Fatalf("Prüfer-Login: %d %s", loginRec.Code, loginRec.Body)
+	}
+	var pruefCookie *http.Cookie
+	for _, c := range loginRec.Result().Cookies() {
+		if c.Name == "ga_pruef_session" {
+			pruefCookie = c
+		}
+	}
+	if pruefCookie == nil {
+		t.Fatal("keine Prüfer-Sitzung erhalten")
+	}
+	// Prüfer darf den Kassenbericht lesen und den Geprüft-Haken setzen
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, pruefCookie))
+	if len(k.Ausgaben) != 1 {
+		t.Fatalf("Kassenbericht für Prüfer: %+v", k)
+	}
+	if rec := do(h, "PUT", "/api/admin/ausgaben/"+ausg.ID+"/geprueft?year=2025", map[string]bool{"geprueft": true}, pruefCookie); rec.Code != 200 {
+		t.Fatalf("Geprüft-Haken durch Prüfer: %d %s", rec.Code, rec.Body)
+	}
+	// Prüfer darf aber keine Ausgaben anlegen oder Pächter ändern (bleibt Admin-only)
+	if rec := do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2026-01-05", Beschreibung: "X", Betrag: 1}, pruefCookie); rec.Code != http.StatusUnauthorized {
+		t.Errorf("Prüfer sollte keine Ausgaben anlegen dürfen: %d", rec.Code)
+	}
+	if rec := do(h, "PUT", "/api/admin/settings", Settings{}, pruefCookie); rec.Code != http.StatusUnauthorized {
+		t.Errorf("Prüfer sollte keine Einstellungen ändern dürfen: %d", rec.Code)
+	}
+	// Logout beendet den Lesezugriff wieder
+	do(h, "POST", "/api/pruef/logout", nil, pruefCookie)
+	if rec := do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, pruefCookie); rec.Code != http.StatusUnauthorized {
+		t.Errorf("nach Logout sollte der Zugriff verweigert werden: %d", rec.Code)
+	}
+}
+
+func TestMahnung(t *testing.T) {
+	_, h := newTestApp(t)
+	p1 := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Erster", "gartengroesse": 300}))
+	p2 := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "2", "name": "Zweiter", "gartengroesse": 300}))
+	abl := Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)}
+	do(h, "PUT", "/api/ablesung/"+p1.ID+"?year=2025", abl)
+	do(h, "PUT", "/api/ablesung/"+p2.ID+"?year=2025", abl)
+	do(h, "POST", "/api/invoices/issue?year=2025", issueReq{})
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	id1, id2 := st.Issued[p1.ID].ID, st.Issued[p2.ID].ID
+
+	// leere Auswahl
+	if rec := do(h, "POST", "/api/admin/mahnung", map[string]any{"ids": []string{}}); rec.Code != http.StatusBadRequest {
+		t.Errorf("leere Auswahl: %d", rec.Code)
+	}
+	// eine ausgewählte offene Rechnung: einzelnes PDF
+	rec := do(h, "POST", "/api/admin/mahnung", map[string]any{"ids": []string{id1}})
+	if rec.Code != 200 || !bytes.HasPrefix(rec.Body.Bytes(), []byte("%PDF")) {
+		t.Fatalf("einzelne Mahnung: %d, Anfang %q", rec.Code, rec.Body.Bytes()[:min(20, rec.Body.Len())])
+	}
+	// zwei ausgewählte: ZIP
+	rec = do(h, "POST", "/api/admin/mahnung", map[string]any{"ids": []string{id1, id2}})
+	if rec.Code != 200 || !bytes.HasPrefix(rec.Body.Bytes(), []byte("PK")) {
+		t.Fatalf("mehrere Mahnungen (ZIP): %d", rec.Code)
+	}
+	// bereits vollständig bezahlt: keine Mahnung nötig
+	do(h, "PUT", "/api/payment/"+id1, paymentReq{BezahltAm: "2026-01-20"})
+	if rec := do(h, "POST", "/api/admin/mahnung", map[string]any{"ids": []string{id1}}); rec.Code != http.StatusBadRequest {
+		t.Errorf("bezahlte Rechnung sollte abgelehnt werden: %d", rec.Code)
+	}
+}
+
+func TestSessionInvalidierungBeiPasswortaenderung(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]string{"new": "altespasswort1"})
+	loginRec := do(h, "POST", "/api/admin/login", map[string]string{"password": "altespasswort1"})
+	var oldCookie *http.Cookie
+	for _, c := range loginRec.Result().Cookies() {
+		if c.Name == "ga_session" {
+			oldCookie = c
+		}
+	}
+	if oldCookie == nil {
+		t.Fatal("keine Admin-Sitzung erhalten")
+	}
+	if rec := do(h, "GET", "/api/admin/audit-log", nil, oldCookie); rec.Code != 200 {
+		t.Fatalf("alte Sitzung sollte vor der Änderung noch gültig sein: %d", rec.Code)
+	}
+	// Passwort ändern: die alte Sitzung (von einem anderen Gerät/Browser) muss sofort ungültig werden
+	if rec := do(h, "POST", "/api/admin/password", map[string]string{"old": "altespasswort1", "new": "neuespasswort1"}, oldCookie); rec.Code != 200 {
+		t.Fatalf("Passwort ändern: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(h, "GET", "/api/admin/audit-log", nil, oldCookie); rec.Code != http.StatusUnauthorized {
+		t.Errorf("alte Sitzung sollte nach Passwortänderung ungültig sein: %d", rec.Code)
+	}
+
+	// dasselbe für den Kassenprüfer-Zugang
+	adminRec := do(h, "POST", "/api/admin/login", map[string]string{"password": "neuespasswort1"})
+	var adminCookie *http.Cookie
+	for _, c := range adminRec.Result().Cookies() {
+		if c.Name == "ga_session" {
+			adminCookie = c
+		}
+	}
+	do(h, "POST", "/api/admin/pruef-password", map[string]string{"new": "pruefalt1234"}, adminCookie)
+	pruefRec := do(h, "POST", "/api/pruef/login", map[string]string{"password": "pruefalt1234"})
+	var pruefCookie *http.Cookie
+	for _, c := range pruefRec.Result().Cookies() {
+		if c.Name == "ga_pruef_session" {
+			pruefCookie = c
+		}
+	}
+	if pruefCookie == nil {
+		t.Fatal("keine Kassenprüfer-Sitzung erhalten")
+	}
+	if rec := do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, pruefCookie); rec.Code != 200 {
+		t.Fatalf("Prüfer-Sitzung sollte vor der Änderung gültig sein: %d", rec.Code)
+	}
+	do(h, "POST", "/api/admin/pruef-password", map[string]string{"new": "pruefneu1234"}, adminCookie)
+	if rec := do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, pruefCookie); rec.Code != http.StatusUnauthorized {
+		t.Errorf("alte Kassenprüfer-Sitzung sollte nach Passwortänderung ungültig sein: %d", rec.Code)
+	}
+}
+
+func TestVersionNewer(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"1.2", "1.1", true}, {"1.1", "1.2", false}, {"1.0", "1.0", false},
+		{"1.10", "1.9", true}, {"2.0", "1.99", true}, {"1", "1.0.1", false}, {"1.0.1", "1", true},
+	}
+	for _, c := range cases {
+		if got := versionNewer(c.a, c.b); got != c.want {
+			t.Errorf("versionNewer(%q,%q) = %v, erwartet %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+func TestGartenVerlauf(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Erika Erst", "gartennr": "5", "gartengroesse": 300}))
+
+	hist := decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=5", nil))
+	if len(hist) != 1 || hist[0].Name != "Erika Erst" || hist[0].Bis != "" || hist[0].Seit == "" {
+		t.Fatalf("nach Anlage: %+v", hist)
+	}
+
+	// Namensänderung im selben Garten: aktualisiert den offenen Abschnitt, legt keinen neuen an
+	upd := map[string]any{"mitgliedsnr": "1", "name": "Erika Zweit", "gartennr": "5", "gartengroesse": 300}
+	do(h, "PUT", "/api/admin/paechter/"+p.ID, upd)
+	hist = decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=5", nil))
+	if len(hist) != 1 || hist[0].Name != "Erika Zweit" {
+		t.Fatalf("nach Namensänderung: %+v", hist)
+	}
+
+	// Gartenwechsel: alter Abschnitt wird geschlossen, neuer eröffnet
+	do(h, "PUT", "/api/admin/paechter/"+p.ID, map[string]any{"mitgliedsnr": "1", "name": "Erika Zweit", "gartennr": "9", "gartengroesse": 300})
+	histAlt := decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=5", nil))
+	histNeu := decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=9", nil))
+	if len(histAlt) != 1 || histAlt[0].Bis == "" {
+		t.Fatalf("alter Garten sollte geschlossen sein: %+v", histAlt)
+	}
+	if len(histNeu) != 1 || histNeu[0].Bis != "" {
+		t.Fatalf("neuer Garten sollte offen sein: %+v", histNeu)
+	}
+
+	// Löschen (Papierkorb) schließt den Abschnitt, Wiederherstellen öffnet ihn erneut
+	do(h, "DELETE", "/api/admin/paechter/"+p.ID, nil)
+	histNeu = decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=9", nil))
+	if len(histNeu) != 1 || histNeu[0].Bis == "" {
+		t.Fatalf("nach Löschung sollte der Abschnitt geschlossen sein: %+v", histNeu)
+	}
+	do(h, "POST", "/api/admin/paechter/"+p.ID+"/wiederherstellen", nil)
+	histNeu = decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=9", nil))
+	if len(histNeu) != 1 || histNeu[0].Bis != "" {
+		t.Fatalf("nach Wiederherstellung sollte der Abschnitt wieder offen sein: %+v", histNeu)
+	}
+
+	// endgültiges Löschen: Historie bleibt erhalten
+	do(h, "DELETE", "/api/admin/paechter/"+p.ID, nil)
+	do(h, "DELETE", "/api/admin/paechter/"+p.ID+"/endgueltig", nil)
+	histNeu = decode[[]GartenEintrag](t, do(h, "GET", "/api/garten-historie?gartennr=9", nil))
+	if len(histNeu) != 1 {
+		t.Fatalf("Historie sollte nach endgültiger Löschung erhalten bleiben: %+v", histNeu)
+	}
+}
+
+func TestICSExport(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Fällig Fritz", "gartengroesse": 300}))
+	do(h, "PUT", "/api/ablesung/"+p.ID+"?year=2025", Ablesung{WasserVJ: fp(0), WasserAkt: fp(40), StromVJ: fp(0), StromAkt: fp(300), Stunden: fp(12)})
+	do(h, "POST", "/api/invoices/issue?year=2025", issueReq{})
+
+	rec := do(h, "GET", "/api/export-ics?year=2025", nil)
+	if rec.Code != 200 {
+		t.Fatalf("ICS-Export: %d %s", rec.Code, rec.Body)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "BEGIN:VCALENDAR") || !strings.Contains(body, "BEGIN:VEVENT") || !strings.Contains(body, "DTSTART;VALUE=DATE:20260215") {
+		t.Fatalf("ICS-Inhalt unerwartet: %s", body)
+	}
+	if !strings.Contains(body, "Fällig Fritz") && !strings.Contains(body, icsEscape("Fällig Fritz")) {
+		t.Errorf("Name sollte im ICS vorkommen: %s", body)
+	}
+
+	// vollständig bezahlt: taucht nicht mehr auf
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	do(h, "PUT", "/api/payment/"+st.Issued[p.ID].ID, paymentReq{BezahltAm: "2026-01-20"})
+	rec = do(h, "GET", "/api/export-ics?year=2025", nil)
+	if strings.Contains(rec.Body.String(), "BEGIN:VEVENT") {
+		t.Errorf("bezahlte Rechnung sollte nicht mehr im ICS stehen: %s", rec.Body.String())
+	}
+}
+
+func TestGartengroesseImProtokoll(t *testing.T) {
+	_, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Teiler Theo", "gartennr": "7", "gartengroesse": 300}))
+	do(h, "PUT", "/api/admin/paechter/"+p.ID, map[string]any{"mitgliedsnr": "1", "name": "Teiler Theo", "gartennr": "7", "gartengroesse": 220})
+
+	log := decode[[]AuditEntry](t, do(h, "GET", "/api/admin/audit-log", nil))
+	found := false
+	for _, e := range log {
+		if strings.Contains(e.Aktion, "Gartengröße geändert") && strings.Contains(e.Aktion, "300") && strings.Contains(e.Aktion, "220") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Gartengrößen-Änderung fehlt im Protokoll: %+v", log)
+	}
+
+	// unveränderte Gartengröße erzeugt keinen zusätzlichen Eintrag
+	before := len(log)
+	do(h, "PUT", "/api/admin/paechter/"+p.ID, map[string]any{"mitgliedsnr": "1", "name": "Teiler Theo", "gartennr": "7", "gartengroesse": 220})
+	log = decode[[]AuditEntry](t, do(h, "GET", "/api/admin/audit-log", nil))
+	gg := 0
+	for _, e := range log {
+		if strings.Contains(e.Aktion, "Gartengröße geändert") {
+			gg++
+		}
+	}
+	if gg != 1 {
+		t.Errorf("sollte nur einen Gartengrößen-Eintrag geben, auch nach einem Speichern ohne Änderung: %d (vor dem zweiten Speichern %d Einträge insgesamt)", gg, before)
+	}
+}
+
+func TestSicherungIntegritaetspruefung(t *testing.T) {
+	_, h := newTestApp(t)
+	// frisch angelegt: noch keine Sicherung, also auch kein Fehler
+	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if st.SicherungFehler != "" {
+		t.Fatalf("ohne Sicherung sollte es keinen Fehler geben: %q", st.SicherungFehler)
+	}
+	// erste echte Tagessicherung entsteht bei der zweiten Speicherung
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "X", "gartengroesse": 100})
+	st = decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if st.LetzteSicherung == "" || st.SicherungFehler != "" {
+		t.Fatalf("intakte Sicherung sollte keinen Fehler melden: letzte=%q fehler=%q", st.LetzteSicherung, st.SicherungFehler)
+	}
+}
+
+func TestSicherungBeschaedigtWirdErkannt(t *testing.T) {
+	dir := t.TempDir()
+	st, err := openStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &App{st: st, port: testPort, sessions: map[string]time.Time{}}
+	h := app.routes(http.NotFoundHandler())
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "X", "gartengroesse": 100})
+
+	_, name := st.letzteSicherungMitName()
+	if name == "" {
+		t.Fatal("es sollte eine Sicherung existieren")
+	}
+	if err := os.WriteFile(filepath.Join(st.backupDir(), name), []byte("das ist kein JSON"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resp := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
+	if resp.SicherungFehler == "" {
+		t.Error("beschädigte Sicherung hätte gemeldet werden müssen")
+	}
+}
+
+func TestWiederkehrendeAusgaben(t *testing.T) {
+	_, h := newTestApp(t)
+	wk := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025",
+		Ausgabe{Datum: "2026-03-01", Beschreibung: "Kontoführung", Kategorie: "Verwaltung", Betrag: 24, Wiederkehrend: true}))
+	einmal := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025",
+		Ausgabe{Datum: "2026-05-01", Beschreibung: "Rasenmäher", Kategorie: "Anschaffung", Betrag: 199}))
+	// die wiederkehrende als geprüft markieren, sollte im neuen Jahr NICHT übernommen werden
+	do(h, "PUT", "/api/admin/ausgaben/"+wk.ID+"/geprueft?year=2025", map[string]bool{"geprueft": true})
+	_ = einmal
+
+	do(h, "POST", "/api/admin/jahreswechsel", nil)
+
+	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2026", nil))
+	if len(k.Ausgaben) != 1 {
+		t.Fatalf("erwartet genau 1 übernommene Ausgabe im neuen Jahr: %+v", k.Ausgaben)
+	}
+	n := k.Ausgaben[0]
+	if n.Beschreibung != "Kontoführung" || n.Kategorie != "Verwaltung" || n.Betrag != 24 || !n.Wiederkehrend {
+		t.Errorf("übernommene Ausgabe stimmt nicht: %+v", n)
+	}
+	if n.Geprueft || n.GeprueftAm != "" {
+		t.Errorf("übernommene Ausgabe sollte ungeprüft starten: %+v", n)
+	}
+	if len(n.Belege) != 0 {
+		t.Errorf("übernommene Ausgabe sollte keinen Beleg übernehmen: %+v", n)
+	}
+	if n.ID == wk.ID {
+		t.Error("übernommene Ausgabe sollte eine eigene ID haben")
+	}
+	if n.Datum != "2027-03-01" {
+		t.Errorf("Datum sollte um ein Jahr verschoben sein: %q", n.Datum)
+	}
+
+	log := decode[[]AuditEntry](t, do(h, "GET", "/api/admin/audit-log", nil))
+	found := false
+	for _, e := range log {
+		if strings.Contains(e.Aktion, "1 wiederkehrende Ausgabe(n) übernommen") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Übernahme sollte im Protokoll stehen: %+v", log)
 	}
 }

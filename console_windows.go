@@ -11,7 +11,7 @@ import (
 func setupConsole() {
 	k := syscall.NewLazyDLL("kernel32.dll")
 	_, _, _ = k.NewProc("SetConsoleOutputCP").Call(65001)
-	if t, err := syscall.UTF16PtrFromString("Gartenabrechnung - dieses Fenster offen lassen"); err == nil {
+	if t, err := syscall.UTF16PtrFromString(appName + " - dieses Fenster offen lassen"); err == nil {
 		_, _, _ = k.NewProc("SetConsoleTitleW").Call(uintptr(unsafe.Pointer(t)))
 	}
 }

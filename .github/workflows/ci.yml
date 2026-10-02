@@ -35,9 +35,9 @@ jobs:
           GOOS: windows
           GOARCH: amd64
           CGO_ENABLED: "0"
-        run: go build -trimpath -ldflags "-s -w" -o Gartenabrechnung.exe .
+        run: go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager.exe .
       - uses: actions/upload-artifact@v4
         with:
-          name: Gartenabrechnung
-          path: Gartenabrechnung.exe
+          name: Kleingarten-Manager
+          path: Kleingarten-Manager.exe
           if-no-files-found: error
