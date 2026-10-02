@@ -969,42 +969,116 @@ func TestBelegAnhang(t *testing.T) {
 		t.Fatalf("Beleg hochladen: %d %s", rec.Code, rec.Body.String())
 	}
 	updated := decode[Ausgabe](t, rec)
-	if updated.Beleg == "" {
-		t.Fatal("Beleg-Pfad fehlt nach Upload")
+	if len(updated.Belege) != 1 {
+		t.Fatalf("Beleg-Pfad fehlt nach Upload: %+v", updated)
 	}
-	if _, err := os.Stat(filepath.Join(app.st.dir, updated.Beleg)); err != nil {
+	if _, err := os.Stat(filepath.Join(app.st.dir, updated.Belege[0])); err != nil {
 		t.Fatalf("Beleg-Datei fehlt auf der Platte: %v", err)
 	}
 
-	// Beleg abrufen
-	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025", nil, cookie); rec.Code != 200 || rec.Body.String() != "%PDF-1.4 Inhalt" {
-		t.Fatalf("Beleg abrufen: %d %q", rec.Code, rec.Body.String())
+	// zweiten Beleg zur selben Ausgabe hochladen (z. B. Vorder- und Rückseite)
+	rec = doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung-rueckseite.jpg", []byte("bildrueckseite"), cookie)
+	if rec.Code != 200 {
+		t.Fatalf("zweiten Beleg hochladen: %d %s", rec.Code, rec.Body.String())
+	}
+	updated = decode[Ausgabe](t, rec)
+	if len(updated.Belege) != 2 {
+		t.Fatalf("es sollten jetzt 2 Belege sein: %+v", updated)
 	}
 
-	// Ausgabe bearbeiten (ohne Beleg-Feld): Beleg bleibt erhalten
+	// Beleg abrufen (Index 0 und 1)
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025&idx=0", nil, cookie); rec.Code != 200 || rec.Body.String() != "%PDF-1.4 Inhalt" {
+		t.Fatalf("ersten Beleg abrufen: %d %q", rec.Code, rec.Body.String())
+	}
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025&idx=1", nil, cookie); rec.Code != 200 || rec.Body.String() != "bildrueckseite" {
+		t.Fatalf("zweiten Beleg abrufen: %d %q", rec.Code, rec.Body.String())
+	}
+	// Index ohne Angabe = 0 (Rückwärtskompatibilität fürs Verlinken)
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025", nil, cookie); rec.Code != 200 || rec.Body.String() != "%PDF-1.4 Inhalt" {
+		t.Fatalf("Beleg ohne idx sollte den ersten liefern: %d %q", rec.Code, rec.Body.String())
+	}
+
+	// Ausgabe bearbeiten (ohne Beleg-Feld): Belege bleiben erhalten
 	do(h, "PUT", "/api/admin/ausgaben/"+a1.ID+"?year=2025", Ausgabe{Datum: "2025-03-02", Beschreibung: "Rasenmäher (neu)", Betrag: 55}, cookie)
 	k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
-	if k.Ausgaben[0].Beleg == "" {
-		t.Fatalf("Beleg nach Bearbeiten verloren: %+v", k.Ausgaben[0])
+	if len(k.Ausgaben[0].Belege) != 2 {
+		t.Fatalf("Belege nach Bearbeiten verloren: %+v", k.Ausgaben[0])
 	}
 
-	// Beleg löschen
-	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", nil, cookie); rec.Code != 200 {
-		t.Fatalf("Beleg löschen: %d", rec.Code)
+	// nur den ersten Beleg löschen: der zweite bleibt, rückt auf Index 0
+	zweiterPfad := updated.Belege[1]
+	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025&idx=0", nil, cookie); rec.Code != 200 {
+		t.Fatalf("ersten Beleg löschen: %d", rec.Code)
 	}
-	if _, err := os.Stat(filepath.Join(app.st.dir, updated.Beleg)); err == nil {
+	nachLoeschen := decode[Ausgabe](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	_ = nachLoeschen
+	k = decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, cookie))
+	if len(k.Ausgaben[0].Belege) != 1 || k.Ausgaben[0].Belege[0] != zweiterPfad {
+		t.Fatalf("nach Löschen von Index 0 sollte nur der zweite Beleg übrig sein: %+v", k.Ausgaben[0])
+	}
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025&idx=0", nil, cookie); rec.Code != 200 || rec.Body.String() != "bildrueckseite" {
+		t.Fatalf("verbleibender Beleg sollte jetzt auf Index 0 stehen: %d %q", rec.Code, rec.Body.String())
+	}
+	// ungültiger Index
+	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025&idx=5", nil, cookie); rec.Code != http.StatusNotFound {
+		t.Fatalf("ungültiger Index sollte 404 liefern: %d", rec.Code)
+	}
+	// letzten Beleg löschen
+	if rec := do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025&idx=0", nil, cookie); rec.Code != 200 {
+		t.Fatalf("letzten Beleg löschen: %d", rec.Code)
+	}
+	if _, err := os.Stat(filepath.Join(app.st.dir, zweiterPfad)); err == nil {
 		t.Fatal("Beleg-Datei sollte nach dem Löschen weg sein")
 	}
 	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025", nil, cookie); rec.Code != http.StatusNotFound {
 		t.Fatalf("Beleg nach Löschen sollte fehlen: %d", rec.Code)
 	}
 
-	// Ausgabe löschen: verbleibender Beleg wird mit entfernt
+	// Ausgabe löschen: verbleibende Belege werden mit entfernt
 	rec2 := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung2.jpg", []byte("bild"), cookie)
 	updated2 := decode[Ausgabe](t, rec2)
 	do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"?year=2025", nil, cookie)
-	if _, err := os.Stat(filepath.Join(app.st.dir, updated2.Beleg)); err == nil {
+	if _, err := os.Stat(filepath.Join(app.st.dir, updated2.Belege[0])); err == nil {
 		t.Fatal("Beleg-Datei sollte nach dem Löschen der Ausgabe weg sein")
+	}
+}
+
+func TestBelegeMaxAnzahl(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/password", map[string]any{"new": "geheim123"})
+	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
+	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Viele Belege", Betrag: 50}, cookie))
+	for i := 0; i < 10; i++ {
+		rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "beleg.jpg", []byte("x"), cookie)
+		if rec.Code != 200 {
+			t.Fatalf("Beleg %d: %d %s", i, rec.Code, rec.Body)
+		}
+	}
+	if rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "beleg.jpg", []byte("x"), cookie); rec.Code != http.StatusBadRequest {
+		t.Fatalf("11. Beleg sollte abgelehnt werden: %d", rec.Code)
+	}
+}
+
+func TestAlteBelegeWerdenMigriert(t *testing.T) {
+	dir := t.TempDir()
+	d := newData()
+	d.Jahre[yearKey(d.Settings.Jahr)].Ausgaben = []Ausgabe{
+		{ID: "a1", Datum: "2025-01-01", Beschreibung: "Alt", Betrag: 10, Beleg: "Belege/2025/alt.jpg"},
+	}
+	raw, _ := json.Marshal(d)
+	if err := os.WriteFile(filepath.Join(dir, dataFileName), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := openStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := st.d.Jahre[yearKey(d.Settings.Jahr)].Ausgaben[0]
+	if a.Beleg != "" {
+		t.Errorf("altes Beleg-Feld sollte geleert sein: %q", a.Beleg)
+	}
+	if len(a.Belege) != 1 || a.Belege[0] != "Belege/2025/alt.jpg" {
+		t.Errorf("alter Beleg sollte in Belege übernommen worden sein: %+v", a.Belege)
 	}
 }
 
@@ -1622,7 +1696,7 @@ func TestWiederkehrendeAusgaben(t *testing.T) {
 	if n.Geprueft || n.GeprueftAm != "" {
 		t.Errorf("übernommene Ausgabe sollte ungeprüft starten: %+v", n)
 	}
-	if n.Beleg != "" {
+	if len(n.Belege) != 0 {
 		t.Errorf("übernommene Ausgabe sollte keinen Beleg übernehmen: %+v", n)
 	}
 	if n.ID == wk.ID {

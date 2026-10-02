@@ -34,9 +34,10 @@ gibt keine Konten, Schlüssel oder Cloud-Anbindung.
 - **Notizfeld je Pächter:** interner Vermerk (z. B. „Tochter kümmert sich, Tel. …“), steht nirgends auf der Rechnung
 - **Kassenbericht** (Admin-Bereich, eigene Jahresauswahl): fasst die Abrechnung aller Pächter zusammen, vergleicht
   Wasser- und Stromverbrauch mit der Rechnung des Versorgers, verwaltet sonstige Ausgaben der Vereinskasse
-  (Kontoführung, Anschaffungen, Reparaturen – jede Ausgabe einzeln, mit Kategorie, optionalem Beleg-Foto/PDF und
-  Kassenprüfer-Haken, optional als jährlich wiederkehrend markierbar – wird dann beim Jahreswechsel automatisch
-  als Vorschlag fürs neue Jahr übernommen, z. B. Kontoführungsgebühren) und führt mit einem Anfangsbestand einen
+  (Kontoführung, Anschaffungen, Reparaturen – jede Ausgabe einzeln, mit Kategorie, optional mehreren Beleg-Fotos/PDFs
+  (z. B. Vorder- und Rückseite einer Quittung) und Kassenprüfer-Haken, optional als jährlich wiederkehrend
+  markierbar – wird dann beim Jahreswechsel automatisch als Vorschlag fürs neue Jahr übernommen, z. B.
+  Kontoführungsgebühren) und führt mit einem Anfangsbestand einen
   echten Kassenbestand (wird beim Jahreswechsel automatisch fortgeschrieben); dazu ein Verlauf über die Jahre für
   den Verein insgesamt; als Excel-Datei für die Kassenprüfung exportierbar
 - Beim Öffnen ein Hinweis, wenn noch Rechnungen offen oder überfällig sind
@@ -71,7 +72,8 @@ gibt keine Konten, Schlüssel oder Cloud-Anbindung.
   markieren – wird beim Jahreswechsel automatisch als Vorschlag fürs neue Jahr angelegt, bleibt aber weiterhin
   von Hand kontrollierbar
 - **Jubiläen** (Admin-Bereich): zeigt, wie lange jeder Pächter schon dabei ist, aus der Gartenhistorie berechnet –
-  praktisch, um langjährige Mitglieder bei der Mitgliederversammlung zu ehren
+  praktisch, um langjährige Mitglieder bei der Mitgliederversammlung zu ehren; auf der Übersicht erscheint automatisch
+  ein Hinweis, welche Mitglieder im laufenden Jahr ein rundes Jubiläum (5, 10, 15, ...) haben
 
 ## Abrechnungsregeln (Beispielwerte, im Admin-Bereich änderbar)
 

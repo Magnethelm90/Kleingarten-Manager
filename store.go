@@ -86,8 +86,31 @@ func openStore(dir string) (*Store, error) {
 		}
 		s.d = &d
 		s.ensureYear(d.Settings.Jahr)
+		if s.migriereBelege() {
+			if err := s.saveLocked(); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return s, nil
+}
+
+// migriereBelege überführt das alte einzelne Beleg-Feld (vor Mehrfach-Belegen)
+// in die neue Belege-Liste. Läuft nur beim Öffnen, bevor andere Anfragen
+// möglich sind, daher ohne zusätzliche Sperre. Meldet zurück, ob sich etwas
+// geändert hat.
+func (s *Store) migriereBelege() bool {
+	changed := false
+	for _, j := range s.d.Jahre {
+		for i := range j.Ausgaben {
+			if j.Ausgaben[i].Beleg != "" {
+				j.Ausgaben[i].Belege = append(j.Ausgaben[i].Belege, j.Ausgaben[i].Beleg)
+				j.Ausgaben[i].Beleg = ""
+				changed = true
+			}
+		}
+	}
+	return changed
 }
 
 func (s *Store) ensureYear(y int) *Jahr {

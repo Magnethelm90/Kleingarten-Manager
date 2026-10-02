@@ -4,7 +4,8 @@
 
 const S = { state: null, year: null, tab: 'uebersicht', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false, nurUnvollstaendig: false, archivSuche: '', archivAlle: null, archivAlleLoading: false, papierkorb: null, papierkorbLoading: false, papierkorbOffen: false, dashKasse: null, dashKasseLoading: false,
   mahnSel: new Set(), pruefLoginMode: false, protokoll: null, protokollLoading: false, updateCheck: null, updateChecking: false,
-  sicherungDismissed: false, abschlussCheck: null, abschlussLoading: false, jubilaeen: null, jubilaeenLoading: false };
+  sicherungDismissed: false, abschlussCheck: null, abschlussLoading: false, jubilaeen: null, jubilaeenLoading: false,
+  dashJubilaeen: null, dashJubilaeenLoading: false, jubilaeumDismissed: false };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
 
@@ -249,6 +250,39 @@ async function loadDashKasse(year) {
   render();
 }
 
+async function loadDashJubilaeen() {
+  if (S.dashJubilaeenLoading) return;
+  S.dashJubilaeenLoading = true;
+  try { S.dashJubilaeen = await api('GET', '/api/garten-historie'); } catch (e) { S.dashJubilaeen = false; }
+  S.dashJubilaeenLoading = false;
+  render();
+}
+
+// Hinweis auf der Übersicht, welche aktiven Mitglieder in diesem Kalenderjahr
+// ein rundes Jubiläum (5, 10, 15, ...) haben – aus der Gartenhistorie.
+function jubilaeumBanner(st, istAdmin) {
+  if (S.jubilaeumDismissed || !istAdmin) return null;
+  if (S.dashJubilaeen == null) { if (!S.dashJubilaeenLoading) loadDashJubilaeen(); return null; }
+  if (!S.dashJubilaeen) return null;
+  const seitByPaechter = {};
+  for (const e of S.dashJubilaeen) {
+    if (!seitByPaechter[e.paechterId] || e.seit < seitByPaechter[e.paechterId]) seitByPaechter[e.paechterId] = e.seit;
+  }
+  const jahr = new Date().getFullYear();
+  const treffer = [];
+  for (const p of st.paechter) {
+    const seit = seitByPaechter[p.id];
+    if (!seit) continue;
+    const jahre = jahr - Number(seit.slice(0, 4));
+    if (jahre > 0 && jahre % 5 === 0) treffer.push(`${p.name} (${jahre} Jahre)`);
+  }
+  if (!treffer.length) return null;
+  return h('div', { class: 'banner info' },
+    `🎉 ${treffer.length} Mitglied(er) haben ${jahr} ein rundes Jubiläum: ${treffer.join(', ')}.`, ' ',
+    h('button', { class: 'btn small', onclick: () => { S.tab = 'admin'; S.adminTab = 'jubilaeen'; render(); } }, 'Zu den Jubiläen'), ' ',
+    h('button', { class: 'btn small', onclick: () => { S.jubilaeumDismissed = true; render(); } }, 'Ausblenden'));
+}
+
 function viewUebersicht() {
   const st = S.state;
   const istAdmin = !st.hasPassword || st.loggedIn;
@@ -276,6 +310,7 @@ function viewUebersicht() {
   return h('div', null,
     h('h2', null, `Willkommen beim Kleingarten-Manager ${st.currentYear}`),
     h('p', { class: 'hint' }, `${st.settings.vereinName}. Kurzer Überblick über den aktuellen Stand.`),
+    jubilaeumBanner(st, istAdmin),
     h('div', { class: 'cards' }, cards),
     h('div', { class: 'actions', style: 'margin-top:6px' },
       h('button', { class: 'btn primary', onclick: () => { S.tab = 'eingabe'; render(); } }, 'Zu den Zählerständen'),
@@ -1375,8 +1410,37 @@ function ausgabeDialog(a) {
   const katList = h('datalist', { id: 'kategorien-liste' }, AUSGABEN_KATEGORIEN.map((x) => h('option', { value: x })));
   const betrag = h('input', { type: 'text', inputmode: 'decimal', value: a ? numIn(a.betrag) : '', autocomplete: 'off' });
   const wiederkehrend = h('input', { type: 'checkbox', checked: !!(a && a.wiederkehrend) });
-  const fileInput = h('input', { type: 'file', accept: '.jpg,.jpeg,.png,.webp,.pdf' });
+  const fileInput = h('input', { type: 'file', accept: '.jpg,.jpeg,.png,.webp,.pdf', multiple: true });
   const fld = (label, input) => h('div', { class: 'field' }, h('label', null, label), input);
+
+  // Vorhandene Belege: Liste mit eigenem Entfernen-Knopf je Beleg, aktualisiert
+  // sich selbst ohne den Dialog zu schließen.
+  const belegeBox = h('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;margin:4px 0' });
+  let belegeAktuell = (a && a.belege) || [];
+  const zeichneBelege = () => {
+    belegeBox.replaceChildren();
+    if (!belegeAktuell.length) { belegeBox.append(h('span', { class: 'hint' }, 'Noch keine Belege hinterlegt.')); return; }
+    belegeAktuell.forEach((_, i) => {
+      belegeBox.append(h('span', { class: 'chip' },
+        h('a', { href: `/api/admin/beleg/${a.id}?year=${S.kasseYear}&idx=${i}`, target: '_blank' }, `Beleg ${i + 1}`), ' ',
+        h('button', { class: 'btn small danger', type: 'button', title: 'Beleg entfernen', onclick: async () => {
+          const ok = await confirmBox(`Beleg ${i + 1} wirklich entfernen?`, 'Entfernen', true);
+          if (!ok) return;
+          try {
+            await api('DELETE', `/api/admin/ausgaben/${a.id}/beleg?year=${S.kasseYear}&idx=${i}`);
+            belegeAktuell = belegeAktuell.filter((_, j) => j !== i);
+            zeichneBelege();
+            // Tabelle hinter dem Dialog sofort aktualisieren, damit sie nicht
+            // veraltet bleibt, falls danach "Abbrechen" statt "Speichern" kommt
+            // (das Entfernen ist bereits endgültig passiert, nicht Teil des
+            // Speichern-Schritts).
+            await refreshKasse();
+          } catch (e) { handleErr(e); }
+        } }, '×')));
+    });
+  };
+  if (!isNew) zeichneBelege();
+
   const body = h('div', { class: 'form' },
     fld('Datum', datum), fld('Beschreibung (z. B. Rasenmäher, Kontoführungsgebühren)', besch),
     fld('Kategorie', h('div', null, kategorie, katList)),
@@ -1384,17 +1448,12 @@ function ausgabeDialog(a) {
     h('div', { class: 'field wide', style: 'border:none' },
       h('label', { style: 'display:flex;align-items:center;gap:6px;font-weight:normal' }, wiederkehrend, 'Jährlich wiederkehrend'),
       h('span', { class: 'fhint' }, 'Wird beim Jahreswechsel automatisch als Vorschlag fürs neue Jahr angelegt (gleiche Beschreibung, Kategorie und Betrag, ungeprüft, ohne Beleg) – z. B. für Kontoführungsgebühren. Lässt sich dort weiterhin anpassen oder löschen.')),
-    h('div', { class: 'field wide' }, h('label', null, 'Beleg (Foto oder PDF, optional)'),
-      a && a.beleg ? h('p', { class: 'hint', style: 'margin:0 0 6px' }, 'Aktuell hinterlegt: ',
-        h('a', { href: `/api/admin/beleg/${a.id}?year=${S.kasseYear}`, target: '_blank' }, 'Beleg ansehen')) : null,
-      fileInput));
+    h('div', { class: 'field wide' }, h('label', null, 'Belege (Fotos oder PDF, z. B. Vorder- und Rückseite, optional)'),
+      isNew ? null : belegeBox,
+      fileInput,
+      isNew ? h('span', { class: 'fhint' }, 'Werden nach dem Anlegen hochgeladen.') : null));
   return modal(isNew ? 'Ausgabe erfassen' : `Ausgabe bearbeiten – ${a.beschreibung}`, body, [
     { label: 'Abbrechen', value: false },
-    !isNew && a.beleg ? { label: 'Beleg entfernen', cls: 'danger', value: 'delbeleg', action: async () => {
-      const ok = await confirmBox('Den hinterlegten Beleg wirklich entfernen?', 'Entfernen', true);
-      if (!ok) return false;
-      try { await api('DELETE', `/api/admin/ausgaben/${a.id}/beleg?year=${S.kasseYear}`); } catch (e) { handleErr(e); return false; }
-    } } : null,
     isNew ? null : { label: 'Löschen', cls: 'danger', value: 'del', action: async () => {
       const ok = await confirmBox(`Ausgabe „${a.beschreibung}“ (${eur(a.betrag)}) wirklich löschen?`, 'Löschen', true);
       if (!ok) return false;
@@ -1408,9 +1467,9 @@ function ausgabeDialog(a) {
       const data = { datum: datum.value, beschreibung: besch.value.trim(), kategorie: kategorie.value.trim(), betrag: b, wiederkehrend: wiederkehrend.checked };
       try {
         const saved = isNew ? await api('POST', `/api/admin/ausgaben?year=${S.kasseYear}`, data) : await api('PUT', `/api/admin/ausgaben/${a.id}?year=${S.kasseYear}`, data);
-        if (fileInput.files.length) {
+        for (const file of fileInput.files) {
           const fd = new FormData();
-          fd.append('file', fileInput.files[0]);
+          fd.append('file', file);
           await api('POST', `/api/admin/ausgaben/${saved.id}/beleg?year=${S.kasseYear}`, fd, true);
         }
       } catch (e) { handleErr(e); return false; }
@@ -1452,10 +1511,10 @@ function adminKassenbericht(pruefMode) {
     try { S.kasse = await api('PUT', `/api/admin/anfangsbestand?year=${S.kasseYear}`, { betrag: v }); S.kasseVerlauf = null; toast('Gespeichert', 'ok'); render(); } catch (e) { handleErr(e); }
   };
 
-  const ohneBeleg = k.ausgaben.filter((x) => !x.beleg).length;
+  const ohneBeleg = k.ausgaben.filter((x) => !(x.belege && x.belege.length)).length;
   const belegFilter = h('input', { type: 'checkbox', checked: S.kasseNurOhneBeleg,
     onchange: (e) => { S.kasseNurOhneBeleg = e.target.checked; render(); } });
-  const gezeigt = S.kasseNurOhneBeleg ? k.ausgaben.filter((x) => !x.beleg) : k.ausgaben;
+  const gezeigt = S.kasseNurOhneBeleg ? k.ausgaben.filter((x) => !(x.belege && x.belege.length)) : k.ausgaben;
   const toggleGeprueft = async (x, checked) => {
     try { await api('PUT', `/api/admin/ausgaben/${x.id}/geprueft?year=${S.kasseYear}`, { geprueft: checked }); await refreshKasse(); }
     catch (e) { handleErr(e); }
@@ -1466,7 +1525,7 @@ function adminKassenbericht(pruefMode) {
       h('td', null, x.beschreibung, x.wiederkehrend ? h('span', { title: 'Jährlich wiederkehrend', style: 'margin-left:4px;cursor:help' }, '🔁') : null),
       h('td', null, x.kategorie),
       h('td', { class: 'r' }, eur(x.betrag)),
-      h('td', null, x.beleg ? h('a', { href: `/api/admin/beleg/${x.id}?year=${S.kasseYear}`, target: '_blank', title: 'Beleg ansehen' }, '📎') : null),
+      h('td', null, x.belege && x.belege.length ? h('a', { href: `/api/admin/beleg/${x.id}?year=${S.kasseYear}&idx=0`, target: '_blank', title: `${x.belege.length} Beleg(e) ansehen` }, `📎${x.belege.length > 1 ? ' ' + x.belege.length : ''}`) : null),
       h('td', { title: x.geprueft ? `Geprüft am ${deDate(x.geprueftAm)}` : 'Von der Kassenprüfung abhaken' },
         h('input', { type: 'checkbox', checked: x.geprueft, onchange: (e) => toggleGeprueft(x, e.target.checked) })),
       h('td', null, pruefMode ? null : h('button', { class: 'btn small', onclick: async () => { const r = await ausgabeDialog(x); if (r !== false && r !== undefined) await refreshKasse(); } }, 'Bearbeiten'))));
