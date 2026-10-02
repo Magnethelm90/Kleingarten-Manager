@@ -4,7 +4,7 @@
 
 const S = { state: null, year: null, tab: 'uebersicht', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false, nurUnvollstaendig: false, archivSuche: '', archivAlle: null, archivAlleLoading: false, papierkorb: null, papierkorbLoading: false, papierkorbOffen: false, dashKasse: null, dashKasseLoading: false,
   mahnSel: new Set(), pruefLoginMode: false, protokoll: null, protokollLoading: false, updateCheck: null, updateChecking: false,
-  sicherungDismissed: false, abschlussCheck: null, abschlussLoading: false };
+  sicherungDismissed: false, abschlussCheck: null, abschlussLoading: false, jubilaeen: null, jubilaeenLoading: false };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
 
@@ -889,6 +889,16 @@ function viewAusstellen() {
 // ------------------------------------------------------------------ Tab: Zahlungen
 
 const deDate = (iso) => (iso ? iso.split('-').reverse().join('.') : '');
+
+// volle Jahre seit einem Datum (JJJJ-MM-TT), Geburtstags-genau gerechnet
+function jahreSeit(iso) {
+  const seit = new Date(iso + 'T00:00:00');
+  const now = new Date();
+  let jahre = now.getFullYear() - seit.getFullYear();
+  const schonGehabt = now.getMonth() > seit.getMonth() || (now.getMonth() === seit.getMonth() && now.getDate() >= seit.getDate());
+  if (!schonGehabt) jahre--;
+  return Math.max(0, jahre);
+}
 const todayIso = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
 const payTotal = (e) => Math.abs(e.gesamt);
 const payPaid = (e) => (e.bezahltAm ? (e.bezahltBetrag != null ? e.bezahltBetrag : payTotal(e)) : 0);
@@ -1035,16 +1045,16 @@ function viewAdmin() {
   const st = S.state;
   if (st.hasPassword && !st.loggedIn) return viewLogin();
   const subs = [['paechter', 'Pächter'], ['einstellungen', 'Preise & Einstellungen'], ['jahreswechsel', 'Jahreswechsel'],
-    ['kassenbericht', 'Kassenbericht'], ['daten', 'Import / Export / Sicherung'], ['protokoll', 'Änderungsprotokoll'], ['sicherheit', 'Passwort']];
+    ['kassenbericht', 'Kassenbericht'], ['jubilaeen', 'Jubiläen'], ['daten', 'Import / Export / Sicherung'], ['protokoll', 'Änderungsprotokoll'], ['sicherheit', 'Passwort']];
   const body = S.adminTab === 'paechter' ? adminPaechter() : S.adminTab === 'einstellungen' ? adminSettings()
     : S.adminTab === 'jahreswechsel' ? adminYear() : S.adminTab === 'kassenbericht' ? adminKassenbericht(false)
-      : S.adminTab === 'daten' ? adminData() : S.adminTab === 'protokoll' ? adminProtokoll() : adminSecurity();
+      : S.adminTab === 'jubilaeen' ? adminJubilaeen() : S.adminTab === 'daten' ? adminData() : S.adminTab === 'protokoll' ? adminProtokoll() : adminSecurity();
   return h('div', null,
     h('h2', null, 'Admin-Bereich'),
     !st.hasPassword ? h('div', { class: 'banner warn' }, 'Für den Admin-Bereich ist noch kein Passwort gesetzt – jeder kann hier Pächter und Preise ändern. ',
       h('button', { class: 'btn small', onclick: () => { S.adminTab = 'sicherheit'; render(); } }, 'Passwort festlegen')) : null,
     h('div', { class: 'subtabs' }, subs.map(([id, label]) => h('button', { class: S.adminTab === id ? 'active' : '',
-      onclick: () => { S.adminTab = id; S.importPreview = null; if (id === 'protokoll') S.protokoll = null; render(); } }, label))),
+      onclick: () => { S.adminTab = id; S.importPreview = null; if (id === 'protokoll') S.protokoll = null; if (id === 'jubilaeen') S.jubilaeen = null; render(); } }, label))),
     body);
 }
 
@@ -1633,6 +1643,55 @@ function zweiteSicherungField() {
     h('div', { class: 'field wide' }, h('label', null, 'Zweiter Sicherungsordner (optional, z. B. USB-Stick oder Netzlaufwerk)'), inp,
       h('span', { class: 'fhint' }, 'Leer lassen = deaktiviert. Ist der Pfad gerade nicht erreichbar (USB-Stick nicht eingesteckt), läuft das Programm trotzdem normal weiter, es wird nur dort nicht zusätzlich gesichert.')),
     h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: save }, 'Speichern')));
+}
+
+// ---- Jubiläen
+
+async function loadJubilaeen() {
+  if (S.jubilaeenLoading) return;
+  S.jubilaeenLoading = true;
+  try { S.jubilaeen = await api('GET', '/api/garten-historie'); } catch (e) { handleErr(e); S.jubilaeen = []; }
+  S.jubilaeenLoading = false;
+  render();
+}
+
+// Zeigt, wie lange ein Pächter schon dabei ist – aus dem frühesten Eintrag der
+// Gartenhistorie je Pächter, nützlich z. B. für die Ehrung langjähriger
+// Mitglieder bei der Mitgliederversammlung. Steht erst ab Einführung der
+// Gartenhistorie zur Verfügung; ältere Pächter ohne Eintrag landen gesondert.
+function adminJubilaeen() {
+  const st = S.state;
+  if (!S.jubilaeen) {
+    if (!S.jubilaeenLoading) loadJubilaeen();
+    return h('p', { class: 'hint' }, 'Wird geladen …');
+  }
+  const seitByPaechter = {};
+  for (const e of S.jubilaeen) {
+    if (!seitByPaechter[e.paechterId] || e.seit < seitByPaechter[e.paechterId]) seitByPaechter[e.paechterId] = e.seit;
+  }
+  const list = [...st.paechter].sort(cmpNr);
+  const rows = [];
+  const ohneDatum = [];
+  for (const p of list) {
+    const seit = seitByPaechter[p.id];
+    if (!seit) { ohneDatum.push(p); continue; }
+    rows.push({ p, seit, jahre: jahreSeit(seit) });
+  }
+  rows.sort((a, b) => a.seit.localeCompare(b.seit));
+  const tbody = h('tbody', null, rows.map((r) => h('tr', null,
+    h('td', null, r.p.mitgliedsnr), h('td', null, r.p.name), h('td', null, r.p.gartennr),
+    h('td', null, deDate(r.seit)),
+    h('td', { class: 'r' }, r.jahre > 0 && r.jahre % 5 === 0
+      ? h('b', { title: 'Jubiläum', style: 'color:var(--ok)' }, `🎉 ${r.jahre} Jahre`)
+      : `${r.jahre} Jahre`))));
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Mitglied-seit-Datum aus der Gartenhistorie (frühester Eintrag je Pächter). Nützlich für die Mitgliederversammlung, z. B. um langjährige Mitglieder zu ehren. Steht erst ab Einführung der Gartenhistorie-Funktion zur Verfügung – bei Pächtern von davor fehlt das Datum, sie stehen unten in einer eigenen Liste.'),
+    h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Name', 'Garten', 'Mitglied seit', 'Dabei seit'].map((t) => h('th', null, t)))),
+      rows.length ? tbody : h('tbody', null, h('tr', null, h('td', { colspan: 5, class: 'empty' }, 'Noch keine Daten.'))))),
+    ohneDatum.length ? h('div', { class: 'card', style: 'margin-top:12px' },
+      h('h3', { style: 'margin-top:0' }, 'Ohne bekanntes Eintrittsdatum'),
+      h('p', { class: 'hint' }, ohneDatum.map((p) => `${p.mitgliedsnr} ${p.name}`).join(', '))) : null);
 }
 
 // ---- Änderungsprotokoll

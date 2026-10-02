@@ -67,6 +67,11 @@ gibt keine Konten, Schlüssel oder Cloud-Anbindung.
 - **Sicherungs-Integritätsprüfung:** die jüngste Sicherung wird beim Öffnen probeweise eingelesen; ist sie
   beschädigt (z. B. durch einen Festplattenfehler), erscheint sofort ein Warnhinweis statt eines bösen Erwachens
   im Ernstfall
+- **Wiederkehrende Ausgaben:** eine sonstige Ausgabe (z. B. Kontoführungsgebühren) als jährlich wiederkehrend
+  markieren – wird beim Jahreswechsel automatisch als Vorschlag fürs neue Jahr angelegt, bleibt aber weiterhin
+  von Hand kontrollierbar
+- **Jubiläen** (Admin-Bereich): zeigt, wie lange jeder Pächter schon dabei ist, aus der Gartenhistorie berechnet –
+  praktisch, um langjährige Mitglieder bei der Mitgliederversammlung zu ehren
 
 ## Abrechnungsregeln (Beispielwerte, im Admin-Bereich änderbar)
 
