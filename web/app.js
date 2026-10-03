@@ -943,6 +943,33 @@ async function loadArchivAlle() {
   render();
 }
 
+// Öffnet die gespeicherte Rechnungs-PDF im PDF-Programm des Rechners (dort gibt es den vollen Druckdialog).
+async function imPdfProgrammOeffnen(id) {
+  try { await api('POST', `/api/open-invoice/${id}`); toast('Die Rechnung wurde im PDF-Programm geöffnet – dort drucken.', 'ok'); }
+  catch (e) { handleErr(e); }
+}
+
+// Alle Rechnungen mit Postversand als eine PDF-Datei zum Ausdrucken (nach Mitgliedsnummer sortiert).
+async function postRechnungenDrucken(year) {
+  try {
+    if (inNativeWindow()) {
+      const r = await api('POST', `/api/admin/rechnungen-druck/oeffnen?year=${year}`);
+      toast(`${r.anzahl} Rechnung(en) im PDF-Programm geöffnet – dort drucken.`, 'ok');
+      return;
+    }
+    const r = await fetch(`/api/admin/rechnungen-druck?year=${year}`, { headers: { 'X-GA-Request': '1' } });
+    if (!r.ok) {
+      const d = await r.json().catch(() => null);
+      const err = new Error((d && d.error) || `Fehler ${r.status}`);
+      err.status = r.status;
+      throw err;
+    }
+    const url = URL.createObjectURL(await r.blob());
+    openDocument(url, 'Rechnungen Postversand');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) { handleErr(e); }
+}
+
 function archivRow(a, mitJahr) {
   const url = `/api/archive/${a.id}.pdf`;
   return h('tr', { class: a.status === 'ersetzt' ? 'ersetzt' : '' },
@@ -951,7 +978,8 @@ function archivRow(a, mitJahr) {
     h('td', { class: 'r' }, eur(a.gesamt)), h('td', null, fmtWhen(a.ausgestellt)),
     h('td', null, h('span', { class: 'badge ' + (a.status === 'gueltig' ? 'ok' : 'warn') }, a.status === 'gueltig' ? 'gültig' : 'ersetzt')),
     h('td', null, h('a', { class: 'btn small', href: url, target: '_blank' }, 'Ansehen'), ' ',
-      h('a', { class: 'btn small', href: url, download: a.datei ? a.datei.split('/').pop() : 'Rechnung.pdf' }, 'Speichern')));
+      h('a', { class: 'btn small', href: url, download: a.datei ? a.datei.split('/').pop() : 'Rechnung.pdf' }, 'Speichern'),
+      inNativeWindow() && a.datei ? [' ', h('button', { class: 'btn small', title: 'Im PDF-Programm öffnen und dort drucken', onclick: () => imPdfProgrammOeffnen(a.id) }, 'Drucken')] : null));
 }
 
 function viewArchiv() {
@@ -1015,6 +1043,9 @@ function viewAusstellen() {
     if (canShow) {
       bar.append(h('a', { class: 'btn', href: url, target: '_blank' }, 'PDF öffnen / drucken'),
         h('a', { class: 'btn', href: url, download: `Rechnung_${p.mitgliedsnr}.pdf` }, 'PDF speichern'));
+      if (inNativeWindow() && inf && !showLive) {
+        bar.append(h('button', { class: 'btn', title: 'Im PDF-Programm des Rechners öffnen und dort drucken', onclick: () => imPdfProgrammOeffnen(inf.id) }, 'Im PDF-Programm öffnen'));
+      }
     }
     right.append(bar);
 
@@ -1066,9 +1097,14 @@ function viewAusstellen() {
     allBtn.disabled = false;
   } }, `Alle offenen ausstellen (${open.length})`);
 
+  const nPost = list.filter((p) => issuedOf(p) && String(p.versand || '').toLowerCase() === 'postversand').length;
+  const postBtn = h('button', { class: 'btn', disabled: !nPost,
+    title: 'Alle ausgestellten Rechnungen mit Versandart Postversand als eine PDF-Datei, nach Mitgliedsnummer sortiert',
+    onclick: () => postRechnungenDrucken(st.year) }, `Postversand drucken (${nPost})`);
+
   return h('div', null,
     h('p', { class: 'hint' }, 'Wähle links einen Pächter und prüfe die Rechnung. Mit »Ausstellen« wird sie festgeschrieben, als PDF gespeichert und ins Archiv gelegt. Punkte: grau = unvollständig, grün = bereit, blau = ausgestellt, orange = ausgestellt, danach geändert.'),
-    h('div', { class: 'toolbar' }, allBtn, h('span', { class: 'hint' }, `${nIss} von ${list.length} ausgestellt`), h('div', { class: 'spacer' }),
+    h('div', { class: 'toolbar' }, allBtn, h('span', { class: 'hint' }, `${nIss} von ${list.length} ausgestellt`), h('div', { class: 'spacer' }), postBtn,
       h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'rechnungen', year: st.year }).catch(handleErr) }, 'Rechnungsordner öffnen')),
     h('div', { class: 'split' }, items, right));
 }

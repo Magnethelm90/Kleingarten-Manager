@@ -59,34 +59,90 @@ const invoiceMaxY = 290.0
 // nur wenn ein längerer Hinweistext die Seite sprengen würde, werden einige Leerabstände im
 // oberen Teil schrittweise verkleinert, bis alles passt.
 func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) {
-	if !r.Vollstaendig {
-		return nil, errors.New("Rechnung unvollständig: " + r.Status)
+	sq, err := fitSqueeze(s, p, a, r)
+	if err != nil {
+		return nil, err
 	}
-	for squeeze := 0.0; squeeze <= 1.0001; squeeze += 0.1 {
-		out, ende, err := renderInvoice(s, p, a, r, squeeze)
-		if err != nil {
-			return nil, err
-		}
-		if ende <= invoiceMaxY {
-			return out, nil
-		}
-	}
-	return nil, errors.New("Rechnung passt nicht auf eine Seite (Hinweistext zu lang?)")
+	out, _, err := renderInvoice(s, p, a, r, sq)
+	return out, err
 }
 
-// renderInvoice zeichnet die Rechnung; squeeze (0 bis 1) verkleinert die Leerabstände zwischen
-// den Blöcken im Kopfbereich. Gibt zusätzlich die Position der letzten Zeile zurück.
-func renderInvoice(s Settings, p Paechter, a Ablesung, r Result, squeeze float64) ([]byte, float64, error) {
-	gap := func(mm float64) float64 { return mm * (1 - 0.8*squeeze) }
+// fitSqueeze ermittelt, wie stark die Leerabstände verkleinert werden müssen, damit die
+// Rechnung auf eine Seite passt (0 = Standardlayout).
+func fitSqueeze(s Settings, p Paechter, a Ablesung, r Result) (float64, error) {
+	if !r.Vollstaendig {
+		return 0, errors.New("Rechnung unvollständig: " + r.Status)
+	}
+	for squeeze := 0.0; squeeze <= 1.0001; squeeze += 0.1 {
+		_, ende, err := renderInvoice(s, p, a, r, squeeze)
+		if err != nil {
+			return 0, err
+		}
+		if ende <= invoiceMaxY {
+			return squeeze, nil
+		}
+	}
+	return 0, errors.New("Rechnung passt nicht auf eine Seite (Hinweistext zu lang?)")
+}
+
+// invoiceItem sind die Angaben einer Rechnung, wie sie im Archiv festgeschrieben sind.
+type invoiceItem struct {
+	S Settings
+	P Paechter
+	A Ablesung
+	R Result
+}
+
+// buildInvoicesCombined setzt mehrere Rechnungen (je eine Seite) in einer PDF-Datei zusammen,
+// z. B. zum Ausdrucken aller Postsendungen in einem Rutsch.
+func buildInvoicesCombined(items []invoiceItem, title string) ([]byte, error) {
+	if len(items) == 0 {
+		return nil, errors.New("keine Rechnungen zum Zusammenstellen")
+	}
+	pdf := newInvoiceDoc(title, items[0].S)
+	for _, it := range items {
+		sq, err := fitSqueeze(it.S, it.P, it.A, it.R)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", invoiceNumber(it.S, it.P), err)
+		}
+		drawInvoicePage(pdf, it.S, it.P, it.A, it.R, sq)
+	}
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func newInvoiceDoc(title string, s Settings) *fpdf.Fpdf {
 	pdf := fpdf.New("P", "mm", "A4", "")
 	pdf.AddUTF8FontFromBytes("lib", "", fontRegular)
 	pdf.AddUTF8FontFromBytes("lib", "B", fontBold)
-	tr := func(s string) string { return s }
 	pdf.SetMargins(leftX, 12, 20)
 	pdf.SetAutoPageBreak(false, 0)
-	pdf.SetTitle(tr("Rechnung "+invoiceNumber(s, p)), true)
-	pdf.SetAuthor(tr(s.VereinName), true)
+	pdf.SetTitle(title, true)
+	pdf.SetAuthor(s.VereinName, true)
 	pdf.SetCreator(appName, true)
+	return pdf
+}
+
+// renderInvoice zeichnet eine einzelne Rechnung; squeeze (0 bis 1) verkleinert die Leerabstände
+// zwischen den Blöcken im Kopfbereich. Gibt zusätzlich die Position der letzten Zeile zurück.
+func renderInvoice(s Settings, p Paechter, a Ablesung, r Result, squeeze float64) ([]byte, float64, error) {
+	pdf := newInvoiceDoc("Rechnung "+invoiceNumber(s, p), s)
+	y := drawInvoicePage(pdf, s, p, a, r, squeeze)
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, 0, err
+	}
+	return buf.Bytes(), y, nil
+}
+
+// drawInvoicePage fügt dem Dokument eine Seite mit der Rechnung hinzu und gibt die Position
+// der letzten Zeile zurück.
+func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Result, squeeze float64) float64 {
+	gap := func(mm float64) float64 { return mm * (1 - 0.8*squeeze) }
+	tr := func(s string) string { return s }
 	pdf.AddPage()
 
 	y := 0.0
@@ -332,8 +388,11 @@ func renderInvoice(s Settings, p Paechter, a Ablesung, r Result, squeeze float64
 	pdf.MultiCell(textW, 4.7, tr(pay), "", "L", false)
 	y = pdf.GetY()
 	if qrPNG != nil {
-		pdf.RegisterImageOptionsReader("girocode", fpdf.ImageOptions{ImageType: "PNG"}, bytes.NewReader(qrPNG))
-		pdf.ImageOptions("girocode", rightX-qrSize, qrTop, qrSize, qrSize, false, fpdf.ImageOptions{ImageType: "PNG"}, 0, "")
+		// eigener Name je Seite: fpdf legt Bilder nach Namen ab, ein gemeinsamer Name würde in einer
+		// Sammeldatei den QR-Code (und damit den Betrag) der ersten Rechnung auf alle Seiten übertragen
+		imgName := fmt.Sprintf("girocode-%d", pdf.PageNo())
+		pdf.RegisterImageOptionsReader(imgName, fpdf.ImageOptions{ImageType: "PNG"}, bytes.NewReader(qrPNG))
+		pdf.ImageOptions(imgName, rightX-qrSize, qrTop, qrSize, qrSize, false, fpdf.ImageOptions{ImageType: "PNG"}, 0, "")
 		font("", 6.5)
 		pdf.SetXY(rightX-qrSize, qrTop+qrSize+0.6)
 		pdf.CellFormat(qrSize, 3, tr("GiroCode zum Bezahlen"), "", 0, "C", false, 0, "")
@@ -351,11 +410,7 @@ func renderInvoice(s Settings, p Paechter, a Ablesung, r Result, squeeze float64
 	font("", 8)
 	text(leftX, rightX-leftX, "Die Rechnung wird maschinell erstellt und ist ohne Unterschrift gültig.", "L")
 
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, 0, err
-	}
-	return buf.Bytes(), y, nil
+	return y
 }
 
 // buildMahnung erzeugt eine einfache Zahlungserinnerung für eine offene,
