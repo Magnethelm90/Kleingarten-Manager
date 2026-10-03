@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -19,6 +18,9 @@ import (
 // meist 8 Jahre). Die Frist beginnt mit dem Ende des Kalenderjahres der Ausstellung.
 // Ob eine kürzere Frist gilt, klärt der Verein mit Steuerberatung oder Kassenprüfern.
 const aufbewahrungJahre = 10
+
+// datenVersion ist die Version des Dateiformats, das dieses Programm lesen und schreiben kann.
+const datenVersion = 1
 
 const (
 	geloeschtText       = "(gelöscht)"
@@ -201,7 +203,9 @@ func (s *Store) bereinigeSicherungen(fn func(d *Data) bool) int {
 			continue
 		}
 		var d Data
-		if json.Unmarshal(raw, &d) != nil || !fn(&d) {
+		// Sicherungen einer neueren Datenversion nicht anfassen: unbekannte Felder gingen beim
+		// Zurückschreiben verloren
+		if json.Unmarshal(raw, &d) != nil || d.Version > datenVersion || !fn(&d) {
 			continue
 		}
 		out, err := json.MarshalIndent(&d, "", "  ")
@@ -405,15 +409,20 @@ func (a *App) handleBereinigen(w http.ResponseWriter, r *http.Request) {
 	}
 	geloescht := 0
 	for _, rel := range dateien {
-		// nur Dateien innerhalb des Rechnungsordners anfassen
-		if !strings.HasPrefix(filepath.ToSlash(rel), "Rechnungen/") || strings.Contains(rel, "..") {
+		// dieselbe strenge Prüfung wie beim Öffnen: nur gewöhnliche .pdf-Dateien im Rechnungsordner,
+		// keine Verweise (Symlinks); der Pfad stammt aus der Datendatei und gilt nicht als vertrauenswürdig
+		full, err := a.rechnungsDatei(rel)
+		if err != nil {
 			continue
 		}
-		if os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(rel))) == nil {
+		if fi, err := os.Lstat(full); err == nil && fi.Mode().IsRegular() && os.Remove(full) == nil {
 			geloescht++
 		}
 		// die Sammel-Druckdatei dieses Jahres enthält dieselben Angaben, sie lässt sich neu erzeugen
-		_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(path.Dir(filepath.ToSlash(rel))), sammelDateiName))
+		sammel := filepath.Join(filepath.Dir(full), sammelDateiName)
+		if fi, err := os.Lstat(sammel); err == nil && fi.Mode().IsRegular() {
+			_ = os.Remove(sammel)
+		}
 	}
 	sicherungen := a.st.bereinigeSicherungen(func(d *Data) bool {
 		r, j, _ := d.bereinigeAbgelaufene(aktuell)
