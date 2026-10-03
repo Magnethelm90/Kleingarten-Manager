@@ -40,6 +40,10 @@ type Rechnung struct {
 	BezahltAm     string   `json:"bezahltAm,omitempty"`     // JJJJ-MM-TT, leer = offen
 	BezahltBetrag *float64 `json:"bezahltBetrag,omitempty"` // leer = voller Betrag
 	Notiz         string   `json:"notiz,omitempty"`
+
+	// Bereinigt: Aufbewahrungsfrist abgelaufen, Personenbezug entfernt, PDF-Datei gelöscht.
+	// Die Beträge bleiben für die Statistik, die Rechnung selbst lässt sich nicht mehr drucken.
+	Bereinigt bool `json:"bereinigt,omitempty"`
 }
 
 // issuedInfo beschreibt die gültige Rechnung eines Pächters im aktuellen Jahr.
@@ -323,6 +327,10 @@ func (a *App) handleArchivePDF(w http.ResponseWriter, r *http.Request) {
 	a.st.mu.Unlock()
 	if !found {
 		writeErr(w, notFound("Rechnung nicht im Archiv gefunden"))
+		return
+	}
+	if rec.Bereinigt {
+		writeErr(w, apiError{http.StatusGone, "Die Aufbewahrungsfrist dieser Rechnung ist abgelaufen, der Personenbezug wurde entfernt"})
 		return
 	}
 	pdf, err := buildInvoice(rec.Settings, rec.Paechter, rec.Ablesung, rec.Result)

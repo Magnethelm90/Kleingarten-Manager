@@ -892,10 +892,12 @@ func (a *App) handlePaechterWiederherstellen(w http.ResponseWriter, r *http.Requ
 	writeErr(w, notFound("Nicht im Papierkorb gefunden"))
 }
 
-// handlePaechterEndgueltig entfernt einen Pächter aus dem Papierkorb endgültig
-// (nur möglich, solange er im Papierkorb ist). Zählerstände des laufenden
-// Jahres gehen dabei verloren, abgeschlossene Jahre und das Rechnungsarchiv
-// bleiben unverändert.
+// handlePaechterEndgueltig löscht einen Pächter aus dem Papierkorb endgültig und entfernt
+// seinen Personenbezug (Art. 17 DSGVO): Stammdaten, offene Zählerstände, Notizen sowie Namen
+// in Garten-Historie, Änderungsprotokoll und allen Sicherungen. Rechnungen und die
+// Jahresunterlagen abgeschlossener Jahre bleiben bis zum Ablauf der Aufbewahrungsfrist
+// bestehen und verlieren ihren Personenbezug erst danach (Datenschutz → Bereinigen).
+// Bewusst keine Sicherung vor dem Löschen: sie würde die Daten wieder enthalten.
 func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	a.st.mu.Lock()
@@ -908,19 +910,15 @@ func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, bad("Nur Pächter im Papierkorb können endgültig gelöscht werden"))
 			return
 		}
-		a.st.snapshotBackup("vor-endgueltigem-Loeschen")
-		a.st.audit("Pächter endgültig gelöscht: %s %s", a.st.d.Paechter[i].Mitgliedsnr, a.st.d.Paechter[i].Name)
-		a.st.d.Paechter = append(a.st.d.Paechter[:i], a.st.d.Paechter[i+1:]...)
-		for _, j := range a.st.d.Jahre {
-			if !j.Abgeschlossen {
-				delete(j.Ablesungen, id)
-			}
-		}
+		a.st.d.entfernePerson(id)
+		// ohne Namen protokollieren, sonst entstünde die Spur sofort neu
+		a.st.audit("Pächter endgültig gelöscht, Personenbezug entfernt")
 		if err := a.st.saveLocked(); err != nil {
 			writeErr(w, err)
 			return
 		}
-		writeJSON(w, 200, map[string]bool{"ok": true})
+		sicherungen := a.st.bereinigeSicherungen(func(d *Data) bool { return d.entfernePerson(id) })
+		writeJSON(w, 200, map[string]int{"sicherungenBereinigt": sicherungen})
 		return
 	}
 	writeErr(w, notFound("Pächter nicht gefunden"))
@@ -1569,6 +1567,9 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/admin/paechter/{id}", a.admin(a.handlePaechterDelete))
 	mux.HandleFunc("GET /api/admin/paechter-papierkorb", a.admin(a.handlePaechterPapierkorb))
 	mux.HandleFunc("POST /api/admin/paechter/{id}/wiederherstellen", a.admin(a.handlePaechterWiederherstellen))
+	mux.HandleFunc("GET /api/admin/paechter/{id}/auskunft", a.admin(a.handleAuskunft))
+	mux.HandleFunc("GET /api/admin/datenschutz", a.admin(a.handleDatenschutz))
+	mux.HandleFunc("POST /api/admin/datenschutz/bereinigen", a.admin(a.handleBereinigen))
 	mux.HandleFunc("DELETE /api/admin/paechter/{id}/endgueltig", a.admin(a.handlePaechterEndgueltig))
 	mux.HandleFunc("PUT /api/admin/settings", a.admin(a.handleSettings))
 	mux.HandleFunc("POST /api/admin/jahreswechsel", a.admin(a.handleNextYear))
