@@ -238,3 +238,66 @@ func TestBereinigenLoeschtSammelDatei(t *testing.T) {
 		t.Errorf("bereinigte Rechnung öffnen: %d, erwartet 410", rec.Code)
 	}
 }
+
+// Der Pfad einer Rechnungsdatei steht in der Datendatei. Auch beim Bereinigen darf eine
+// manipulierte Angabe nicht dazu führen, dass etwas anderes als eine Rechnungs-PDF gelöscht wird.
+func TestBereinigenLoeschtNurRechnungsPDFs(t *testing.T) {
+	f := newDruckFixture(t)
+	dir := filepath.Join(f.app.st.dir, "Rechnungen", "2025")
+	wichtig := filepath.Join(dir, "wichtig.json")
+	fremd := filepath.Join(t.TempDir(), "fremd.pdf")
+	for _, p := range []string{wichtig, fremd} {
+		if err := os.WriteFile(p, []byte("BLEIBT"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := filepath.Join(dir, "link.pdf")
+	hatLink := os.Symlink(fremd, link) == nil
+
+	manipuliert := map[string]string{"10": "Rechnungen/2025/wichtig.json", "5": "../../fremd.pdf"}
+	if hatLink {
+		manipuliert["2"] = "Rechnungen/2025/link.pdf"
+	}
+	f.app.st.mu.Lock()
+	for _, r := range f.app.st.d.Rechnungen {
+		r.Ausgestellt = "2010-01-05T10:00:00+01:00"
+		for nr, datei := range manipuliert {
+			if r.PaechterID == f.ids[nr] {
+				r.Datei = datei
+			}
+		}
+	}
+	f.app.st.mu.Unlock()
+
+	if rec := do(f.h, "POST", "/api/admin/datenschutz/bereinigen", nil); rec.Code != 200 {
+		t.Fatalf("bereinigen: %d %s", rec.Code, rec.Body)
+	}
+	for _, p := range []string{wichtig, fremd} {
+		if b, err := os.ReadFile(p); err != nil || string(b) != "BLEIBT" {
+			t.Errorf("%s darf nicht gelöscht oder verändert werden (%v)", filepath.Base(p), err)
+		}
+	}
+	if hatLink {
+		if _, err := os.Lstat(link); err != nil {
+			t.Error("ein Symlink darf nicht entfernt werden")
+		}
+	}
+}
+
+// Sicherungen einer neueren Datenversion kennen Felder, die dieses Programm nicht kennt; sie würden
+// beim Zurückschreiben verlieren, was sie enthalten. Sie bleiben deshalb unangetastet.
+func TestSicherungNeuererVersionBleibtUnangetastet(t *testing.T) {
+	f := newDruckFixture(t)
+	neu := filepath.Join(f.app.st.backupDir(), backupPrefix+"2099-01-01.json")
+	inhalt := `{"version": 99, "zukunftsfeld": {"wichtig": true}, "paechter": [{"id": "` + f.ids["10"] + `", "name": "Pächter 10"}]}`
+	if err := os.WriteFile(neu, []byte(inhalt), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	do(f.h, "DELETE", "/api/admin/paechter/"+f.ids["10"], nil)
+	if rec := do(f.h, "DELETE", "/api/admin/paechter/"+f.ids["10"]+"/endgueltig", nil); rec.Code != 200 {
+		t.Fatalf("endgültig löschen: %d %s", rec.Code, rec.Body)
+	}
+	if b, _ := os.ReadFile(neu); string(b) != inhalt {
+		t.Errorf("Sicherung einer neueren Version wurde verändert: %s", b)
+	}
+}
