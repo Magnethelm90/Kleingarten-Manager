@@ -52,10 +52,32 @@ func epcQRPayload(s Settings, p Paechter, betrag float64) string {
 	return strings.Join(lines, "\n")
 }
 
+// invoiceMaxY ist die tiefste erlaubte Position (Oberkante) der letzten Zeile der Rechnung.
+const invoiceMaxY = 290.0
+
+// buildInvoice erzeugt die Rechnung auf einer A4-Seite. Das Standardlayout bleibt unverändert;
+// nur wenn ein längerer Hinweistext die Seite sprengen würde, werden einige Leerabstände im
+// oberen Teil schrittweise verkleinert, bis alles passt.
 func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) {
 	if !r.Vollstaendig {
 		return nil, errors.New("Rechnung unvollständig: " + r.Status)
 	}
+	for squeeze := 0.0; squeeze <= 1.0001; squeeze += 0.1 {
+		out, ende, err := renderInvoice(s, p, a, r, squeeze)
+		if err != nil {
+			return nil, err
+		}
+		if ende <= invoiceMaxY {
+			return out, nil
+		}
+	}
+	return nil, errors.New("Rechnung passt nicht auf eine Seite (Hinweistext zu lang?)")
+}
+
+// renderInvoice zeichnet die Rechnung; squeeze (0 bis 1) verkleinert die Leerabstände zwischen
+// den Blöcken im Kopfbereich. Gibt zusätzlich die Position der letzten Zeile zurück.
+func renderInvoice(s Settings, p Paechter, a Ablesung, r Result, squeeze float64) ([]byte, float64, error) {
+	gap := func(mm float64) float64 { return mm * (1 - 0.8*squeeze) }
 	pdf := fpdf.New("P", "mm", "A4", "")
 	pdf.AddUTF8FontFromBytes("lib", "", fontRegular)
 	pdf.AddUTF8FontFromBytes("lib", "B", fontBold)
@@ -104,7 +126,7 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	text(leftX, rightX-leftX, p.Versand, "R")
 
 	// Anschrift
-	next(5)
+	next(gap(5))
 	font("", 10)
 	text(leftX, 90, p.Anrede, "L")
 	next(rowH)
@@ -117,7 +139,7 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	text(leftX, 90, p.PLZOrt, "L")
 
 	// Rechnungsdaten rechts
-	next(rowH + 4)
+	next(rowH + gap(4))
 	meta := [][2]string{
 		{"Mitgliedsnr.:", p.Mitgliedsnr},
 		{"Rechnungsdatum:", germanDate(s.Rechnungsdatum)},
@@ -135,7 +157,7 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	}
 
 	// Überschriften
-	next(5)
+	next(gap(5))
 	font("B", 12)
 	pdf.SetXY(leftX, y)
 	pdf.CellFormat(rightX-leftX, 6, tr(fmt.Sprintf("Rechnung Jahresendabrechnung %d", s.Jahr)), "", 0, "L", false, 0, "")
@@ -240,15 +262,16 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	posten("Sonstige Auslagen:", a.Auslagen)
 	font("U", 8.5)
 	text(leftX, 40, "Hinweis/Erläuterung:", "L")
+	hinweisH := rowH
 	if h := strings.TrimSpace(a.Hinweis); h != "" {
 		font("", 9)
 		pdf.SetXY(colX[1], y)
 		pdf.MultiCell(rightX-colX[1], 4.4, tr(h), "", "L", false)
-		if pdf.GetY() > y {
-			y = pdf.GetY()
+		if hh := pdf.GetY() - y; hh > hinweisH {
+			hinweisH = hh
 		}
 	}
-	next(rowH + 1)
+	next(hinweisH + 1)
 	font("", 10)
 	span(4, 5, "Zwischensumme:", "R")
 	font("B", 10)
@@ -328,14 +351,11 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	font("", 8)
 	text(leftX, rightX-leftX, "Die Rechnung wird maschinell erstellt und ist ohne Unterschrift gültig.", "L")
 
-	if y > 290 {
-		return nil, errors.New("Rechnung passt nicht auf eine Seite (Hinweistext zu lang?)")
-	}
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return buf.Bytes(), nil
+	return buf.Bytes(), y, nil
 }
 
 // buildMahnung erzeugt eine einfache Zahlungserinnerung für eine offene,
