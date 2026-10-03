@@ -162,6 +162,9 @@ type Data struct {
 	AuditLog []AuditEntry `json:"auditLog,omitempty"`
 	// GartenHistorie: Belegungshistorie je Garten (unabhängig vom Abrechnungsjahr).
 	GartenHistorie []GartenEintrag `json:"gartenHistorie,omitempty"`
+	// TutorialGesehen: der Einführungsrundgang wurde durchlaufen oder übersprungen
+	// und erscheint nicht mehr automatisch (über die Hilfe jederzeit abrufbar).
+	TutorialGesehen bool `json:"tutorialGesehen,omitempty"`
 }
 
 func defaultSettings() Settings {

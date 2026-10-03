@@ -15,6 +15,9 @@ Cloud-Anbindung.
 
 - **Übersicht:** Startseite mit Kennzahlen auf einen Blick – Kassenbestand, offene Rechnungen, unvollständige
   Pächter, Datum der letzten Sicherung
+- **Einführung im Programm:** beim ersten Start führt ein kurzer Rundgang in 5 Schritten durch das Programm (einrichten,
+  Zählerstände, Rechnungen, Zahlungen, Jahresabschluss). Jeder Schritt wechselt selbst zur passenden Stelle und
+  markiert den Reiter; über den runden »?«-Knopf oben rechts lässt er sich jederzeit wieder aufrufen
 - **Globale Suche:** Suchfeld im Kopfbereich, von jeder Seite aus erreichbar – Name, Gartennummer, Mitgliedsnummer
   oder Straße eingeben, springt direkt zur Schnellansicht des passenden Pächters
 - **Admin-Bereich:** Pächter anlegen, ändern, löschen (Nummer, Name, Anschrift, Gartengröße, Umlage, Zählernummern),
