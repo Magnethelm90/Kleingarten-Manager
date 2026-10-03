@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -411,6 +412,8 @@ func (a *App) handleBereinigen(w http.ResponseWriter, r *http.Request) {
 		if os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(rel))) == nil {
 			geloescht++
 		}
+		// die Sammel-Druckdatei dieses Jahres enthält dieselben Angaben, sie lässt sich neu erzeugen
+		_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(path.Dir(filepath.ToSlash(rel))), sammelDateiName))
 	}
 	sicherungen := a.st.bereinigeSicherungen(func(d *Data) bool {
 		r, j, _ := d.bereinigeAbgelaufene(aktuell)
