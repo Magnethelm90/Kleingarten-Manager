@@ -185,6 +185,9 @@ dialog { border: 0; border-radius: 10px; padding: 0; box-shadow: 0 10px 40px rgb
 dialog::backdrop { background: rgba(20, 30, 22, .5); }
 dialog .dhead { padding: 14px 18px; background: var(--green); color: #fff; font-weight: 600; font-size: 16px; border-radius: 10px 10px 0 0; }
 dialog .dbody { padding: 18px; max-height: 70vh; overflow: auto; }
+dialog.viewer { max-width: min(1000px, 96vw); }
+dialog.viewer .dbody { padding: 0; max-height: none; overflow: hidden; }
+dialog.viewer iframe { display: block; width: 100%; height: 74vh; border: 0; background: #fff; }
 dialog .dfoot { padding: 12px 18px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--line); background: #fafbf8; border-radius: 0 0 10px 10px; }
 
 /* Meldungen */

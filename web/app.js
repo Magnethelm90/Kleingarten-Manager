@@ -141,6 +141,35 @@ function modal(title, body, buttons) {
   });
 }
 
+// Im eigenen Programmfenster (Go stellt kgmOpenExternal bereit) gibt es keine Browser-Tabs:
+// target=_blank und window.open würden dort je nach Plattform nichts tun oder das App-Fenster
+// verlassen. Dokumente (PDF, Belege) werden deshalb in einem Vorschau-Dialog angezeigt.
+const inNativeWindow = () => typeof window.kgmOpenExternal === 'function';
+
+function openViewer(url, title) {
+  const frame = h('iframe', { src: url, title: title || 'Vorschau' });
+  const done = modal(title || 'Vorschau', frame, [{ label: 'Schließen', value: true }]);
+  const dlg = document.querySelector('dialog:last-of-type');
+  if (dlg) dlg.classList.add('viewer');
+  return done;
+}
+
+function openDocument(url, title) {
+  if (inNativeWindow()) return openViewer(url, title);
+  window.open(url, '_blank');
+  return Promise.resolve();
+}
+
+document.addEventListener('click', (e) => {
+  if (!inNativeWindow() || e.defaultPrevented) return;
+  const a = e.target.closest && e.target.closest('a[target="_blank"]');
+  if (!a || a.hasAttribute('download')) return;
+  const u = new URL(a.href, location.href);
+  if (u.origin !== location.origin) return;
+  e.preventDefault();
+  openViewer(a.href, a.textContent.trim() || 'Vorschau');
+});
+
 const confirmBox = (msg, okLabel, danger) =>
   modal('Bitte bestätigen', h('p', null, msg), [
     { label: 'Abbrechen', value: false },
@@ -1023,7 +1052,7 @@ async function mahnungErzeugen(ids) {
     if (!r.ok) { const d = await r.json().catch(() => null); throw new Error((d && d.error) || `Fehler ${r.status}`); }
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
-    if ((r.headers.get('content-type') || '').includes('pdf')) window.open(url, '_blank');
+    if ((r.headers.get('content-type') || '').includes('pdf')) openDocument(url, 'Mahnung');
     else { const a = h('a', { href: url, download: 'Mahnungen.zip' }); document.body.append(a); a.click(); a.remove(); }
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   } catch (e) { handleErr(e); }
