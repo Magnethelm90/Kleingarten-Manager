@@ -5,7 +5,7 @@
 const S = { state: null, year: null, tab: 'uebersicht', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false, nurUnvollstaendig: false, archivSuche: '', archivAlle: null, archivAlleLoading: false, papierkorb: null, papierkorbLoading: false, papierkorbOffen: false, dashKasse: null, dashKasseLoading: false,
   mahnSel: new Set(), pruefLoginMode: false, protokoll: null, protokollLoading: false, updateCheck: null, updateChecking: false,
   sicherungDismissed: false, abschlussCheck: null, abschlussLoading: false, jubilaeen: null, jubilaeenLoading: false,
-  dashJubilaeen: null, dashJubilaeenLoading: false, jubilaeumDismissed: false, globalSearchQ: '' };
+  dashJubilaeen: null, dashJubilaeenLoading: false, jubilaeumDismissed: false, globalSearchQ: '', tour: null, tourAutoChecked: false };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
 
@@ -207,13 +207,18 @@ function render() {
   if (S.tab === 'admin' || S.tab === 'uebersicht') yearSel.disabled = true;
 
   const tabBtn = (id, label) => h('button', {
-    class: S.tab === id ? 'active' : '',
+    class: S.tab === id ? 'active' : '', 'data-tour': id,
     onclick: async () => {
       S.tab = id;
       if ((id === 'admin' || id === 'uebersicht') && S.year !== st.currentYear) S.year = st.currentYear;
       await reload();
     },
   }, label);
+
+  if (!S.tourAutoChecked && istVollAdmin) {
+    S.tourAutoChecked = true;
+    if (!st.tutorialGesehen) S.tour = { i: 0 };
+  }
 
   app.append(
     h('header', { class: 'top' },
@@ -222,6 +227,7 @@ function render() {
       h('div', { class: 'spacer' }),
       globalSearchBox(st),
       h('div', null, h('label', null, 'Jahr'), yearSel),
+      h('button', { class: 'quit help', 'data-tour': 'hilfe', onclick: () => tourGo(0), title: 'Hilfe: kurze Einführung, was wohin gehört', 'aria-label': 'Hilfe' }, '?'),
       h('button', { class: 'quit', onclick: quitApp, title: 'Programm beenden' }, 'Beenden'),
     ),
     h('main', null,
@@ -234,8 +240,77 @@ function render() {
         : S.tab === 'rechnungen' ? viewRechnungen() : S.tab === 'zahlungen' ? viewZahlungen() : viewAdmin(),
       h('div', { class: 'footer' }, `Kleingarten-Manager ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir)),
     ),
+    tourCard(),
   );
+  tourMark();
 }
+
+// ------------------------------------------------------------------ Einführungsrundgang
+
+// Jeder Schritt wechselt selbst zur passenden Stelle im Programm und markiert den
+// zugehörigen Reiter, die Seite dahinter bleibt bedienbar.
+const TOUR = [
+  { titel: 'Willkommen im Kleingarten-Manager',
+    text: 'In 5 kurzen Schritten siehst du, was wohin gehört. Die Reiter oben führen dich der Reihe nach durch ein Abrechnungsjahr, und ich zeige dir jede Stelle direkt im Programm. Alles wird sofort gespeichert, du kannst nichts kaputt machen.',
+    ziel: 'uebersicht', gehe: () => { S.tab = 'uebersicht'; } },
+  { titel: '1. Einmalig einrichten',
+    text: 'Unter »Admin« legst du zuerst die Pächter an (einzeln oder per Excel/CSV-Import) und trägst bei »Preise & Einstellungen« Vereinsname, Bankverbindung, Preise und Rechnungsdatum ein. Das bleibt in allen Folgejahren erhalten.',
+    ziel: 'admin', gehe: () => { S.tab = 'admin'; S.adminTab = 'paechter'; } },
+  { titel: '2. Zählerstände eintragen',
+    text: 'Das ist die Arbeit jedes Jahr: Nummer eintippen, Enter drücken, neue Zählerstände und Arbeitsstunden eingeben. Name, Größe und Vorjahresstände sind schon da, gespeichert wird automatisch.',
+    ziel: 'eingabe', gehe: () => { S.tab = 'eingabe'; S.eingabeMode = 'schnell'; } },
+  { titel: '3. Rechnungen ausstellen',
+    text: 'Hier prüfst du jede Rechnung und stellst sie aus. Sie wird als PDF gespeichert und archiviert, spätere Änderungen verändern sie nicht mehr. »Alle offenen ausstellen« erledigt alle auf einmal.',
+    ziel: 'rechnungen', gehe: () => { S.tab = 'rechnungen'; S.invTab = 'pruefen'; } },
+  { titel: '4. Zahlungen verfolgen',
+    text: 'Setze den Haken, sobald eine Rechnung bezahlt ist (Teilzahlungen gehen über »Details«). Für überfällige Rechnungen erzeugst du hier die Mahnung, es wird nie automatisch gemahnt.',
+    ziel: 'zahlungen', gehe: () => { S.tab = 'zahlungen'; } },
+  { titel: '5. Jahresabschluss & Sicherheit',
+    text: 'Am Jahresende schließt »Admin → Jahreswechsel« das Jahr ab, mit Checkliste. Deine Daten werden automatisch gesichert; unter »Admin → Passwort« kannst du einen Zugang einrichten. Das Suchfeld oben findet jeden Pächter, und diese Einführung erreichst du jederzeit über den runden »?«-Knopf oben rechts.',
+    ziel: 'hilfe', gehe: () => { S.tab = 'admin'; S.adminTab = 'jahreswechsel'; } },
+];
+
+async function tourGo(i) {
+  S.tour = { i };
+  const step = TOUR[i];
+  if (step.gehe) step.gehe();
+  if ((S.tab === 'admin' || S.tab === 'uebersicht') && S.year !== S.state.currentYear) S.year = S.state.currentYear;
+  await reload();
+}
+
+function tourEnd() {
+  S.tour = null;
+  if (S.state && !S.state.tutorialGesehen) {
+    S.state.tutorialGesehen = true;
+    api('POST', '/api/tutorial').catch(() => { /* beim nächsten Start erneut anbieten */ });
+  }
+  render();
+}
+
+function tourCard() {
+  if (!S.tour) return null;
+  const i = S.tour.i, step = TOUR[i], last = i === TOUR.length - 1;
+  return h('div', { class: 'tour', role: 'dialog', 'aria-label': 'Einführung' },
+    h('button', { class: 'skip', onclick: tourEnd, title: 'Einführung beenden (Esc)' }, last ? 'Schließen ✕' : 'Überspringen ✕'),
+    h('div', { class: 'tstep' }, i === 0 ? 'Einführung' : `Schritt ${i} von ${TOUR.length - 1}`),
+    h('h3', null, step.titel),
+    h('p', null, step.text),
+    h('div', { class: 'tfoot' },
+      h('div', { class: 'dots' }, TOUR.map((_, k) => h('i', { class: k === i ? 'on' : '' }))),
+      i > 0 ? h('button', { class: 'btn small', onclick: () => tourGo(i - 1) }, 'Zurück') : null,
+      h('button', { class: 'btn small primary', onclick: () => (last ? tourEnd() : tourGo(i + 1)) }, last ? 'Fertig' : 'Weiter')));
+}
+
+function tourMark() {
+  document.querySelectorAll('.tour-hl').forEach((el) => el.classList.remove('tour-hl'));
+  if (!S.tour) return;
+  const el = document.querySelector(`[data-tour="${TOUR[S.tour.i].ziel}"]`);
+  if (el) el.classList.add('tour-hl');
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && S.tour && !document.querySelector('dialog[open]')) tourEnd();
+});
 
 // Globale Suche im Kopfbereich: springt von jeder Seite direkt zur
 // Schnellansicht eines Pächters (Nummer, Gartennummer, Name oder Straße).

@@ -1717,3 +1717,28 @@ func TestWiederkehrendeAusgaben(t *testing.T) {
 		t.Errorf("Übernahme sollte im Protokoll stehen: %+v", log)
 	}
 }
+
+func TestTutorialWirdEinmalGemerkt(t *testing.T) {
+	_, h := newTestApp(t)
+	state := func() map[string]any {
+		rec := do(h, "GET", "/api/state", nil)
+		var m map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	if state()["tutorialGesehen"] != false {
+		t.Fatalf("frische Installation: Einführung muss noch offen sein, war %v", state()["tutorialGesehen"])
+	}
+	if rec := do(h, "POST", "/api/tutorial", nil); rec.Code != 200 {
+		t.Fatalf("tutorial: %d %s", rec.Code, rec.Body)
+	}
+	if state()["tutorialGesehen"] != true {
+		t.Error("Einführung muss nach dem Abschluss als gesehen gelten")
+	}
+	// wiederholtes Melden ist harmlos
+	if rec := do(h, "POST", "/api/tutorial", nil); rec.Code != 200 {
+		t.Errorf("zweiter Aufruf: %d", rec.Code)
+	}
+}

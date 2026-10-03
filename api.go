@@ -535,6 +535,7 @@ type stateResp struct {
 	LetzteSicherung string `json:"letzteSicherung,omitempty"`
 	// SicherungFehler: Hinweistext, falls die jüngste Sicherung beschädigt ist (leer = alles gut).
 	SicherungFehler string `json:"sicherungFehler,omitempty"`
+	TutorialGesehen bool   `json:"tutorialGesehen"`
 }
 
 func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
@@ -572,6 +573,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		res.LetzteSicherung = t.Format("2006-01-02")
 	}
 	res.SicherungFehler = a.st.pruefeSicherung()
+	res.TutorialGesehen = a.st.d.TutorialGesehen
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
 	a.st.mu.Unlock()
@@ -1509,6 +1511,22 @@ func (a *App) handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]string{"folder": dir})
 }
 
+// handleTutorial merkt sich, dass der Einführungsrundgang durchlaufen oder
+// übersprungen wurde. Bewusst ohne Admin-Pflicht: die Einführung ist für alle
+// Nutzer gedacht und enthält keine Daten.
+func (a *App) handleTutorial(w http.ResponseWriter, r *http.Request) {
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	if !a.st.d.TutorialGesehen {
+		a.st.d.TutorialGesehen = true
+		if err := a.st.saveLocked(); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
 func (a *App) handleQuit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]bool{"ok": true})
 	go func() {
@@ -1538,6 +1556,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/export", a.handleExport)
 	mux.HandleFunc("POST /api/open-folder", a.handleOpenFolder)
 	mux.HandleFunc("POST /api/quit", a.handleQuit)
+	mux.HandleFunc("POST /api/tutorial", a.handleTutorial)
 
 	mux.HandleFunc("POST /api/admin/login", a.handleLogin)
 	mux.HandleFunc("POST /api/admin/logout", a.handleLogout)
