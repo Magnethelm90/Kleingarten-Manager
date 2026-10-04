@@ -238,7 +238,7 @@ function render() {
         : null,
       S.tab === 'uebersicht' ? viewUebersicht() : S.tab === 'eingabe' ? viewEingabe() : S.tab === 'lageplan' ? viewLageplan()
         : S.tab === 'rechnungen' ? viewRechnungen() : S.tab === 'zahlungen' ? viewZahlungen() : viewAdmin(),
-      h('div', { class: 'footer' }, `Kleingarten-Manager ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir)),
+      h('div', { class: 'footer' }, `Kleingarten-Manager ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir), ' · ', zoomKnoepfe()),
     ),
   );
   const tour = tourCard();
@@ -343,7 +343,7 @@ function globalSearchBox(st) {
         h('span', { class: 'hint' }, p.mitgliedsnr)));
   };
   const input = h('input', {
-    type: 'search', placeholder: '🔍 Garten, Name, Nummer …', class: 'gs-input', autocomplete: 'off',
+    type: 'search', placeholder: '🔍 Pächter suchen', class: 'gs-input', autocomplete: 'off',
     value: S.globalSearchQ,
     oninput: (e) => { S.globalSearchQ = e.target.value; draw(); },
     onkeydown: (e) => {
@@ -358,6 +358,25 @@ function globalSearchBox(st) {
   draw();
   return h('div', { class: 'globalsearch' }, input, results);
 }
+
+// ---- Schriftgröße (Anzeige), nur in diesem Programm; wird im Browser-Speicher gemerkt
+const ZOOM_STUFEN = [0.9, 1, 1.15, 1.3, 1.5];
+function zoomLaden() {
+  try { const v = Number(localStorage.getItem('kgm-zoom')); return ZOOM_STUFEN.includes(v) ? v : 1; } catch (e) { return 1; }
+}
+function zoomSetzen(v) {
+  document.documentElement.style.zoom = v === 1 ? '' : String(v);
+  try { localStorage.setItem('kgm-zoom', String(v)); } catch (e) { /* ohne Speicher nur für diese Sitzung */ }
+}
+function zoomKnoepfe() {
+  const i = ZOOM_STUFEN.indexOf(zoomLaden());
+  const knopf = (label, titel, ziel, aus) => h('button', { class: 'zoombtn', title: titel, disabled: aus, onclick: () => { zoomSetzen(ziel); render(); } }, label);
+  return h('span', { class: 'zoom' }, 'Anzeige: ',
+    knopf('A−', 'Schrift kleiner', ZOOM_STUFEN[Math.max(0, i - 1)], i <= 0), ' ',
+    knopf('A', 'Normale Größe', 1, i === 1), ' ',
+    knopf('A+', 'Schrift größer', ZOOM_STUFEN[Math.min(ZOOM_STUFEN.length - 1, i + 1)], i >= ZOOM_STUFEN.length - 1));
+}
+zoomSetzen(zoomLaden());
 
 // Erinnerung an offene Rechnungen des laufenden Jahres, direkt nach dem Öffnen sichtbar.
 // Bleibt bis zum nächsten Programmstart ausgeblendet, sobald sie einmal weggeklickt wurde.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -174,6 +175,12 @@ func main() {
 	}()
 
 	openStart(url, *noBrowser)
+	if hasNativeWindow && !*noBrowser {
+		// Fenster geschlossen: laufende Vorgänge (z. B. Rechnungen ausstellen) noch zu Ende führen lassen
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	}
 	// Läuft das Programm als eigenes Fenster, endet es, sobald das Fenster
 	// geschlossen wird. Sonst (Browser oder --no-browser) läuft der Server
 	// im Vordergrund weiter, bis das Programm über /api/quit beendet wird.

@@ -135,3 +135,27 @@ func TestDatendateiNeuererVersionWirdAbgelehnt(t *testing.T) {
 		t.Error("die Datendatei darf dabei nicht überschrieben werden")
 	}
 }
+
+func TestSchreibeAtomar(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "daten.json")
+	if err := schreibeAtomar(p, []byte("eins"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := schreibeAtomar(p, []byte("zwei"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "zwei" {
+		t.Errorf("Inhalt: %q", b)
+	}
+	if _, err := os.Stat(p + ".tmp"); !os.IsNotExist(err) {
+		t.Error("die temporäre Datei darf nicht liegen bleiben")
+	}
+	if fi, _ := os.Stat(p); filepath.Separator == '/' && fi.Mode().Perm() != 0o600 {
+		t.Errorf("Rechte: %v", fi.Mode().Perm())
+	}
+	// Fehlerfall: Zielordner existiert nicht, es bleibt nichts zurück und der Fehler wird gemeldet
+	if err := schreibeAtomar(filepath.Join(dir, "gibtsnicht", "x.json"), []byte("x"), 0o600); err == nil {
+		t.Error("Schreiben in einen fehlenden Ordner muss einen Fehler melden")
+	}
+}

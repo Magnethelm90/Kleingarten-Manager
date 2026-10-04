@@ -29,6 +29,7 @@ header.top {
   background: var(--green);
   color: #fff;
   display: flex;
+  flex-wrap: wrap; /* reicht der Platz nicht (kleines Fenster, große Schrift), in die nächste Zeile umbrechen */
   align-items: center;
   gap: 14px;
   padding: 0 16px;
@@ -294,3 +295,8 @@ td.diffwarn { color: var(--err); font-weight: 600; }
 .tour-hl { outline: 3px solid #ffc83d !important; outline-offset: 3px; border-radius: 6px; animation: tourpulse 1.4s ease-in-out infinite; }
 @keyframes tourpulse { 0%, 100% { outline-color: #ffc83d; } 50% { outline-color: #fff0b3; } }
 @media (prefers-reduced-motion: reduce) { .tour-hl { animation: none; } }
+
+/* Schriftgröße */
+.zoom { white-space: nowrap; }
+.zoombtn { border: 1px solid var(--line); background: #fff; border-radius: 5px; padding: 1px 8px; font: inherit; font-size: 12px; cursor: pointer; color: var(--text); }
+.zoombtn:disabled { opacity: .4; cursor: default; }
