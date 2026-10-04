@@ -24,7 +24,7 @@ import (
 )
 
 // appVersion wird beim Release-Build über -ldflags "-X main.appVersion=..." gesetzt.
-var appVersion = "1.0"
+var appVersion = "1.1"
 
 // appAutor erscheint in der Fußzeile der Oberfläche und im Konsolenfenster.
 const appAutor = "Derek"
