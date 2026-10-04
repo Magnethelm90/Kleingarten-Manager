@@ -29,9 +29,14 @@ Cloud-Anbindung.
   Gelöschte Pächter landen im Papierkorb (Zählerstände und Rechnungen bleiben erhalten) und lassen sich
   wiederherstellen oder endgültig entfernen
 - **Schnelleingabe:** Nummer eintippen, Stammdaten und Vorjahresstände erscheinen automatisch, nur neue Zählerstände eingeben
+- **Ablesebogen:** Liste aller Gärten mit Zählernummern, Vorjahresständen und leeren Feldern zum Ausdrucken für den
+  Ablese-Rundgang (A4 quer, nach Gartennummer sortiert)
 - **Rechnungen:** PDF pro Pächter oder alle auf einmal, ausgestellte Rechnungen werden mit den damaligen Werten
   festgeschrieben und archiviert (spätere Änderungen verändern sie nicht); das Archiv lässt sich auch über alle
   Jahre hinweg durchsuchen (z. B. „wann wurde dieser Pächter zuletzt abgerechnet“)
+- **Drucken für den Postversand:** »Postversand drucken« fasst alle ausgestellten Rechnungen mit Versandart Postversand
+  in einer PDF-Datei zusammen (nach Mitgliedsnummer sortiert, jede Seite mit ihrem eigenen GiroCode); im Programmfenster
+  öffnet »Im PDF-Programm öffnen« die Rechnung bzw. die Sammeldatei im PDF-Programm des Rechners
 - **Zahlungen:** bezahlt abhaken (mit Datum), Teilzahlungen, Liste der offenen Posten, Excel-Export
 - **GiroCode auf der Rechnung:** QR-Code zum Bezahlen, die Banking-App füllt IBAN, Betrag und Verwendungszweck
   automatisch aus
@@ -75,6 +80,10 @@ Cloud-Anbindung.
   dem Vorjahr direkt mit an (Betrag und Prozent)
 - **Gartengröße im Änderungsprotokoll:** wird die Gartengröße eines Pächters geändert (z. B. bei Teilung oder
   Zusammenlegung), steht die alte und neue Größe im Änderungsprotokoll
+- **Sicherung wiederherstellen** (Admin → Import / Export / Sicherung): Liste der vorhandenen Sicherungen mit Stand,
+  Pächter- und Rechnungszahl; eine Auswahl wird eingespielt, der heutige Stand bleibt vorher als eigene Sicherung erhalten
+  (also rückgängig machbar). Beschädigte Sicherungen oder solche aus einer neueren Programmversion werden gekennzeichnet
+  und nicht eingespielt
 - **Sicherungs-Integritätsprüfung:** die jüngste Sicherung wird beim Öffnen probeweise eingelesen; ist sie
   beschädigt (z. B. durch einen Festplattenfehler), erscheint sofort ein Warnhinweis statt eines bösen Erwachens
   im Ernstfall
@@ -109,6 +118,7 @@ Die Daten liegen im selben Ordner:
 | `kleingarten-manager-daten.json` | alle Daten (Pächter, Zählerstände, Rechnungsarchiv, Zahlungen) |
 | `Rechnungen/<Jahr>/` | fertige PDF-Rechnungen |
 | `Sicherungen/` | automatische Tages- und Ereignissicherungen |
+| `Druck/` | kurzlebige Druckdateien (Sammel-PDF, Ablesebogen), wird beim Start und beim Löschen von Personen geleert |
 
 ### macOS
 

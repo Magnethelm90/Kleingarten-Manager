@@ -4,7 +4,7 @@
 
 const S = { state: null, year: null, tab: 'uebersicht', adminTab: 'paechter', filter: '', selInvoice: null, invTab: 'pruefen', invView: 'archiv', eingabeMode: 'schnell', quickId: null, quickQ: '', payFilter: 'offen', payQ: '', importPreview: null, kasse: null, kasseLoading: false, kasseYear: null, kasseNurOhneBeleg: false, kasseVerlauf: null, kasseVerlaufLoading: false, remindDismissed: false, nurUnvollstaendig: false, archivSuche: '', archivAlle: null, archivAlleLoading: false, papierkorb: null, papierkorbLoading: false, papierkorbOffen: false, dashKasse: null, dashKasseLoading: false,
   mahnSel: new Set(), pruefLoginMode: false, protokoll: null, protokollLoading: false, updateCheck: null, updateChecking: false,
-  sicherungDismissed: false, abschlussCheck: null, abschlussLoading: false, jubilaeen: null, jubilaeenLoading: false, datenschutz: null, datenschutzLoading: false,
+  sicherungDismissed: false, abschlussCheck: null, abschlussLoading: false, jubilaeen: null, jubilaeenLoading: false, datenschutz: null, datenschutzLoading: false, sicherungen: null, sicherungenLoading: false, sicherungenZeigen: false,
   dashJubilaeen: null, dashJubilaeenLoading: false, jubilaeumDismissed: false, globalSearchQ: '', tour: null, tourAutoChecked: false };
 
 // ------------------------------------------------------------------ Hilfsfunktionen
@@ -1955,13 +1955,60 @@ function adminData() {
       h('a', { class: 'btn', href: `/api/export?year=${st.year}` }, `Jahresübersicht ${st.year} als Excel`)),
     h('div', { class: 'card' },
       h('h3', { style: 'margin-top:0' }, 'Datensicherung'),
-      h('p', { class: 'hint' }, 'Das Programm legt bei Änderungen automatisch eine Tagessicherung an (die letzten 60 Tage) und vor dem Jahreswechsel, Löschen und Import zusätzlich eine eigene. Du kannst außerdem den gesamten Datenbestand herunterladen. Zum Wiederherstellen die gewünschte Sicherungsdatei in »kleingarten-manager-daten.json« umbenennen und im Datenordner ersetzen (Programm vorher beenden).'),
+      h('p', { class: 'hint' }, 'Das Programm legt bei Änderungen automatisch eine Tagessicherung an (die letzten 60 Tage) und vor dem Jahreswechsel, Löschen und Import zusätzlich eine eigene. Du kannst außerdem den gesamten Datenbestand herunterladen. Eine Sicherung spielst du direkt hier unten wieder ein.'),
       h('div', { class: 'actions', style: 'margin-top:8px' },
         h('a', { class: 'btn', href: '/api/admin/backup' }, 'Gesamten Datenbestand herunterladen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'sicherungen' }).catch(handleErr) }, 'Sicherungsordner öffnen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'daten' }).catch(handleErr) }, 'Datenordner öffnen')),
-      zweiteSicherungField()));
+      zweiteSicherungField()),
+    sicherungenCard());
   return wrap;
+}
+
+async function loadSicherungen() {
+  if (S.sicherungenLoading) return;
+  S.sicherungenLoading = true;
+  try { S.sicherungen = await api('GET', '/api/admin/sicherungen'); } catch (e) { handleErr(e); S.sicherungen = null; S.sicherungenZeigen = false; }
+  S.sicherungenLoading = false;
+  render();
+}
+
+// Sicherung wiederherstellen: Liste der vorhandenen Sicherungen, Auswahl mit deutlicher Rückfrage.
+function sicherungenCard() {
+  const kopf = h('h3', { style: 'margin-top:0' }, 'Sicherung wiederherstellen');
+  if (!S.sicherungenZeigen) {
+    return h('div', { class: 'card', style: 'margin-top:14px' }, kopf,
+      h('p', { class: 'hint' }, 'Hat sich etwas versehentlich verändert oder ist die Datendatei beschädigt? Hier siehst du alle vorhandenen Sicherungen und kannst eine davon einspielen. Der aktuelle Stand wird vorher selbst gesichert, auch das lässt sich also rückgängig machen.'),
+      h('button', { class: 'btn', onclick: () => { S.sicherungenZeigen = true; S.sicherungen = null; render(); } }, 'Sicherungen anzeigen'));
+  }
+  if (!S.sicherungen) {
+    if (!S.sicherungenLoading) loadSicherungen();
+    return h('div', { class: 'card', style: 'margin-top:14px' }, kopf, h('p', { class: 'hint', style: 'margin:0' }, 'Wird geladen …'));
+  }
+  const wiederherstellen = async (x) => {
+    const ok = await confirmBox(`Den Stand vom ${fmtWhen(x.zeit)} (${x.art}; ${x.paechter} Pächter, ${x.rechnungen} Rechnungen) wiederherstellen? Alles, was seitdem geändert wurde, verschwindet aus dem Programm, auch Einstellungen und Passwörter gehen auf den damaligen Stand zurück. Der heutige Stand bleibt als Sicherung »vor-Wiederherstellung« erhalten.`, 'Wiederherstellen', true);
+    if (!ok) return;
+    try {
+      await api('POST', '/api/admin/sicherungen/wiederherstellen', { name: x.name });
+      toast('Sicherung wiederhergestellt', 'ok');
+      location.reload();
+    } catch (e) { handleErr(e); }
+  };
+  const rows = S.sicherungen.map((x) => h('tr', null,
+    h('td', null, fmtWhen(x.zeit)), h('td', null, x.art),
+    h('td', { class: 'num' }, x.lesbar ? x.paechter : '–'), h('td', { class: 'num' }, x.lesbar ? x.rechnungen : '–'),
+    h('td', null, x.lesbar
+      ? h('button', { class: 'btn small danger', onclick: () => wiederherstellen(x) }, 'Wiederherstellen')
+      : h('span', { class: 'hint' }, x.hinweis || 'nicht lesbar'))));
+  return h('div', { class: 'card', style: 'margin-top:14px' },
+    h('div', { class: 'toolbar' }, kopf, h('div', { class: 'spacer' }),
+      h('button', { class: 'btn small', onclick: () => { S.sicherungenZeigen = false; render(); } }, 'Schließen')),
+    S.sicherungen.length
+      ? h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
+          h('thead', null, h('tr', null, ['Stand vom', 'Art', 'Pächter', 'Rechnungen', ''].map((t) => h('th', null, t)))),
+          h('tbody', null, rows)))
+      : h('p', { class: 'hint', style: 'margin:0' }, 'Noch keine Sicherungen vorhanden.'),
+    S.sicherungen.length >= 40 ? h('p', { class: 'hint', style: 'margin-bottom:0' }, `Es werden die neuesten ${S.sicherungen.length} Sicherungen angezeigt. Ältere liegen im Sicherungsordner.`) : null);
 }
 
 function zweiteSicherungField() {

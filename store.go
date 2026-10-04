@@ -72,20 +72,14 @@ func openStore(dir string) (*Store, error) {
 	case err != nil:
 		return nil, err
 	default:
-		var d Data
-		if err := json.Unmarshal(raw, &d); err != nil {
-			return nil, fmt.Errorf("Datendatei %s ist beschädigt (%v). Bitte eine Sicherung aus dem Ordner »Sicherungen« zurückkopieren", s.path, err)
+		d, err := parseDaten(raw)
+		switch {
+		case errors.Is(err, errNeuereVersion):
+			return nil, fmt.Errorf("Die Datendatei %s stammt aus einer neueren Programmversion. Bitte den %s auf die neueste Version aktualisieren, sonst gehen Angaben verloren", s.path, appName)
+		case err != nil:
+			return nil, fmt.Errorf("Datendatei %s ist beschädigt (%v). Bitte eine Sicherung aus dem Ordner »Sicherungen« zurückkopieren oder im Programm unter Admin → Import / Export / Sicherung wiederherstellen", s.path, err)
 		}
-		if d.Jahre == nil {
-			d.Jahre = map[string]*Jahr{}
-		}
-		if d.Paechter == nil {
-			d.Paechter = []Paechter{}
-		}
-		if d.Rechnungen == nil {
-			d.Rechnungen = []*Rechnung{}
-		}
-		s.d = &d
+		s.d = d
 		s.ensureYear(d.Settings.Jahr)
 		if s.migriereBelege() {
 			if err := s.saveLocked(); err != nil {
@@ -94,6 +88,31 @@ func openStore(dir string) (*Store, error) {
 		}
 	}
 	return s, nil
+}
+
+var errNeuereVersion = errors.New("Datenversion zu neu")
+
+// parseDaten liest eine Datendatei oder Sicherung und stellt sicher, dass die Pflichtfelder vorhanden sind.
+// Dateien einer neueren Datenversion werden abgelehnt, weil beim Zurückschreiben unbekannte Felder
+// verloren gingen.
+func parseDaten(raw []byte) (*Data, error) {
+	var d Data
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return nil, err
+	}
+	if d.Version > datenVersion {
+		return nil, errNeuereVersion
+	}
+	if d.Jahre == nil {
+		d.Jahre = map[string]*Jahr{}
+	}
+	if d.Paechter == nil {
+		d.Paechter = []Paechter{}
+	}
+	if d.Rechnungen == nil {
+		d.Rechnungen = []*Rechnung{}
+	}
+	return &d, nil
 }
 
 // migriereBelege überführt das alte einzelne Beleg-Feld (vor Mehrfach-Belegen)
