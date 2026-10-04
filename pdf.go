@@ -32,6 +32,33 @@ const (
 	rowH   = 5.1
 )
 
+// adressZeile schreibt eine Zeile des Anschriftenfelds (höchstens 90 mm breit, wie ein Fensterbrief es
+// verlangt). Passt der Text nicht, wird die Schrift bis 8 pt verkleinert, danach auf zwei Zeilen umbrochen,
+// damit er nie über den Rand läuft. Gibt die belegte Höhe zurück (mindestens eine Zeile).
+func adressZeile(pdf *fpdf.Fpdf, x, y float64, txt, style string) float64 {
+	const maxW = 90.0
+	size := 10.0
+	pdf.SetFont("lib", style, size)
+	for size > 8 && pdf.GetStringWidth(txt) > maxW {
+		size -= 0.5
+		pdf.SetFont("lib", style, size)
+	}
+	pdf.SetXY(x, y)
+	if pdf.GetStringWidth(txt) <= maxW {
+		pdf.CellFormat(maxW, rowH, txt, "", 0, "L", false, 0, "")
+		pdf.SetFont("lib", style, 10)
+		return rowH
+	}
+	pdf.SetFont("lib", style, 9)
+	pdf.MultiCell(maxW, 4.4, txt, "", "L", false)
+	h := pdf.GetY() - y + 0.7
+	pdf.SetFont("lib", style, 10)
+	if h < rowH {
+		h = rowH
+	}
+	return h
+}
+
 // invoiceNumber bildet die Rechnungsnummer, z. B. 100-35-95.
 func invoiceNumber(s Settings, p Paechter) string {
 	return strings.TrimSpace(s.RechnungsnrPraefix) + "-" + strings.TrimSpace(p.Mitgliedsnr)
@@ -185,16 +212,10 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 
 	// Anschrift
 	next(gap(5))
-	font("", 10)
-	text(leftX, 90, p.Anrede, "L")
-	next(rowH)
-	font("B", 10)
-	text(leftX, 90, p.Name, "L")
-	next(rowH)
-	font("", 10)
-	text(leftX, 90, p.Strasse, "L")
-	next(rowH)
-	text(leftX, 90, p.PLZOrt, "L")
+	next(adressZeile(pdf, leftX, y, p.Anrede, ""))
+	next(adressZeile(pdf, leftX, y, p.Name, "B"))
+	next(adressZeile(pdf, leftX, y, p.Strasse, ""))
+	next(adressZeile(pdf, leftX, y, p.PLZOrt, "") - rowH)
 
 	// Rechnungsdaten rechts
 	next(rowH + gap(4))
@@ -466,16 +487,10 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	text(leftX, rightX-leftX, p.Versand, "R")
 
 	next(5)
-	font("", 10)
-	text(leftX, 90, p.Anrede, "L")
-	next(rowH)
-	font("B", 10)
-	text(leftX, 90, p.Name, "L")
-	next(rowH)
-	font("", 10)
-	text(leftX, 90, p.Strasse, "L")
-	next(rowH)
-	text(leftX, 90, p.PLZOrt, "L")
+	next(adressZeile(pdf, leftX, y, p.Anrede, ""))
+	next(adressZeile(pdf, leftX, y, p.Name, "B"))
+	next(adressZeile(pdf, leftX, y, p.Strasse, ""))
+	next(adressZeile(pdf, leftX, y, p.PLZOrt, "") - rowH)
 
 	next(rowH + 4)
 	meta := [][2]string{

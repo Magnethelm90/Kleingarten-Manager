@@ -73,3 +73,33 @@ func TestRechnungMitHinweisAusstellenUeberAPI(t *testing.T) {
 		t.Fatalf("Rechnung mit Hinweis muss sich ausstellen lassen: %+v", res)
 	}
 }
+
+// Lange Namen und Straßen dürfen nie über den Rand laufen: erst kleinere Schrift, dann Umbruch;
+// die Rechnung (und die Mahnung) bleibt auf einer Seite.
+func TestLangeAnschriftBleibtAufEinerSeite(t *testing.T) {
+	s, p, a := rechnungFixture()
+	for _, name := range []string{
+		strings.Repeat("X", 100),
+		"Prof. Dr. Maximilian-Alexander Freiherr von Mustermann-Schmidt",
+		"Normal",
+	} {
+		p.Name = name
+		p.Strasse = strings.Repeat("Langer Straßenname ", 5)
+		r := calculate(s, p, a)
+		pdf, err := buildInvoice(s, p, a, r)
+		if err != nil {
+			t.Fatalf("Rechnung für %.20q...: %v", name, err)
+		}
+		if n := len(seitenRegexp.FindAll(pdf, -1)); n != 1 {
+			t.Errorf("Rechnung für %.20q...: %d Seiten", name, n)
+		}
+		rec := &Rechnung{Jahr: 2025, Nummer: invoiceNumber(s, p), Settings: s, Paechter: p, Ablesung: a, Result: r, Ausgestellt: "2026-01-10T10:00:00+01:00", Status: statusGueltig}
+		m, err := buildMahnung(s, p, rec)
+		if err != nil {
+			t.Fatalf("Mahnung für %.20q...: %v", name, err)
+		}
+		if n := len(seitenRegexp.FindAll(m, -1)); n != 1 {
+			t.Errorf("Mahnung für %.20q...: %d Seiten", name, n)
+		}
+	}
+}

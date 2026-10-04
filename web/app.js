@@ -390,16 +390,38 @@ function sicherungBanner(st) {
     h('button', { class: 'btn small', onclick: () => { S.sicherungDismissed = true; render(); } }, 'Ausblenden'));
 }
 
+// Offene Posten des laufenden Jahres plus aller Vorjahre (diese liefert der Server getrennt), damit nichts
+// nach dem Jahreswechsel aus dem Blick gerät.
+function offenePosten(st) {
+  const jetzt = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt >= 0).filter(payIsOpen);
+  const vor = (st.offeneVorjahre || []).filter(payIsOpen);
+  return { jetzt, vor, alle: [...vor, ...jetzt] };
+}
+
+// Hinweis in der Zahlungsübersicht: in anderen Jahren sind noch Rechnungen offen (Sprung dorthin)
+function anderenJahrenOffen(st) {
+  const proJahr = {};
+  for (const e of (st.offeneVorjahre || []).filter(payIsOpen)) proJahr[e.jahr] = (proJahr[e.jahr] || 0) + 1;
+  const jahre = Object.keys(proJahr).map(Number).sort();
+  if (!jahre.length) return null;
+  return h('div', { class: 'banner warn' }, 'In anderen Jahren sind noch Rechnungen offen: ',
+    jahre.map((j) => [h('button', { class: 'btn small', onclick: async () => { S.year = j; await reload(); } }, `${j} (${proJahr[j]})`), ' ']));
+}
+
 function openRechnungenBanner(st) {
   if (S.remindDismissed || S.tab === 'zahlungen' || S.tab === 'uebersicht' || st.year !== st.currentYear) return null;
-  const all = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt >= 0);
-  const open = all.filter(payIsOpen);
-  if (!open.length) return null;
+  const { jetzt, vor, alle } = offenePosten(st);
+  if (!alle.length) return null;
   const today = todayIso();
-  const overdue = open.filter((e) => e.faellig && e.faellig < today);
+  const overdue = alle.filter((e) => e.faellig && e.faellig < today);
+  const vorTxt = vor.length ? ` (davon ${vor.length} aus früheren Jahren, ältestes ${vor[0].jahr})` : '';
   return h('div', { class: 'banner warn' },
-    `${open.length} Rechnung${open.length === 1 ? '' : 'en'} ${st.year} noch offen${overdue.length ? `, davon ${overdue.length} überfällig` : ''}.`, ' ',
-    h('button', { class: 'btn small', onclick: () => { S.tab = 'zahlungen'; render(); } }, 'Zu den Zahlungen'), ' ',
+    `${alle.length} Rechnung${alle.length === 1 ? '' : 'en'} noch offen${vorTxt}${overdue.length ? `, davon ${overdue.length} überfällig` : ''}.`, ' ',
+    h('button', { class: 'btn small', onclick: async () => {
+      S.tab = 'zahlungen';
+      S.year = jetzt.length ? st.currentYear : vor[0].jahr;
+      await reload();
+    } }, 'Zu den Zahlungen'), ' ',
     h('button', { class: 'btn small', onclick: () => { S.remindDismissed = true; render(); } }, 'Ausblenden'));
 }
 
@@ -457,15 +479,15 @@ function jubilaeumBanner(st, istAdmin) {
 function viewUebersicht() {
   const st = S.state;
   const istAdmin = !st.hasPassword || st.loggedIn;
-  const all = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt >= 0);
-  const open = all.filter(payIsOpen);
+  const op = offenePosten(st);
+  const open = op.alle;
   const today = todayIso();
   const overdue = open.filter((e) => e.faellig && e.faellig < today);
   const unvollstaendig = st.paechter.filter((p) => !(st.results[p.id] && st.results[p.id].vollstaendig));
 
   const card = (t, big, small, cls) => h('div', { class: 'card stat ' + (cls || '') }, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small));
   const cards = [
-    card('Offene Rechnungen', String(open.length), open.length ? `${eur(open.reduce((a, e) => a + payOpen(e), 0))} · ${overdue.length} überfällig` : 'alles bezahlt', open.length ? 'warn' : 'ok'),
+    card('Offene Rechnungen', String(open.length), open.length ? `${eur(open.reduce((a, e) => a + payOpen(e), 0))} · ${overdue.length} überfällig${op.vor.length ? ` · ${op.vor.length} aus Vorjahren` : ''}` : 'alles bezahlt', open.length ? 'warn' : 'ok'),
     card('Unvollständige Pächter', String(unvollstaendig.length), `von ${st.paechter.length} in ${st.currentYear}`, unvollstaendig.length ? 'warn' : 'ok'),
     card('Letzte Sicherung', st.letzteSicherung ? deDate(st.letzteSicherung) : 'noch keine',
       st.sicherungFehler ? 'beschädigt!' : 'automatisch bei jeder Änderung',
@@ -757,7 +779,12 @@ function viewSchnell() {
       const m = find(input.value);
       if (m.length === 1) choose(m[0]);
       else if (m.length > 1) toast('Mehrere Treffer – bitte einen anklicken oder die Nummer genauer eingeben.', 'err');
-      else if (input.value.trim()) toast('Nummer nicht gefunden.', 'err');
+      else if (input.value.trim()) {
+        // die Karte des vorherigen Pächters ausblenden, damit nichts versehentlich beim Falschen landet
+        S.quickId = null;
+        drawCard();
+        toast('Nummer nicht gefunden.', 'err');
+      }
     } });
 
   const drawCard = (focusFirst) => {
@@ -1133,7 +1160,8 @@ function viewAusstellen() {
     allBtn.disabled = false;
   } }, `Alle offenen ausstellen (${open.length})`);
 
-  const nPost = list.filter((p) => issuedOf(p) && String(p.versand || '').toLowerCase() === 'postversand').length;
+  // gezählt wird wie im PDF: nach der Versandart auf der ausgestellten Rechnung, nicht nach den heutigen Stammdaten
+  const nPost = (st.archive || []).filter((e) => e.status === 'gueltig' && String(e.versand || '').toLowerCase() === 'postversand').length;
   const postBtn = h('button', { class: 'btn', disabled: !nPost,
     title: 'Alle ausgestellten Rechnungen mit Versandart Postversand als eine PDF-Datei, nach Mitgliedsnummer sortiert',
     onclick: () => postRechnungenDrucken(st.year) }, `Postversand drucken (${nPost})`);
@@ -1283,7 +1311,8 @@ function viewZahlungen() {
   return h('div', null,
     h('h2', null, `Zahlungen ${st.year}`),
     h('p', { class: 'hint' }, 'Hier siehst du, welche Rechnungen bezahlt sind und welche noch offen. Haken setzen = bezahlt heute (das Datum kannst du ändern). Über »Details« trägst du Teilzahlungen oder eine Notiz ein. Rechnungen mit Guthaben erscheinen hier auch, damit du siehst, was noch an Pächter auszuzahlen ist.'),
-    notIssued > 0 ? h('div', { class: 'banner info' }, `${notIssued} Pächter haben in ${st.year} noch keine ausgestellte Rechnung und tauchen deshalb hier noch nicht auf.`) : null,
+    notIssued > 0 ? h('div', { class: 'banner info' }, `${notIssued} Pächter ${notIssued === 1 ? 'hat' : 'haben'} in ${st.year} noch keine ausgestellte Rechnung und ${notIssued === 1 ? 'taucht' : 'tauchen'} deshalb hier noch nicht auf.`) : null,
+    anderenJahrenOffen(st),
     summary,
     h('div', { class: 'toolbar' },
       h('input', { type: 'search', placeholder: 'Suchen (Nummer oder Name)', value: S.payQ, style: 'width:240px', oninput: (e) => { S.payQ = e.target.value; draw(); } }),

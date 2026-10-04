@@ -345,3 +345,25 @@ func TestDruckOrdnerWirdGeleert(t *testing.T) {
 		}
 	}
 }
+
+// Der Zähler am Knopf »Postversand drucken« stammt aus dem Archiv (Versandart laut Rechnung),
+// genau wie das PDF. Ändert sich die Versandart im Stammdatensatz nachträglich, darf sich beides nicht
+// auseinanderentwickeln.
+func TestPostversandZaehlerStimmtMitPDFUeberein(t *testing.T) {
+	f := newDruckFixture(t)
+	// Pächter 5 (E-Mail) wird nach dem Ausstellen auf Postversand umgestellt
+	do(f.h, "PUT", "/api/admin/paechter/"+f.ids["5"], map[string]any{"mitgliedsnr": "5", "name": "Pächter 5", "versand": "Postversand", "gartengroesse": 300})
+	st := decode[struct {
+		Archive []archiveEntry `json:"archive"`
+	}](t, do(f.h, "GET", "/api/state?year=2025", nil))
+	n := 0
+	for _, e := range st.Archive {
+		if e.Status == statusGueltig && e.Versand == "Postversand" {
+			n++
+		}
+	}
+	pdf := do(f.h, "GET", "/api/admin/rechnungen-druck?year=2025", nil).Body.Bytes()
+	if seiten := len(seitenRegexp.FindAll(pdf, -1)); seiten != n || n != 2 {
+		t.Errorf("Zähler laut Archiv: %d, Seiten im PDF: %d (erwartet beide 2)", n, seiten)
+	}
+}
