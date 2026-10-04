@@ -38,6 +38,8 @@ vorher prüfen.
 - Hinweis- und Notizfelder in aufbewahrten Rechnungen und Jahresunterlagen,
 - **alles Genannte auch in allen vorhandenen Sicherungen** (inkl. zweitem Sicherungsordner, sofern erreichbar).
   Dafür wird bewusst keine Sicherung „vor dem Löschen“ angelegt.
+- den Ordner `Druck/` (kurzlebige Druckdateien wie Sammel-PDF der Postrechnungen und Ablesebogen): er wird beim
+  Programmstart und hierbei geleert.
 
 **Bleibt zunächst bestehen:** ausgestellte Rechnungen (Archiv und PDF-Dateien) und die eingefrorenen Pächterlisten
 abgeschlossener Jahre. Sie sind Buchungsunterlagen und unterliegen der steuerlichen Aufbewahrungspflicht
@@ -60,7 +62,7 @@ nachsehen.
   Content-Security-Policy ohne Inline-Skripte)
 - Admin-Passwort optional, nur als PBKDF2-Hash gespeichert, Sperre nach Fehlversuchen
 - getrennter Kassenprüfer-Zugang mit Lesezugriff
-- Änderungsprotokoll, automatische Sicherungen, Papierkorb statt sofortigem Löschen
+- Änderungsprotokoll, automatische Sicherungen (im Programm wiederherstellbar), Papierkorb statt sofortigem Löschen
 - Dateien werden nur für den Benutzer lesbar angelegt (Rechte 0600/0700; wirksam unter macOS und Linux, unter Windows
   schützt das Benutzerkonto bzw. die Festplattenverschlüsselung)
 
