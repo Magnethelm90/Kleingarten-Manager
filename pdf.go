@@ -79,6 +79,29 @@ func epcQRPayload(s Settings, p Paechter, betrag float64) string {
 	return strings.Join(lines, "\n")
 }
 
+// ibanGueltig prüft Länge, Zeichen und die Prüfziffer (Modulo 97) einer IBAN.
+func ibanGueltig(iban string) bool {
+	iban = strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(iban), " ", ""))
+	if len(iban) < 15 || len(iban) > 34 {
+		return false
+	}
+	if iban[0] < 'A' || iban[0] > 'Z' || iban[1] < 'A' || iban[1] > 'Z' || iban[2] < '0' || iban[2] > '9' || iban[3] < '0' || iban[3] > '9' {
+		return false
+	}
+	rest := 0
+	for _, c := range iban[4:] + iban[:4] {
+		switch {
+		case c >= '0' && c <= '9':
+			rest = (rest*10 + int(c-'0')) % 97
+		case c >= 'A' && c <= 'Z':
+			rest = (rest*100 + int(c-'A') + 10) % 97
+		default:
+			return false
+		}
+	}
+	return rest == 1
+}
+
 // invoiceMaxY ist die tiefste erlaubte Position (Oberkante) der letzten Zeile der Rechnung.
 const invoiceMaxY = 290.0
 
@@ -399,7 +422,7 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 	const qrSize = 24.0
 	textW := rightX - leftX
 	var qrPNG []byte
-	if !guthaben && r.Gesamt != 0 && strings.TrimSpace(s.IBAN) != "" {
+	if !guthaben && r.Gesamt != 0 && ibanGueltig(s.IBAN) {
 		if png, err := qrcode.Encode(epcQRPayload(s, p, absf(r.Gesamt)), qrcode.Medium, 300); err == nil {
 			qrPNG = png
 			textW = rightX - leftX - qrSize - 5

@@ -49,6 +49,7 @@ func newDruckFixture(t *testing.T) *druckFixture {
 	t.Helper()
 	app, h := newTestApp(t)
 	f := &druckFixture{app: app, h: h, ids: map[string]string{}}
+	app.st.d.Settings.IBAN = "DE89 3704 0044 0532 0130 00" // Platzhalter-IBAN erzeugt keinen GiroCode
 	orig := openPathFn
 	openPathFn = func(p string) { f.geoeff = append(f.geoeff, p) }
 	t.Cleanup(func() { openPathFn = orig })

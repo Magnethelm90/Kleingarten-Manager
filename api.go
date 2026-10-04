@@ -743,6 +743,9 @@ func cleanPaechter(p Paechter) (Paechter, error) {
 	if !validNum(p.Gartengroesse) {
 		return p, bad("Die Gartengröße muss eine Zahl ab 0 sein")
 	}
+	if p.Gartengroesse > 10000 {
+		return p, bad("Die Gartengröße ist unwahrscheinlich groß (mehr als 10.000 m²). Bitte prüfen.")
+	}
 	if p.UmlageAbweichend != nil && !validNum(*p.UmlageAbweichend) {
 		return p, bad("Die Umlage muss eine Zahl ab 0 sein")
 	}
@@ -960,6 +963,10 @@ func cleanSettings(in, cur Settings) (Settings, error) {
 	in.ZweiteSicherung = trim(in.ZweiteSicherung, 250)
 	if in.VereinName == "" {
 		return in, bad("Bitte einen Vereinsnamen eintragen")
+	}
+	// eine neu eingegebene IBAN muss formal stimmen; ein unveränderter (alter) Wert blockiert das Speichern anderer Felder nicht
+	if in.IBAN != "" && in.IBAN != cur.IBAN && !ibanGueltig(in.IBAN) {
+		return in, bad("Die IBAN ist ungültig (Prüfziffer stimmt nicht). Bitte noch einmal prüfen.")
 	}
 	if _, err := parseDate(in.Rechnungsdatum); err != nil {
 		return in, bad("Das Rechnungsdatum ist ungültig")
