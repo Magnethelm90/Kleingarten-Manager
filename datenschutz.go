@@ -212,13 +212,7 @@ func (s *Store) bereinigeSicherungen(fn func(d *Data) bool) int {
 		if err != nil {
 			continue
 		}
-		tmp := f + ".tmp"
-		if os.WriteFile(tmp, out, 0o600) != nil {
-			_ = os.Remove(tmp)
-			continue
-		}
-		if os.Rename(tmp, f) != nil {
-			_ = os.Remove(tmp)
+		if schreibeAtomar(f, out, 0o600) != nil {
 			continue
 		}
 		n++
