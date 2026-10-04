@@ -252,7 +252,7 @@ function render() {
 // zugehörigen Reiter, die Seite dahinter bleibt bedienbar.
 const TOUR = [
   { titel: 'Willkommen im Kleingarten-Manager',
-    text: 'In 5 kurzen Schritten siehst du, was wohin gehört. Die Reiter oben führen dich der Reihe nach durch ein Abrechnungsjahr, und ich zeige dir jede Stelle direkt im Programm. Alles wird sofort gespeichert, du kannst nichts kaputt machen.',
+    text: 'In 5 kurzen Schritten siehst du, was wohin gehört. Die Reiter oben führen dich der Reihe nach durch ein Abrechnungsjahr, und ich zeige dir jede Stelle direkt im Programm. Alles wird sofort gespeichert, und vor heiklen Schritten legt das Programm automatisch eine Sicherung an.',
     ziel: 'uebersicht', gehe: () => { S.tab = 'uebersicht'; } },
   { titel: '1. Einmalig einrichten',
     text: 'Unter »Admin« legst du zuerst die Pächter an (einzeln oder per Excel/CSV-Import) und trägst bei »Preise & Einstellungen« Vereinsname, Bankverbindung, Preise und Rechnungsdatum ein. Das bleibt in allen Folgejahren erhalten.',
