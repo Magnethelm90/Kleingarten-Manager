@@ -418,12 +418,8 @@ func (a *App) handleBereinigen(w http.ResponseWriter, r *http.Request) {
 		if fi, err := os.Lstat(full); err == nil && fi.Mode().IsRegular() && os.Remove(full) == nil {
 			geloescht++
 		}
-		// die Sammel-Druckdatei dieses Jahres enthält dieselben Angaben, sie lässt sich neu erzeugen
-		sammel := filepath.Join(filepath.Dir(full), sammelDateiName)
-		if fi, err := os.Lstat(sammel); err == nil && fi.Mode().IsRegular() {
-			_ = os.Remove(sammel)
-		}
 	}
+	a.st.leereDruckOrdner() // abgeleitete Druckdateien enthalten dieselben Angaben
 	sicherungen := a.st.bereinigeSicherungen(func(d *Data) bool {
 		r, j, _ := d.bereinigeAbgelaufene(aktuell)
 		return r > 0 || j > 0

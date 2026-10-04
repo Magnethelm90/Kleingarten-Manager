@@ -917,6 +917,7 @@ func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, err)
 			return
 		}
+		a.st.leereDruckOrdner() // abgeleitete Druckdateien (z. B. Sammel-PDF) enthalten den Namen noch
 		sicherungen := a.st.bereinigeSicherungen(func(d *Data) bool { return d.entfernePerson(id) })
 		writeJSON(w, 200, map[string]int{"sicherungenBereinigt": sicherungen})
 		return
@@ -1546,6 +1547,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/invoice/{id}", a.handleInvoice)
 	mux.HandleFunc("POST /api/invoices/issue", a.handleIssue)
 	mux.HandleFunc("POST /api/open-invoice/{id}", a.handleOpenInvoice)
+	mux.HandleFunc("GET /api/ablesebogen", a.handleAblesebogen)
+	mux.HandleFunc("POST /api/ablesebogen/oeffnen", a.handleAblesebogenOeffnen)
 	mux.HandleFunc("GET /api/admin/rechnungen-druck", a.admin(a.handleDruckPost))
 	mux.HandleFunc("POST /api/admin/rechnungen-druck/oeffnen", a.admin(a.handleDruckPostOeffnen))
 	mux.HandleFunc("GET /api/archive/{id}", a.handleArchivePDF)

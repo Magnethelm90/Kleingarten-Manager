@@ -53,6 +53,7 @@ func openStore(dir string) (*Store, error) {
 	_ = os.Remove(probe)
 
 	s := &Store{dir: dir, path: filepath.Join(dir, dataFileName)}
+	s.leereDruckOrdner() // übrig gebliebene Druckdateien mit Namen und Anschriften aus einem früheren Start
 	// Umstieg von der alten Datendatei (vor der Umbenennung): einmalig übernehmen,
 	// falls noch keine neue Datei existiert.
 	if _, err := os.Stat(s.path); errors.Is(err, os.ErrNotExist) {

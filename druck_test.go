@@ -132,7 +132,7 @@ func TestSammelDruckOeffnen(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("öffnen: %d %s", rec.Code, rec.Body)
 	}
-	want := filepath.Join(f.app.st.dir, "Rechnungen", "2025", sammelDateiName)
+	want := filepath.Join(f.app.st.dir, "Druck", "Rechnungen_2025_Postversand.pdf")
 	if len(f.geoeff) != 1 || f.geoeff[0] != want {
 		t.Fatalf("geöffnet: %v, erwartet %s", f.geoeff, want)
 	}
@@ -219,7 +219,7 @@ func TestRechnungOeffnenLehntFremdePfadeAb(t *testing.T) {
 func TestBereinigenLoeschtSammelDatei(t *testing.T) {
 	f := newDruckFixture(t)
 	do(f.h, "POST", "/api/admin/rechnungen-druck/oeffnen?year=2025", nil)
-	sammel := filepath.Join(f.app.st.dir, "Rechnungen", "2025", sammelDateiName)
+	sammel := filepath.Join(f.app.st.dir, "Druck", "Rechnungen_2025_Postversand.pdf")
 	if _, err := os.Stat(sammel); err != nil {
 		t.Fatal(err)
 	}
@@ -299,5 +299,49 @@ func TestSicherungNeuererVersionBleibtUnangetastet(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(neu); string(b) != inhalt {
 		t.Errorf("Sicherung einer neueren Version wurde verändert: %s", b)
+	}
+}
+
+// Druckdateien enthalten Namen und Anschriften. Sie werden beim Programmstart, beim endgültigen
+// Löschen einer Person und beim Bereinigen abgelaufener Unterlagen entfernt.
+func TestDruckOrdnerWirdGeleert(t *testing.T) {
+	f := newDruckFixture(t)
+	druck := f.app.st.druckDir()
+	neu := func() string {
+		do(f.h, "POST", "/api/admin/rechnungen-druck/oeffnen?year=2025", nil)
+		p := filepath.Join(druck, "Rechnungen_2025_Postversand.pdf")
+		if _, err := os.Stat(p); err != nil {
+			t.Fatal("Druckdatei fehlt:", err)
+		}
+		return p
+	}
+
+	// Programmstart
+	p := neu()
+	if _, err := openStore(f.app.st.dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Error("beim Start muss der Druckordner geleert werden")
+	}
+
+	// endgültiges Löschen einer Person
+	p = neu()
+	do(f.h, "DELETE", "/api/admin/paechter/"+f.ids["10"], nil)
+	if rec := do(f.h, "DELETE", "/api/admin/paechter/"+f.ids["10"]+"/endgueltig", nil); rec.Code != 200 {
+		t.Fatalf("endgültig löschen: %d", rec.Code)
+	}
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Error("beim endgültigen Löschen muss der Druckordner geleert werden")
+	}
+
+	// Verweise im Druckordner werden nie angefasst
+	fremd := filepath.Join(t.TempDir(), "fremd.txt")
+	os.WriteFile(fremd, []byte("BLEIBT"), 0o600)
+	if err := os.Symlink(fremd, filepath.Join(druck, "link.pdf")); err == nil {
+		f.app.st.leereDruckOrdner()
+		if b, _ := os.ReadFile(fremd); string(b) != "BLEIBT" {
+			t.Error("das Ziel eines Verweises im Druckordner wurde verändert")
+		}
 	}
 }

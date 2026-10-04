@@ -7,7 +7,6 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -15,9 +14,40 @@ import (
 // (in Tests ersetzbar, damit kein echtes Programm gestartet wird).
 var openPathFn = openPath
 
-// sammelDateiName ist die Druckdatei für alle Postsendungen eines Jahres. Sie lässt sich jederzeit
-// neu erzeugen und wird beim Bereinigen abgelaufener Unterlagen mit gelöscht.
-const sammelDateiName = "Druck_Postversand.pdf"
+// druckOrdner enthält Druckdateien, die nur zum Öffnen im PDF-Programm entstehen (Sammel-PDF der
+// Postrechnungen, Ablesebogen). Sie lassen sich jederzeit neu erzeugen, enthalten aber Namen und
+// Anschriften; deshalb wird der Ordner beim Programmstart und beim Löschen von Personen geleert.
+const druckOrdner = "Druck"
+
+func (s *Store) druckDir() string { return filepath.Join(s.dir, druckOrdner) }
+
+// leereDruckOrdner entfernt alle gewöhnlichen Dateien im Druckordner (Verweise bleiben unangetastet).
+func (s *Store) leereDruckOrdner() {
+	entries, err := os.ReadDir(s.druckDir())
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.Type().IsRegular() {
+			_ = os.Remove(filepath.Join(s.druckDir(), e.Name()))
+		}
+	}
+}
+
+// schreibeDruckdatei legt eine Druckdatei im Druckordner ab und gibt ihren Pfad zurück.
+func (s *Store) schreibeDruckdatei(name string, data []byte) (string, error) {
+	if err := os.MkdirAll(s.druckDir(), 0o700); err != nil {
+		return "", err
+	}
+	full := filepath.Join(s.druckDir(), name)
+	if fi, err := os.Lstat(full); err == nil && !fi.Mode().IsRegular() {
+		return "", fmt.Errorf("%s ist keine gewöhnliche Datei", name)
+	}
+	if err := os.WriteFile(full, data, 0o600); err != nil {
+		return "", err
+	}
+	return full, nil
+}
 
 // naturalLess sortiert Nummern wie »35-95« oder »2-1« so, wie man es erwartet (Zahlen nach Wert).
 func naturalLess(a, b string) bool {
@@ -114,18 +144,13 @@ func (a *App) handleDruckPostOeffnen(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	dir := filepath.Join(a.st.dir, "Rechnungen", strconv.Itoa(year))
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		writeErr(w, err)
-		return
-	}
-	full := filepath.Join(dir, sammelDateiName)
-	if err := os.WriteFile(full, pdf, 0o600); err != nil {
+	full, err := a.st.schreibeDruckdatei(fmt.Sprintf("Rechnungen_%d_Postversand.pdf", year), pdf)
+	if err != nil {
 		writeErr(w, err)
 		return
 	}
 	openPathFn(full)
-	writeJSON(w, 200, map[string]any{"anzahl": n, "datei": path.Join("Rechnungen", strconv.Itoa(year), sammelDateiName)})
+	writeJSON(w, 200, map[string]any{"anzahl": n, "datei": path.Join(druckOrdner, filepath.Base(full))})
 }
 
 // handleOpenInvoice öffnet die gespeicherte PDF einer ausgestellten Rechnung im PDF-Programm des

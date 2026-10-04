@@ -696,9 +696,13 @@ function viewEingabe() {
   const st = S.state;
   return h('div', null,
     h('h2', null, `Zählerstände ${st.year}`),
-    h('div', { class: 'subtabs' },
-      h('button', { class: S.eingabeMode === 'schnell' ? 'active' : '', onclick: () => { S.eingabeMode = 'schnell'; render(); } }, 'Schnelleingabe (Nummer eintippen)'),
-      h('button', { class: S.eingabeMode === 'tabelle' ? 'active' : '', onclick: () => { S.eingabeMode = 'tabelle'; render(); } }, 'Tabelle (alle Pächter)')),
+    h('div', { class: 'toolbar' },
+      h('div', { class: 'subtabs', style: 'margin:0' },
+        h('button', { class: S.eingabeMode === 'schnell' ? 'active' : '', onclick: () => { S.eingabeMode = 'schnell'; render(); } }, 'Schnelleingabe (Nummer eintippen)'),
+        h('button', { class: S.eingabeMode === 'tabelle' ? 'active' : '', onclick: () => { S.eingabeMode = 'tabelle'; render(); } }, 'Tabelle (alle Pächter)')),
+      h('div', { class: 'spacer' }),
+      h('button', { class: 'btn', disabled: !st.paechter.length, title: 'Liste aller Gärten mit Zählernummern und Vorjahresständen zum Ausdrucken, mit leeren Feldern für den Ablese-Rundgang',
+        onclick: () => ablesebogenDrucken(st.year) }, 'Ablesebogen drucken')),
     S.eingabeMode === 'schnell' ? viewSchnell() : viewTabelle());
 }
 
@@ -949,26 +953,39 @@ async function imPdfProgrammOeffnen(id) {
   catch (e) { handleErr(e); }
 }
 
-// Alle Rechnungen mit Postversand als eine PDF-Datei zum Ausdrucken (nach Mitgliedsnummer sortiert).
-async function postRechnungenDrucken(year) {
+// Öffnet ein serverseitig erzeugtes PDF zum Drucken: im Programmfenster im PDF-Programm des Rechners
+// (voller Druckdialog), sonst als Vorschau bzw. neuer Tab im Browser.
+async function pdfDrucken({ url, oeffnenUrl, titel, meldung }) {
   try {
     if (inNativeWindow()) {
-      const r = await api('POST', `/api/admin/rechnungen-druck/oeffnen?year=${year}`);
-      toast(`${r.anzahl} Rechnung(en) im PDF-Programm geöffnet – dort drucken.`, 'ok');
+      const r = await api('POST', oeffnenUrl);
+      toast(meldung(r), 'ok');
       return;
     }
-    const r = await fetch(`/api/admin/rechnungen-druck?year=${year}`, { headers: { 'X-GA-Request': '1' } });
+    const r = await fetch(url, { headers: { 'X-GA-Request': '1' } });
     if (!r.ok) {
       const d = await r.json().catch(() => null);
       const err = new Error((d && d.error) || `Fehler ${r.status}`);
       err.status = r.status;
       throw err;
     }
-    const url = URL.createObjectURL(await r.blob());
-    openDocument(url, 'Rechnungen Postversand');
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    const blobUrl = URL.createObjectURL(await r.blob());
+    openDocument(blobUrl, titel);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
   } catch (e) { handleErr(e); }
 }
+
+// Alle Rechnungen mit Postversand als eine PDF-Datei zum Ausdrucken (nach Mitgliedsnummer sortiert).
+const postRechnungenDrucken = (year) => pdfDrucken({
+  url: `/api/admin/rechnungen-druck?year=${year}`, oeffnenUrl: `/api/admin/rechnungen-druck/oeffnen?year=${year}`,
+  titel: 'Rechnungen Postversand', meldung: (r) => `${r.anzahl} Rechnung(en) im PDF-Programm geöffnet – dort drucken.`,
+});
+
+// Ablesebogen für den Rundgang: alle Gärten mit Zählernummern und Vorjahresständen, leere Felder zum Eintragen.
+const ablesebogenDrucken = (year) => pdfDrucken({
+  url: `/api/ablesebogen?year=${year}`, oeffnenUrl: `/api/ablesebogen/oeffnen?year=${year}`,
+  titel: `Ablesebogen ${year}`, meldung: () => 'Der Ablesebogen wurde im PDF-Programm geöffnet – dort drucken.',
+});
 
 function archivRow(a, mitJahr) {
   const url = `/api/archive/${a.id}.pdf`;
