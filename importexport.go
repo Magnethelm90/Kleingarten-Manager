@@ -77,13 +77,13 @@ func classify(n string) field {
 	switch {
 	case pre("mitgliedsbeitrag", "mitgliedsbeit"):
 		return fNone
-	case pre("mitglied"):
+	case pre("mitglied", "mitgl", "mnr"):
 		return fMitgl
 	case pre("gartennr", "gartennummer", "parzelle"):
 		return fGarten
 	case n == "anrede":
 		return fAnrede
-	case n == "name" || n == "paechter" || n == "pachter":
+	case n == "name" || n == "nachname" || n == "paechter" || n == "pachter":
 		return fName
 	case pre("strasse") || n == "str":
 		return fStrasse
@@ -133,7 +133,8 @@ func parseNumber(s string, raw bool) (float64, bool) {
 	if s == "" {
 		return 0, false
 	}
-	if !raw {
+	if !raw || (strings.Contains(s, ",") && !strings.Contains(s, ".")) {
+		// Excel-Zellen mit Text (»1,5«) kommen auch im Rohmodus mit Komma an
 		if strings.Contains(s, ",") {
 			s = strings.ReplaceAll(s, ".", "")
 			s = strings.Replace(s, ",", ".", 1)
@@ -192,6 +193,16 @@ func parseImport(table [][]string, raw bool, st Settings, existing []Paechter) (
 	if hdr < 0 {
 		return nil, nil, errors.New("Keine Kopfzeile gefunden. Es werden mindestens die Spalten »Mitgliedsnr.« und »Name« erwartet")
 	}
+	warn := []string{}
+	var ignoriert []string
+	for c, cell := range table[hdr] {
+		if _, ok := colField[c]; !ok && strings.TrimSpace(cell) != "" {
+			ignoriert = append(ignoriert, "»"+trim(strings.TrimSpace(cell), 40)+"«")
+		}
+	}
+	if len(ignoriert) > 0 {
+		warn = append(warn, "Diese Spalten werden nicht eingelesen (unbekannt oder doppelt): "+strings.Join(ignoriert, ", "))
+	}
 	present := map[field]bool{}
 	felder := []string{}
 	names := map[field]string{fGarten: "Gartennr.", fAnrede: "Anrede", fStrasse: "Straße", fPLZ: "PLZ Ort", fVersand: "Versandart",
@@ -213,7 +224,6 @@ func parseImport(table [][]string, raw bool, st Settings, existing []Paechter) (
 	}
 	seen := map[string]int{}
 	var rows []ImportRow
-	warn := []string{}
 	for i := hdr + 1; i < len(table); i++ {
 		cells := table[i]
 		get := func(f field) string {
@@ -269,6 +279,9 @@ func parseImport(table [][]string, raw bool, st Settings, existing []Paechter) (
 			p.Versand = "Emailsendung"
 		} else if strings.HasPrefix(strings.ToLower(p.Versand), "p") {
 			p.Versand = "Postversand"
+		} else if p.Versand != "" {
+			row.Warnungen = append(row.Warnungen, "Versandart »"+p.Versand+"« unbekannt – es gilt Emailsendung")
+			p.Versand = "Emailsendung"
 		}
 
 		// Ablesungen (optional)
