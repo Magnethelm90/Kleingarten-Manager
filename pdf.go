@@ -59,30 +59,32 @@ const invoiceMaxY = 290.0
 // nur wenn ein längerer Hinweistext die Seite sprengen würde, werden einige Leerabstände im
 // oberen Teil schrittweise verkleinert, bis alles passt.
 func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) {
-	sq, err := fitSqueeze(s, p, a, r)
-	if err != nil {
-		return nil, err
-	}
-	out, _, err := renderInvoice(s, p, a, r, sq)
+	_, out, err := layoutFit(s, p, a, r, true)
 	return out, err
 }
 
-// fitSqueeze ermittelt, wie stark die Leerabstände verkleinert werden müssen, damit die
-// Rechnung auf eine Seite passt (0 = Standardlayout).
-func fitSqueeze(s Settings, p Paechter, a Ablesung, r Result) (float64, error) {
+// layoutFit ermittelt, wie stark die Leerabstände verkleinert werden müssen, damit die Rechnung auf
+// eine Seite passt (0 = Standardlayout). Mit wantPDF wird die fertige PDF des erfolgreichen Versuchs
+// gleich mitgeliefert, sonst nur gezeichnet (günstiger, z. B. für Sammeldateien).
+func layoutFit(s Settings, p Paechter, a Ablesung, r Result, wantPDF bool) (float64, []byte, error) {
 	if !r.Vollstaendig {
-		return 0, errors.New("Rechnung unvollständig: " + r.Status)
+		return 0, nil, errors.New("Rechnung unvollständig: " + r.Status)
 	}
 	for squeeze := 0.0; squeeze <= 1.0001; squeeze += 0.1 {
-		_, ende, err := renderInvoice(s, p, a, r, squeeze)
-		if err != nil {
-			return 0, err
+		pdf := newInvoiceDoc("Rechnung "+invoiceNumber(s, p), s)
+		if ende := drawInvoicePage(pdf, s, p, a, r, squeeze); ende > invoiceMaxY {
+			continue
 		}
-		if ende <= invoiceMaxY {
-			return squeeze, nil
+		if !wantPDF {
+			return squeeze, nil, nil
 		}
+		var buf bytes.Buffer
+		if err := pdf.Output(&buf); err != nil {
+			return 0, nil, err
+		}
+		return squeeze, buf.Bytes(), nil
 	}
-	return 0, errors.New("Rechnung passt nicht auf eine Seite (Hinweistext zu lang?)")
+	return 0, nil, errors.New("Rechnung passt nicht auf eine Seite (Hinweistext zu lang?)")
 }
 
 // invoiceItem sind die Angaben einer Rechnung, wie sie im Archiv festgeschrieben sind.
@@ -101,7 +103,7 @@ func buildInvoicesCombined(items []invoiceItem, title string) ([]byte, error) {
 	}
 	pdf := newInvoiceDoc(title, items[0].S)
 	for _, it := range items {
-		sq, err := fitSqueeze(it.S, it.P, it.A, it.R)
+		sq, _, err := layoutFit(it.S, it.P, it.A, it.R, false)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", invoiceNumber(it.S, it.P), err)
 		}
