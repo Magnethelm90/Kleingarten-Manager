@@ -1428,6 +1428,9 @@ function paechterDialog(p) {
       const data = { mitgliedsnr: f.mitgliedsnr.value, gartennr: f.gartennr.value, anrede: f.anrede.value, name: f.name.value,
         strasse: f.strasse.value, plzOrt: f.plzOrt.value, versand: f.versand.value, gartengroesse: gg ?? 0, umlageAbweichend: um,
         wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value, notiz: f.notiz.value.trim() };
+      const gnr = data.gartennr.trim().toLowerCase();
+      const gleich = gnr ? S.state.paechter.find((q) => q.id !== cur.id && (q.gartennr || '').trim().toLowerCase() === gnr) : null;
+      if (gleich && !(await confirmBox(`Die Gartennummer ${data.gartennr.trim()} ist schon bei ${gleich.name} (${gleich.mitgliedsnr}) eingetragen. Trotzdem speichern?`, 'Trotzdem speichern'))) return false;
       try {
         if (isNew) await api('POST', '/api/admin/paechter', data);
         else await api('PUT', `/api/admin/paechter/${cur.id}`, data);
@@ -1700,7 +1703,14 @@ function adminYear() {
         h('li', null, 'Vorher wird automatisch eine Sicherung angelegt.')),
       done < total ? h('div', { class: 'banner warn', style: 'margin-top:12px' }, `Achtung: Bei ${total - done} von ${total} Pächtern fehlen noch Angaben.`) : null,
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: async () => {
-        if (!(await confirmBox(`Jahr ${st.currentYear} jetzt abschließen und ${st.currentYear + 1} beginnen? Das kann nicht rückgängig gemacht werden (die Sicherung vorher bleibt aber erhalten).`, 'Jahr abschließen', true))) return;
+        const offen = [];
+        if (done < total) offen.push(`bei ${total - done} Pächter(n) fehlen Angaben`);
+        const nIssued = Object.keys(st.issued || {}).length;
+        if (nIssued < done) offen.push(`${done - nIssued} Rechnung(en) sind noch nicht ausgestellt`);
+        const nOffen = offenePosten(st).jetzt.length;
+        if (nOffen) offen.push(`${nOffen} Rechnung(en) sind noch nicht bezahlt`);
+        const warnung = offen.length ? ` Achtung: ${offen.join(', ')}.` : '';
+        if (!(await confirmBox(`Jahr ${st.currentYear} jetzt abschließen und ${st.currentYear + 1} beginnen?${warnung} Das kann nicht rückgängig gemacht werden (die Sicherung vorher bleibt aber erhalten).`, 'Jahr abschließen', true))) return;
         try { await api('POST', '/api/admin/jahreswechsel'); toast('Neues Jahr gestartet', 'ok'); S.year = null; S.dashKasse = null; S.kasse = null; S.kasseVerlauf = null; S.abschlussCheck = null; await reload(); } catch (e) { handleErr(e); }
       } }, `Jahr ${st.currentYear} abschließen`))));
 }
