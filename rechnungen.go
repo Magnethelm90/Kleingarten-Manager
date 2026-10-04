@@ -69,6 +69,8 @@ type archiveEntry struct {
 	Gesamt      float64 `json:"gesamt"`
 	Datei       string  `json:"datei"`
 
+	// Versand: Versandart laut ausgestellter Rechnung (steht auf dem Papier), nicht laut aktuellen Stammdaten
+	Versand       string   `json:"versand"`
 	Faellig       string   `json:"faellig"`
 	BezahltAm     string   `json:"bezahltAm"`
 	BezahltBetrag *float64 `json:"bezahltBetrag"`
@@ -79,7 +81,7 @@ func archiveEntryFrom(r *Rechnung) archiveEntry {
 	return archiveEntry{
 		ID: r.ID, Jahr: r.Jahr, Mitgliedsnr: r.Paechter.Mitgliedsnr, Name: r.Paechter.Name, Nummer: r.Nummer,
 		Version: r.Version, Status: r.Status, Ausgestellt: r.Ausgestellt, Gesamt: r.Result.Gesamt, Datei: r.Datei,
-		Faellig: r.Settings.Zahlungsziel, BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz,
+		Versand: r.Paechter.Versand, Faellig: r.Settings.Zahlungsziel, BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz,
 	}
 }
 
@@ -98,6 +100,25 @@ func (s *Store) archiveAllLocked() []archiveEntry {
 			return natLess(out[i].Mitgliedsnr, out[j].Mitgliedsnr)
 		}
 		return out[i].Version < out[j].Version
+	})
+	return out
+}
+
+// offeneAndererJahreLocked liefert alle noch nicht voll bezahlten, gültigen Rechnungen (ohne Guthaben)
+// der Jahre außer year, ältestes Jahr zuerst. Der Aufrufer hält s.mu.
+func (s *Store) offeneAndererJahreLocked(year int) []archiveEntry {
+	out := []archiveEntry{}
+	for _, r := range s.d.Rechnungen {
+		if r.Jahr == year || r.Status != statusGueltig || r.Result.Gesamt < 0 || r.Bereinigt || openAmount(r) <= 0.004 {
+			continue
+		}
+		out = append(out, archiveEntryFrom(r))
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Jahr != out[j].Jahr {
+			return out[i].Jahr < out[j].Jahr
+		}
+		return natLess(out[i].Mitgliedsnr, out[j].Mitgliedsnr)
 	})
 	return out
 }

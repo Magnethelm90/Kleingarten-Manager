@@ -536,6 +536,9 @@ type stateResp struct {
 	// SicherungFehler: Hinweistext, falls die jüngste Sicherung beschädigt ist (leer = alles gut).
 	SicherungFehler string `json:"sicherungFehler,omitempty"`
 	TutorialGesehen bool   `json:"tutorialGesehen"`
+	// OffeneVorjahre: noch nicht (voll) bezahlte, gültige Rechnungen aus allen anderen Jahren als dem
+	// angezeigten, damit sie nach einem Jahreswechsel nicht aus dem Blick geraten.
+	OffeneVorjahre []archiveEntry `json:"offeneVorjahre"`
 }
 
 func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
@@ -574,6 +577,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	}
 	res.SicherungFehler = a.st.pruefeSicherung()
 	res.TutorialGesehen = a.st.d.TutorialGesehen
+	res.OffeneVorjahre = a.st.offeneAndererJahreLocked(year)
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
 	a.st.mu.Unlock()

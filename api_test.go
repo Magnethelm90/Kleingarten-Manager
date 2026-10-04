@@ -1742,3 +1742,45 @@ func TestTutorialWirdEinmalGemerkt(t *testing.T) {
 		t.Errorf("zweiter Aufruf: %d", rec.Code)
 	}
 }
+
+// Nach dem Jahreswechsel dürfen offene Rechnungen des Vorjahres nicht aus dem Blick geraten.
+func TestOffeneVorjahresRechnungenImState(t *testing.T) {
+	app, h := newTestApp(t)
+	mk := func(nr string) string {
+		return decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": nr, "name": "P" + nr, "gartengroesse": 300})).ID
+	}
+	a, b := mk("1"), mk("2")
+	abl := Ablesung{WasserVJ: fp(100), WasserAkt: fp(150), StromVJ: fp(2000), StromAkt: fp(2200), Stunden: fp(20)}
+	do(h, "PUT", "/api/ablesung/"+a+"?year=2025", abl)
+	do(h, "PUT", "/api/ablesung/"+b+"?year=2025", abl)
+	do(h, "POST", "/api/invoices/issue?year=2025", issueReq{})
+
+	// eine Rechnung wird bezahlt, eine bleibt offen
+	state := decode[struct {
+		Archive []archiveEntry `json:"archive"`
+	}](t, do(h, "GET", "/api/state?year=2025", nil))
+	if len(state.Archive) != 2 {
+		t.Fatalf("Archiv: %d", len(state.Archive))
+	}
+	if rec := do(h, "PUT", "/api/payment/"+state.Archive[0].ID, map[string]any{"bezahltAm": "2026-01-20"}); rec.Code != 200 {
+		t.Fatalf("Zahlung: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(h, "POST", "/api/admin/jahreswechsel", nil); rec.Code != 200 {
+		t.Fatalf("Jahreswechsel: %d %s", rec.Code, rec.Body)
+	}
+
+	type stateT struct {
+		Year           int            `json:"year"`
+		OffeneVorjahre []archiveEntry `json:"offeneVorjahre"`
+	}
+	neu := decode[stateT](t, do(h, "GET", "/api/state", nil))
+	if neu.Year != 2026 || len(neu.OffeneVorjahre) != 1 || neu.OffeneVorjahre[0].Jahr != 2025 || neu.OffeneVorjahre[0].ID != state.Archive[1].ID {
+		t.Errorf("genau die unbezahlte Rechnung von 2025 erwartet, bekommen: %+v", neu)
+	}
+	// im Vorjahr selbst steht sie im Archiv, nicht doppelt in der Vorjahresliste
+	alt := decode[stateT](t, do(h, "GET", "/api/state?year=2025", nil))
+	if len(alt.OffeneVorjahre) != 0 {
+		t.Errorf("im Jahr 2025 selbst darf die Liste der anderen Jahre nichts enthalten: %+v", alt.OffeneVorjahre)
+	}
+	_ = app
+}
