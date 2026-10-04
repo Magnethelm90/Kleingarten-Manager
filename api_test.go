@@ -1784,3 +1784,32 @@ func TestOffeneVorjahresRechnungenImState(t *testing.T) {
 	}
 	_ = app
 }
+
+func TestIBANPruefung(t *testing.T) {
+	for iban, want := range map[string]bool{
+		"DE89 3704 0044 0532 0130 00": true,
+		"de89370400440532013000":      true,
+		"DE89 3704 0044 0532 0130 01": false,
+		"DE00 0000 0000 0000 0000 00": false,
+		"":                            false,
+		"DE89":                        false,
+	} {
+		if ibanGueltig(iban) != want {
+			t.Errorf("ibanGueltig(%q) != %v", iban, want)
+		}
+	}
+	cur := Settings{IBAN: "DE00 0000 0000 0000 0000 00"}
+	in := cur
+	in.VereinName, in.Rechnungsdatum, in.Zahlungsziel = "V", "2026-01-01", "2026-02-01"
+	if _, err := cleanSettings(in, cur); err != nil {
+		t.Errorf("unveränderter Platzhalter darf nicht blockieren: %v", err)
+	}
+	in.IBAN = "DE89 3704 0044 0532 0130 01"
+	if _, err := cleanSettings(in, cur); err == nil {
+		t.Error("falsche IBAN wurde akzeptiert")
+	}
+	in.IBAN = "DE89 3704 0044 0532 0130 00"
+	if _, err := cleanSettings(in, cur); err != nil {
+		t.Errorf("gültige IBAN abgelehnt: %v", err)
+	}
+}
