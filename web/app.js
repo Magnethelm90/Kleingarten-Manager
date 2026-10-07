@@ -1899,6 +1899,13 @@ function adminKassenbericht(pruefMode) {
     h('tbody', null,
       diffRow('Wasser', k.wasserVerbrauch, vW3, 'm³'), diffRow('Wasser (€)', k.summen.kostenWasser, vWE, '€'),
       diffRow('Strom', k.stromVerbrauch, vSK, 'kWh'), diffRow('Strom (€)', k.summen.kostenEnergie, vSE, '€')));
+  // Wasser: liegt der Hauptzähler deutlich über der Summe der Pächter, kann eine Leitung undicht sein
+  const wasserHaupt = parseNum(vW3.value);
+  const wasserLoch = wasserHaupt != null && !Number.isNaN(wasserHaupt) && wasserHaupt > 0 ? wasserHaupt - k.wasserVerbrauch : 0;
+  const verlustHinweis = wasserLoch > 0 && wasserLoch / wasserHaupt > 0.15
+    ? h('div', { class: 'banner warn', style: 'margin-top:10px' },
+      `Wasser: Der Hauptzähler zeigt ${nfFlex.format(Math.round(wasserLoch * 100) / 100)} m³ (${Math.round(wasserLoch / wasserHaupt * 100)} %) mehr, als die Pächter zusammen verbraucht haben. Das kann auf eine undichte Leitung oder einen falsch abgelesenen Zähler hindeuten.`)
+    : null;
   const saveVersorger = async () => {
     const vals = [vW3, vWE, vSK, vSE].map((i) => parseNum(i.value));
     if (vals.some((v) => Number.isNaN(v) || (v !== null && v < 0))) { toast('Bitte nur Zahlen ab 0 eingeben.', 'err'); return; }
@@ -1932,7 +1939,7 @@ function adminKassenbericht(pruefMode) {
     h('h3', null, 'Vergleich mit dem Versorger'),
     h('div', { class: 'card' },
       h('p', { class: 'hint' }, 'Trage hier die Werte der Hauptzähler bzw. der Versorgerrechnung ein, um sie mit der Summe der Pächterabrechnung zu vergleichen. Eine größere Abweichung kann auf einen Zählerfehler, Schwund oder eine falsche Ablesung hindeuten.'),
-      h('div', { class: 'tablewrap' }, versorgerTable),
+      h('div', { class: 'tablewrap' }, versorgerTable), verlustHinweis,
       pruefMode ? null : h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: saveVersorger }, 'Werte speichern'))),
     h('div', { class: 'actions', style: 'margin-top:16px;margin-bottom:22px' },
       h('a', { class: 'btn', href: `/api/admin/export-kassenbericht?year=${S.kasseYear}` }, `Kassenbericht ${S.kasseYear} als Excel`)),
