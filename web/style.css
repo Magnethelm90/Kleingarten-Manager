@@ -300,3 +300,6 @@ td.diffwarn { color: var(--err); font-weight: 600; }
 .zoom { white-space: nowrap; }
 .zoombtn { border: 1px solid var(--line); background: #fff; border-radius: 5px; padding: 1px 8px; font: inherit; font-size: 12px; cursor: pointer; color: var(--text); }
 .zoombtn:disabled { opacity: .4; cursor: default; }
+
+/* Haken stehen auf Höhe der Beschriftung */
+input[type=checkbox] { vertical-align: middle; margin: 0 4px 2px 0; }
