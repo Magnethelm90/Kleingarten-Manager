@@ -31,6 +31,8 @@ Cloud-Anbindung.
 - **Schnelleingabe:** Nummer eintippen, Stammdaten und Vorjahresstände erscheinen automatisch, nur neue Zählerstände eingeben
 - **Ablesebogen:** Liste aller Gärten mit Zählernummern, Vorjahresständen und leeren Feldern zum Ausdrucken für den
   Ablese-Rundgang (A4 quer, nach Gartennummer sortiert)
+- **Pächterliste:** Garten, Name, Anschrift, Größe, Versandart und Zähler aller Pächter als PDF zum Ausdrucken (nur mit
+  Admin-Zugang, Admin → Pächter)
 - **Rechnungen:** PDF pro Pächter oder alle auf einmal, ausgestellte Rechnungen werden mit den damaligen Werten
   festgeschrieben und archiviert (spätere Änderungen verändern sie nicht); das Archiv lässt sich auch über alle
   Jahre hinweg durchsuchen (z. B. „wann wurde dieser Pächter zuletzt abgerechnet“)
@@ -118,7 +120,7 @@ Die Daten liegen im selben Ordner:
 | `kleingarten-manager-daten.json` | alle Daten (Pächter, Zählerstände, Rechnungsarchiv, Zahlungen) |
 | `Rechnungen/<Jahr>/` | fertige PDF-Rechnungen |
 | `Sicherungen/` | automatische Tages- und Ereignissicherungen |
-| `Druck/` | kurzlebige Druckdateien (Sammel-PDF, Ablesebogen), wird beim Start und beim Löschen von Personen geleert |
+| `Druck/` | kurzlebige Druckdateien (Sammel-PDF, Ablesebogen, Pächterliste), wird beim Start und beim Löschen von Personen geleert |
 
 ### macOS
 

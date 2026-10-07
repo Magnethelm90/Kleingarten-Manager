@@ -1474,11 +1474,19 @@ function adminPaechter() {
     h('div', { class: 'toolbar' },
       h('button', { class: 'btn primary', onclick: async () => { if (await paechterDialog(null)) await reload(); } }, '+ Pächter anlegen'),
       h('input', { type: 'search', placeholder: 'Suchen', value: S.filter, style: 'width:220px', oninput: (e) => { S.filter = e.target.value; fill(); } }),
-      h('span', { class: 'stat' }, `${list.length} Pächter`)),
+      h('span', { class: 'stat' }, `${list.length} Pächter`),
+      h('div', { class: 'spacer' }),
+      h('button', { class: 'btn', title: 'Liste aller Pächter mit Anschrift als PDF zum Ausdrucken', onclick: paechterlisteDrucken }, 'Pächterliste drucken')),
     h('div', { class: 'tablewrap' }, h('table', null,
       h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Größe', 'Umlage', 'Wasserzähler', 'Stromzähler', ''].map((x) => h('th', null, x)))), tbody)),
     papierkorbCard());
 }
+
+// Pächterliste (Garten, Name, Anschrift, Größe, Versandart, Zähler) zum Ausdrucken.
+const paechterlisteDrucken = () => pdfDrucken({
+  url: '/api/admin/paechterliste', oeffnenUrl: '/api/admin/paechterliste/oeffnen',
+  titel: 'Pächterliste', meldung: () => 'Die Pächterliste wurde im PDF-Programm geöffnet – dort drucken.',
+});
 
 function auskunftLink(p) {
   return h('a', { class: 'btn small', href: `/api/admin/paechter/${p.id}/auskunft`,
