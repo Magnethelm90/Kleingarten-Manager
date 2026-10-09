@@ -41,7 +41,7 @@ jobs:
           CGO_ENABLED: "1"
         shell: bash
         run: go build -trimpath -ldflags "-s -w -H windowsgui -X main.appVersion=${GITHUB_REF_NAME#v}" -o Kleingarten-Manager.exe .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: windows-exe
           path: Kleingarten-Manager.exe
@@ -88,7 +88,7 @@ jobs:
           </dict></plist>
           EOF
           zip -r -y Kleingarten-Manager-mac.zip "$APP"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: macos-zip
           path: Kleingarten-Manager-mac.zip

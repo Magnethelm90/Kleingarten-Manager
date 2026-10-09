@@ -44,7 +44,7 @@ jobs:
           CGO_ENABLED: "1"
         shell: bash
         run: go build -trimpath -ldflags "-s -w -H windowsgui" -o Kleingarten-Manager.exe .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: Kleingarten-Manager
           path: Kleingarten-Manager.exe
