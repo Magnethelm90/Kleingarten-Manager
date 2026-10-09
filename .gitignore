@@ -1,6 +1,10 @@
 # Programmdaten (enthalten personenbezogene Daten - niemals einchecken)
 gartenabrechnung-daten.json
 gartenabrechnung-daten.json.tmp
+kleingarten-manager-daten.json
+kleingarten-manager-daten.json.tmp
+Belege/
+Druck/
 Rechnungen/
 Sicherungen/
 *.pdf
@@ -10,4 +14,5 @@ Sicherungen/
 # Build-Ergebnisse
 *.exe
 /gartenabrechnung
+/kleingarten-manager
 /vendor/

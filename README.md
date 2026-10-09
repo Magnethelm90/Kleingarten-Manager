@@ -6,14 +6,22 @@ Kassenprüfer-Zugang, Mahnungen und mehr – daher der Name: es ist inzwischen m
 (früher hieß das Programm „Gartenabrechnung“).
 
 Unter Windows ist das Programm eine einzelne `.exe` ohne Installation, unter macOS eine normale `.app` zum
-Reinziehen in den Programme-Ordner. Es startet einen kleinen Webserver, der **nur auf dem eigenen Rechner**
-(`127.0.0.1`) lauscht, und öffnet die Oberfläche im Browser. Es werden keine Daten ins Internet gesendet, es
-gibt keine Konten, Schlüssel oder Cloud-Anbindung.
+Reinziehen in den Programme-Ordner. Es läuft in einem eigenen Programmfenster (kein Browser-Tab, keine
+Adressleiste) und startet dafür im Hintergrund einen kleinen Webserver, der **nur auf dem eigenen Rechner**
+(`127.0.0.1`) lauscht. Es werden keine Daten ins Internet gesendet, es gibt keine Konten, Schlüssel oder
+Cloud-Anbindung.
 
 ## Funktionen
 
 - **Übersicht:** Startseite mit Kennzahlen auf einen Blick – Kassenbestand, offene Rechnungen, unvollständige
   Pächter, Datum der letzten Sicherung
+- **Einführung im Programm:** beim ersten Start führt ein kurzer Rundgang in 5 Schritten durch das Programm (einrichten,
+  Zählerstände, Rechnungen, Zahlungen, Jahresabschluss). Jeder Schritt wechselt selbst zur passenden Stelle und
+  markiert den Reiter; über den runden »?«-Knopf oben rechts lässt er sich jederzeit wieder aufrufen
+- **Datenschutz (DSGVO-Hilfen):** Admin → Datenschutz: Auskunft und Datenkopie je Person als Datei (Art. 15/20),
+  endgültiges Löschen entfernt den Personenbezug auch aus Protokoll, Garten-Historie und allen Sicherungen (Art. 17),
+  nach Ablauf der Aufbewahrungsfrist lassen sich Rechnungen und Jahresunterlagen bereinigen. Vorlagen für
+  Verarbeitungsverzeichnis und Mitgliederinformation: [DATENSCHUTZ.md](DATENSCHUTZ.md)
 - **Globale Suche:** Suchfeld im Kopfbereich, von jeder Seite aus erreichbar – Name, Gartennummer, Mitgliedsnummer
   oder Straße eingeben, springt direkt zur Schnellansicht des passenden Pächters
 - **Admin-Bereich:** Pächter anlegen, ändern, löschen (Nummer, Name, Anschrift, Gartengröße, Umlage, Zählernummern),
@@ -21,9 +29,16 @@ gibt keine Konten, Schlüssel oder Cloud-Anbindung.
   Gelöschte Pächter landen im Papierkorb (Zählerstände und Rechnungen bleiben erhalten) und lassen sich
   wiederherstellen oder endgültig entfernen
 - **Schnelleingabe:** Nummer eintippen, Stammdaten und Vorjahresstände erscheinen automatisch, nur neue Zählerstände eingeben
+- **Ablesebogen:** Liste aller Gärten mit Zählernummern, Vorjahresständen und leeren Feldern zum Ausdrucken für den
+  Ablese-Rundgang (A4 quer, nach Gartennummer sortiert)
+- **Pächterliste:** Garten, Name, Anschrift, Größe, Versandart und Zähler aller Pächter als PDF zum Ausdrucken (nur mit
+  Admin-Zugang, Admin → Pächter)
 - **Rechnungen:** PDF pro Pächter oder alle auf einmal, ausgestellte Rechnungen werden mit den damaligen Werten
   festgeschrieben und archiviert (spätere Änderungen verändern sie nicht); das Archiv lässt sich auch über alle
   Jahre hinweg durchsuchen (z. B. „wann wurde dieser Pächter zuletzt abgerechnet“)
+- **Drucken für den Postversand:** »Postversand drucken« fasst alle ausgestellten Rechnungen mit Versandart Postversand
+  in einer PDF-Datei zusammen (nach Mitgliedsnummer sortiert, jede Seite mit ihrem eigenen GiroCode); im Programmfenster
+  öffnet »Im PDF-Programm öffnen« die Rechnung bzw. die Sammeldatei im PDF-Programm des Rechners
 - **Zahlungen:** bezahlt abhaken (mit Datum), Teilzahlungen, Liste der offenen Posten, Excel-Export
 - **GiroCode auf der Rechnung:** QR-Code zum Bezahlen, die Banking-App füllt IBAN, Betrag und Verwendungszweck
   automatisch aus
@@ -67,6 +82,10 @@ gibt keine Konten, Schlüssel oder Cloud-Anbindung.
   dem Vorjahr direkt mit an (Betrag und Prozent)
 - **Gartengröße im Änderungsprotokoll:** wird die Gartengröße eines Pächters geändert (z. B. bei Teilung oder
   Zusammenlegung), steht die alte und neue Größe im Änderungsprotokoll
+- **Sicherung wiederherstellen** (Admin → Import / Export / Sicherung): Liste der vorhandenen Sicherungen mit Stand,
+  Pächter- und Rechnungszahl; eine Auswahl wird eingespielt, der heutige Stand bleibt vorher als eigene Sicherung erhalten
+  (also rückgängig machbar). Beschädigte Sicherungen oder solche aus einer neueren Programmversion werden gekennzeichnet
+  und nicht eingespielt
 - **Sicherungs-Integritätsprüfung:** die jüngste Sicherung wird beim Öffnen probeweise eingelesen; ist sie
   beschädigt (z. B. durch einen Festplattenfehler), erscheint sofort ein Warnhinweis statt eines bösen Erwachens
   im Ernstfall
@@ -90,7 +109,10 @@ Alle Namen, Adressen und die Bankverbindung in den Voreinstellungen sind Platzha
 
 ### Windows
 
-`Kleingarten-Manager.exe` in einen eigenen Ordner legen und doppelklicken. Das Konsolenfenster offen lassen.
+`Kleingarten-Manager.exe` in einen eigenen Ordner legen und doppelklicken. Es öffnet sich ein eigenes
+Programmfenster (kein Konsolenfenster, kein Browser). Windows 10/11 bringt die dafür nötige
+WebView2-Komponente serienmäßig mit (Teil von Microsoft Edge); auf sehr alten oder stark abgespeckten
+Windows-Installationen installiert Windows Update sie bei Bedarf automatisch nach.
 Die Daten liegen im selben Ordner:
 
 | Datei / Ordner | Inhalt |
@@ -98,6 +120,7 @@ Die Daten liegen im selben Ordner:
 | `kleingarten-manager-daten.json` | alle Daten (Pächter, Zählerstände, Rechnungsarchiv, Zahlungen) |
 | `Rechnungen/<Jahr>/` | fertige PDF-Rechnungen |
 | `Sicherungen/` | automatische Tages- und Ereignissicherungen |
+| `Druck/` | kurzlebige Druckdateien (Sammel-PDF, Ablesebogen, Pächterliste), wird beim Start und beim Löschen von Personen geleert |
 
 ### macOS
 
@@ -109,38 +132,44 @@ die App → „Öffnen" → im Dialog nochmal „Öffnen" bestätigen. Danach st
 Da der Programme-Ordner nicht beschreibbar ist, legt die App ihre Daten unter
 `~/Library/Application Support/Kleingarten-Manager/` an (gleiche Dateien wie oben).
 
-Beide Systeme: Optionen `--data <Ordner>`, `--port <Zahl>`, `--no-browser`, `--reset-admin` (Admin-Passwort entfernen).
+Beide Systeme: Optionen `--data <Ordner>`, `--port <Zahl>`, `--reset-admin` (Admin-Passwort entfernen) und
+`--no-browser` (kein eigenes Fenster, läuft nur noch als Server im Hintergrund – für Admins, die lieber
+selbst im Browser auf `http://127.0.0.1:<Port>/` zugreifen).
 
 **Update von „Gartenabrechnung“:** eine vorhandene `gartenabrechnung-daten.json` wird beim ersten Start
 automatisch in `kleingarten-manager-daten.json` umbenannt, es ist nichts von Hand zu tun.
 
 ## Selbst bauen
 
-Benötigt [Go](https://go.dev/dl/) 1.24 oder neuer.
+Benötigt [Go](https://go.dev/dl/) 1.24 oder neuer. Das Programmfenster (Paket `webview/webview_go`) nutzt
+CGO und braucht deshalb einen C-Compiler – und jeweils das Betriebssystem selbst, da sich GUI-Code mit CGO
+nicht cross-kompilieren lässt wie reines Go. Windows-Builds laufen daher unter Windows, macOS-Builds unter
+macOS.
 
 Bei jedem Push auf `main` und jedem Pull Request prüft GitHub Actions Formatierung, `go vet` und die Tests
-und baut die `Kleingarten-Manager.exe`. Sie liegt beim jeweiligen Lauf unter »Artifacts« zum Herunterladen.
+(Linux) und baut Windows- und macOS-Programm (auf `windows-latest` bzw. `macos-latest`). Sie liegen beim
+jeweiligen Lauf unter »Artifacts« zum Herunterladen.
 
-Neue Version veröffentlichen: `git tag v1.1 && git push origin v1.1`. GitHub baut dann die `.exe` mit dieser
-Versionsnummer und stellt sie unter »Releases« zum Download bereit.
+Neue Version veröffentlichen: `git tag v1.1 && git push origin v1.1`. GitHub baut dann `.exe` und `.app` mit
+dieser Versionsnummer und stellt sie unter »Releases« zum Download bereit.
 
-```
-go test ./...
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager.exe .
-```
-
-Unter Windows (PowerShell):
+Unter Windows (PowerShell, benötigt einen C-Compiler, z. B. [MSYS2/MinGW](https://www.msys2.org/)):
 
 ```
 go test ./...
-go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager.exe .
+go build -trimpath -ldflags "-s -w -H windowsgui" -o Kleingarten-Manager.exe .
 ```
 
-macOS-Build (als `.app`, läuft ohne Installation von Zusatzsoftware):
+`-H windowsgui` unterdrückt das Konsolenfenster; zum Testen/Debuggen lässt es sich weglassen, dann bleibt
+zusätzlich ein Konsolenfenster mit den Log-Ausgaben offen.
+
+macOS-Build (als `.app`, läuft ohne Installation von Zusatzsoftware – Apple Silicon und Intel aus einem
+Lauf, da der mitgelieferte `clang` beide Architekturen beherrscht):
 
 ```
-GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager-arm64 .
-GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o Kleingarten-Manager-amd64 .
+VERSION=1.1
+CGO_ENABLED=1 GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-arm64 .
+CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64" go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-amd64 .
 # beide Binaries in Kleingarten-Manager.app/Contents/MacOS/ legen, Startskript wählt per `uname -m` die passende aus
 ```
 

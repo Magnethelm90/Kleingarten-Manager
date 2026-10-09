@@ -53,6 +53,7 @@ func openStore(dir string) (*Store, error) {
 	_ = os.Remove(probe)
 
 	s := &Store{dir: dir, path: filepath.Join(dir, dataFileName)}
+	s.leereDruckOrdner() // übrig gebliebene Druckdateien mit Namen und Anschriften aus einem früheren Start
 	// Umstieg von der alten Datendatei (vor der Umbenennung): einmalig übernehmen,
 	// falls noch keine neue Datei existiert.
 	if _, err := os.Stat(s.path); errors.Is(err, os.ErrNotExist) {
@@ -71,20 +72,14 @@ func openStore(dir string) (*Store, error) {
 	case err != nil:
 		return nil, err
 	default:
-		var d Data
-		if err := json.Unmarshal(raw, &d); err != nil {
-			return nil, fmt.Errorf("Datendatei %s ist beschädigt (%v). Bitte eine Sicherung aus dem Ordner »Sicherungen« zurückkopieren", s.path, err)
+		d, err := parseDaten(raw)
+		switch {
+		case errors.Is(err, errNeuereVersion):
+			return nil, fmt.Errorf("Die Datendatei %s stammt aus einer neueren Programmversion. Bitte den %s auf die neueste Version aktualisieren, sonst gehen Angaben verloren", s.path, appName)
+		case err != nil:
+			return nil, fmt.Errorf("Datendatei %s ist beschädigt (%v). Bitte eine Sicherung aus dem Ordner »Sicherungen« zurückkopieren oder im Programm unter Admin → Import / Export / Sicherung wiederherstellen", s.path, err)
 		}
-		if d.Jahre == nil {
-			d.Jahre = map[string]*Jahr{}
-		}
-		if d.Paechter == nil {
-			d.Paechter = []Paechter{}
-		}
-		if d.Rechnungen == nil {
-			d.Rechnungen = []*Rechnung{}
-		}
-		s.d = &d
+		s.d = d
 		s.ensureYear(d.Settings.Jahr)
 		if s.migriereBelege() {
 			if err := s.saveLocked(); err != nil {
@@ -93,6 +88,31 @@ func openStore(dir string) (*Store, error) {
 		}
 	}
 	return s, nil
+}
+
+var errNeuereVersion = errors.New("Datenversion zu neu")
+
+// parseDaten liest eine Datendatei oder Sicherung und stellt sicher, dass die Pflichtfelder vorhanden sind.
+// Dateien einer neueren Datenversion werden abgelehnt, weil beim Zurückschreiben unbekannte Felder
+// verloren gingen.
+func parseDaten(raw []byte) (*Data, error) {
+	var d Data
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return nil, err
+	}
+	if d.Version > datenVersion {
+		return nil, errNeuereVersion
+	}
+	if d.Jahre == nil {
+		d.Jahre = map[string]*Jahr{}
+	}
+	if d.Paechter == nil {
+		d.Paechter = []Paechter{}
+	}
+	if d.Rechnungen == nil {
+		d.Rechnungen = []*Rechnung{}
+	}
+	return &d, nil
 }
 
 // migriereBelege überführt das alte einzelne Beleg-Feld (vor Mehrfach-Belegen)
@@ -134,11 +154,39 @@ func (s *Store) saveLocked() error {
 		return err
 	}
 	s.dailyBackup()
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+	return schreibeAtomar(s.path, raw, 0o600)
+}
+
+// schreibeAtomar schreibt eine Datei so, dass nach einem Absturz oder Stromausfall entweder der alte
+// oder der neue Inhalt vorliegt, nie eine halb geschriebene oder leere Datei: erst in eine temporäre
+// Datei schreiben, auf den Datenträger zwingen (fsync), dann umbenennen.
+func schreibeAtomar(path string, data []byte, perm os.FileMode) error {
+	tmp := path + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	_, werr := f.Write(data)
+	if werr == nil {
+		werr = f.Sync()
+	}
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		_ = os.Remove(tmp)
+		return werr
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	// auch den Ordnereintrag sichern (unter Windows nicht möglich, dort ohne Wirkung)
+	if d, err := os.Open(filepath.Dir(path)); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
+	return nil
 }
 
 func (s *Store) backupDir() string { return filepath.Join(s.dir, "Sicherungen") }

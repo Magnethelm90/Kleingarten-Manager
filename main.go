@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -8,10 +9,12 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -33,6 +36,24 @@ func openBrowser(url string) {
 	if err := cmd.Start(); err == nil {
 		go func() { _ = cmd.Wait() }()
 	}
+}
+
+// externalURLAllowed legt fest, welche Adressen aus dem Programmfenster heraus
+// im Systembrowser geöffnet werden dürfen: nur die eigene GitHub-Projektseite
+// (Release-Link der Update-Prüfung). Alles andere wird abgelehnt, damit die
+// Brücke vom Fenster zum Betriebssystem nicht für beliebige Adressen oder
+// Protokolle (file:, ms-…:, Programmaufrufe) missbraucht werden kann.
+func externalURLAllowed(raw string) bool {
+	if !strings.HasPrefix(raw, repoURLBase) {
+		return false
+	}
+	for _, c := range raw {
+		if c < 0x21 || c == 0x7f || c == '"' || c == '\\' {
+			return false
+		}
+	}
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "https" && u.Host == "github.com" && u.User == nil
 }
 
 // dataDir bestimmt, wo die Daten liegen: neben der .exe, sonst im Benutzerordner.
@@ -89,10 +110,7 @@ func main() {
 	dir := dataDir(*dirFlag)
 	st, err := openStore(dir)
 	if err != nil {
-		fmt.Println("FEHLER:", err)
-		fmt.Println("Zum Beenden eine Taste druecken ...")
-		_, _ = fmt.Scanln()
-		os.Exit(1)
+		fail(err.Error())
 	}
 	if *resetAdmin {
 		st.mu.Lock()
@@ -100,8 +118,7 @@ func main() {
 		err := st.saveLocked()
 		st.mu.Unlock()
 		if err != nil {
-			fmt.Println("FEHLER:", err)
-			os.Exit(1)
+			fail(err.Error())
 		}
 		fmt.Println("Das Admin-Passwort wurde entfernt.")
 		return
@@ -110,16 +127,13 @@ func main() {
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
 	if err != nil {
 		if alreadyRunning(*port) {
-			fmt.Println(appName, "laeuft bereits - oeffne den Browser.")
-			if !*noBrowser {
-				openBrowser(fmt.Sprintf("http://127.0.0.1:%d/", *port))
-			}
+			fmt.Println(appName, "laeuft bereits - oeffne das Fenster.")
+			openStart(fmt.Sprintf("http://127.0.0.1:%d/", *port), *noBrowser)
 			return
 		}
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
-			fmt.Println("FEHLER: kein freier Port:", err)
-			os.Exit(1)
+			fail("Kein freier Port gefunden: " + err.Error())
 		}
 	}
 	actual := ln.Addr().(*net.TCPAddr).Port
@@ -145,21 +159,54 @@ func main() {
 	fmt.Println("==============================================================")
 	fmt.Println(" "+appName, appVersion, "- Copyright (c)", time.Now().Year(), appAutor)
 	fmt.Println("==============================================================")
-	fmt.Println(" Das Programm laeuft. Dieses Fenster bitte offen lassen.")
-	fmt.Println(" Adresse im Browser:", url)
-	fmt.Println(" Daten liegen in:   ", dir)
-	fmt.Println()
-	fmt.Println(" Beenden: im Programm oben rechts auf \"Beenden\" klicken")
-	fmt.Println(" oder dieses Fenster schliessen.")
+	fmt.Println(" Daten liegen in:", dir)
+	fmt.Println(" Adresse:        ", url)
+	if *noBrowser || !hasNativeWindow {
+		fmt.Println(" Das Programm laeuft. Dieses Fenster bitte offen lassen.")
+		fmt.Println(" Beenden: im Programm oben rechts auf \"Beenden\" klicken")
+		fmt.Println(" oder dieses Fenster schliessen.")
+	}
 	fmt.Println("==============================================================")
-	if !*noBrowser {
-		go func() {
-			time.Sleep(300 * time.Millisecond)
-			openBrowser(url)
-		}()
+
+	go func() {
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+			fail(err.Error())
+		}
+	}()
+
+	openStart(url, *noBrowser)
+	if hasNativeWindow && !*noBrowser {
+		// Fenster geschlossen: laufende Vorgänge (z. B. Rechnungen ausstellen) noch zu Ende führen lassen
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
 	}
-	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-		fmt.Println("FEHLER:", err)
-		os.Exit(1)
+	// Läuft das Programm als eigenes Fenster, endet es, sobald das Fenster
+	// geschlossen wird. Sonst (Browser oder --no-browser) läuft der Server
+	// im Vordergrund weiter, bis das Programm über /api/quit beendet wird.
+	if *noBrowser || !hasNativeWindow {
+		select {}
 	}
+}
+
+// openStart öffnet die Oberfläche: als eigenes Programmfenster, wenn die
+// Plattform das unterstützt (Windows/macOS), sonst im Standardbrowser.
+func openStart(url string, noBrowser bool) {
+	if noBrowser {
+		return
+	}
+	if hasNativeWindow {
+		runNativeWindow(url)
+		return
+	}
+	openBrowser(url)
+}
+
+// fail meldet einen Startfehler (Konsole, bei Windows zusätzlich als
+// Meldungsfenster, da das Programmfenster keine sichtbare Konsole mehr hat)
+// und beendet das Programm.
+func fail(msg string) {
+	fmt.Println("FEHLER:", msg)
+	fatalBox(msg)
+	os.Exit(1)
 }

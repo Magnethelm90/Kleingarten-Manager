@@ -24,7 +24,7 @@ import (
 )
 
 // appVersion wird beim Release-Build über -ldflags "-X main.appVersion=..." gesetzt.
-var appVersion = "1.0"
+var appVersion = "1.1"
 
 // appAutor erscheint in der Fußzeile der Oberfläche und im Konsolenfenster.
 const appAutor = "Derek"
@@ -37,7 +37,7 @@ const (
 	appName     = "Kleingarten-Manager"
 	appID       = "kleingarten-manager"
 	repoOwner   = "Magnethelm90"
-	repoName    = "kleingarten-manager"
+	repoName    = "Kleingarten-Manager"
 	repoURLBase = "https://github.com/" + repoOwner + "/" + repoName + "/"
 )
 
@@ -145,7 +145,7 @@ func (a *App) guard(next http.Handler) http.Handler {
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
 		if !strings.HasSuffix(r.URL.Path, ".pdf") {
-			h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-src 'self'; object-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'")
+			h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-src 'self' blob:; object-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'")
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -535,6 +535,10 @@ type stateResp struct {
 	LetzteSicherung string `json:"letzteSicherung,omitempty"`
 	// SicherungFehler: Hinweistext, falls die jüngste Sicherung beschädigt ist (leer = alles gut).
 	SicherungFehler string `json:"sicherungFehler,omitempty"`
+	TutorialGesehen bool   `json:"tutorialGesehen"`
+	// OffeneVorjahre: noch nicht (voll) bezahlte, gültige Rechnungen aus allen anderen Jahren als dem
+	// angezeigten, damit sie nach einem Jahreswechsel nicht aus dem Blick geraten.
+	OffeneVorjahre []archiveEntry `json:"offeneVorjahre"`
 }
 
 func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
@@ -572,6 +576,8 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		res.LetzteSicherung = t.Format("2006-01-02")
 	}
 	res.SicherungFehler = a.st.pruefeSicherung()
+	res.TutorialGesehen = a.st.d.TutorialGesehen
+	res.OffeneVorjahre = a.st.offeneAndererJahreLocked(year)
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
 	a.st.mu.Unlock()
@@ -737,6 +743,9 @@ func cleanPaechter(p Paechter) (Paechter, error) {
 	if !validNum(p.Gartengroesse) {
 		return p, bad("Die Gartengröße muss eine Zahl ab 0 sein")
 	}
+	if p.Gartengroesse > 10000 {
+		return p, bad("Die Gartengröße ist unwahrscheinlich groß (mehr als 10.000 m²). Bitte prüfen.")
+	}
 	if p.UmlageAbweichend != nil && !validNum(*p.UmlageAbweichend) {
 		return p, bad("Die Umlage muss eine Zahl ab 0 sein")
 	}
@@ -890,10 +899,12 @@ func (a *App) handlePaechterWiederherstellen(w http.ResponseWriter, r *http.Requ
 	writeErr(w, notFound("Nicht im Papierkorb gefunden"))
 }
 
-// handlePaechterEndgueltig entfernt einen Pächter aus dem Papierkorb endgültig
-// (nur möglich, solange er im Papierkorb ist). Zählerstände des laufenden
-// Jahres gehen dabei verloren, abgeschlossene Jahre und das Rechnungsarchiv
-// bleiben unverändert.
+// handlePaechterEndgueltig löscht einen Pächter aus dem Papierkorb endgültig und entfernt
+// seinen Personenbezug (Art. 17 DSGVO): Stammdaten, offene Zählerstände, Notizen sowie Namen
+// in Garten-Historie, Änderungsprotokoll und allen Sicherungen. Rechnungen und die
+// Jahresunterlagen abgeschlossener Jahre bleiben bis zum Ablauf der Aufbewahrungsfrist
+// bestehen und verlieren ihren Personenbezug erst danach (Datenschutz → Bereinigen).
+// Bewusst keine Sicherung vor dem Löschen: sie würde die Daten wieder enthalten.
 func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	a.st.mu.Lock()
@@ -906,19 +917,16 @@ func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, bad("Nur Pächter im Papierkorb können endgültig gelöscht werden"))
 			return
 		}
-		a.st.snapshotBackup("vor-endgueltigem-Loeschen")
-		a.st.audit("Pächter endgültig gelöscht: %s %s", a.st.d.Paechter[i].Mitgliedsnr, a.st.d.Paechter[i].Name)
-		a.st.d.Paechter = append(a.st.d.Paechter[:i], a.st.d.Paechter[i+1:]...)
-		for _, j := range a.st.d.Jahre {
-			if !j.Abgeschlossen {
-				delete(j.Ablesungen, id)
-			}
-		}
+		a.st.d.entfernePerson(id)
+		// ohne Namen protokollieren, sonst entstünde die Spur sofort neu
+		a.st.audit("Pächter endgültig gelöscht, Personenbezug entfernt")
 		if err := a.st.saveLocked(); err != nil {
 			writeErr(w, err)
 			return
 		}
-		writeJSON(w, 200, map[string]bool{"ok": true})
+		a.st.leereDruckOrdner() // abgeleitete Druckdateien (z. B. Sammel-PDF) enthalten den Namen noch
+		sicherungen := a.st.bereinigeSicherungen(func(d *Data) bool { return d.entfernePerson(id) })
+		writeJSON(w, 200, map[string]int{"sicherungenBereinigt": sicherungen})
 		return
 	}
 	writeErr(w, notFound("Pächter nicht gefunden"))
@@ -955,6 +963,10 @@ func cleanSettings(in, cur Settings) (Settings, error) {
 	in.ZweiteSicherung = trim(in.ZweiteSicherung, 250)
 	if in.VereinName == "" {
 		return in, bad("Bitte einen Vereinsnamen eintragen")
+	}
+	// eine neu eingegebene IBAN muss formal stimmen; ein unveränderter (alter) Wert blockiert das Speichern anderer Felder nicht
+	if in.IBAN != "" && in.IBAN != cur.IBAN && !ibanGueltig(in.IBAN) {
+		return in, bad("Die IBAN ist ungültig (Prüfziffer stimmt nicht). Bitte noch einmal prüfen.")
 	}
 	if _, err := parseDate(in.Rechnungsdatum); err != nil {
 		return in, bad("Das Rechnungsdatum ist ungültig")
@@ -1509,6 +1521,22 @@ func (a *App) handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]string{"folder": dir})
 }
 
+// handleTutorial merkt sich, dass der Einführungsrundgang durchlaufen oder
+// übersprungen wurde. Bewusst ohne Admin-Pflicht: die Einführung ist für alle
+// Nutzer gedacht und enthält keine Daten.
+func (a *App) handleTutorial(w http.ResponseWriter, r *http.Request) {
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	if !a.st.d.TutorialGesehen {
+		a.st.d.TutorialGesehen = true
+		if err := a.st.saveLocked(); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
 func (a *App) handleQuit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]bool{"ok": true})
 	go func() {
@@ -1529,6 +1557,13 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("PUT /api/zaehler/{id}", a.handleZaehler)
 	mux.HandleFunc("GET /api/invoice/{id}", a.handleInvoice)
 	mux.HandleFunc("POST /api/invoices/issue", a.handleIssue)
+	mux.HandleFunc("POST /api/open-invoice/{id}", a.handleOpenInvoice)
+	mux.HandleFunc("GET /api/ablesebogen", a.handleAblesebogen)
+	mux.HandleFunc("POST /api/ablesebogen/oeffnen", a.handleAblesebogenOeffnen)
+	mux.HandleFunc("GET /api/admin/rechnungen-druck", a.admin(a.handleDruckPost))
+	mux.HandleFunc("POST /api/admin/rechnungen-druck/oeffnen", a.admin(a.handleDruckPostOeffnen))
+	mux.HandleFunc("GET /api/admin/paechterliste", a.admin(a.handleMitgliederliste))
+	mux.HandleFunc("POST /api/admin/paechterliste/oeffnen", a.admin(a.handleMitgliederlisteOeffnen))
 	mux.HandleFunc("GET /api/archive/{id}", a.handleArchivePDF)
 	mux.HandleFunc("GET /api/archiv-alle", a.handleArchivAlle)
 	mux.HandleFunc("PUT /api/payment/{id}", a.handlePayment)
@@ -1538,6 +1573,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/export", a.handleExport)
 	mux.HandleFunc("POST /api/open-folder", a.handleOpenFolder)
 	mux.HandleFunc("POST /api/quit", a.handleQuit)
+	mux.HandleFunc("POST /api/tutorial", a.handleTutorial)
 
 	mux.HandleFunc("POST /api/admin/login", a.handleLogin)
 	mux.HandleFunc("POST /api/admin/logout", a.handleLogout)
@@ -1550,6 +1586,11 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/admin/paechter/{id}", a.admin(a.handlePaechterDelete))
 	mux.HandleFunc("GET /api/admin/paechter-papierkorb", a.admin(a.handlePaechterPapierkorb))
 	mux.HandleFunc("POST /api/admin/paechter/{id}/wiederherstellen", a.admin(a.handlePaechterWiederherstellen))
+	mux.HandleFunc("GET /api/admin/paechter/{id}/auskunft", a.admin(a.handleAuskunft))
+	mux.HandleFunc("GET /api/admin/sicherungen", a.admin(a.handleSicherungen))
+	mux.HandleFunc("POST /api/admin/sicherungen/wiederherstellen", a.admin(a.handleSicherungWiederherstellen))
+	mux.HandleFunc("GET /api/admin/datenschutz", a.admin(a.handleDatenschutz))
+	mux.HandleFunc("POST /api/admin/datenschutz/bereinigen", a.admin(a.handleBereinigen))
 	mux.HandleFunc("DELETE /api/admin/paechter/{id}/endgueltig", a.admin(a.handlePaechterEndgueltig))
 	mux.HandleFunc("PUT /api/admin/settings", a.admin(a.handleSettings))
 	mux.HandleFunc("POST /api/admin/jahreswechsel", a.admin(a.handleNextYear))

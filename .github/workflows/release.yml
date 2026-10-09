@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,17 +18,48 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./...
       - run: go test ./...
-      - name: Windows-Programm bauen
+
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc
+      - name: MinGW in den Suchpfad aufnehmen
+        shell: bash
+        run: echo "${{ steps.msys2.outputs.msys2-location }}\\mingw64\\bin" >> "$GITHUB_PATH"
+      - name: Windows-Programm bauen (eigenes Fenster, CGO/WebView2)
         env:
-          GOOS: windows
-          GOARCH: amd64
-          CGO_ENABLED: "0"
-        run: go build -trimpath -ldflags "-s -w -X main.appVersion=${GITHUB_REF_NAME#v}" -o Kleingarten-Manager.exe .
-      - name: macOS-Programme bauen (Apple Silicon + Intel)
+          CGO_ENABLED: "1"
+        shell: bash
+        run: go build -trimpath -ldflags "-s -w -H windowsgui -X main.appVersion=${GITHUB_REF_NAME#v}" -o Kleingarten-Manager.exe .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: Kleingarten-Manager.exe
+          if-no-files-found: error
+
+  build-macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: macOS-Programme bauen (Apple Silicon + Intel, eigenes Fenster)
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-arm64 .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-amd64 .
+          CGO_ENABLED=1 GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-arm64 .
+          CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64" go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-amd64 .
       - name: macOS-App bündeln
         run: |
           APP=Kleingarten-Manager.app
@@ -57,6 +88,23 @@ jobs:
           </dict></plist>
           EOF
           zip -r -y Kleingarten-Manager-mac.zip "$APP"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-zip
+          path: Kleingarten-Manager-mac.zip
+          if-no-files-found: error
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-zip
       - name: Release anlegen
         env:
           GH_TOKEN: ${{ github.token }}

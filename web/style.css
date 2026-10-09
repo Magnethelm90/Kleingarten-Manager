@@ -29,9 +29,10 @@ header.top {
   background: var(--green);
   color: #fff;
   display: flex;
+  flex-wrap: wrap; /* reicht der Platz nicht (kleines Fenster, große Schrift), in die nächste Zeile umbrechen */
   align-items: center;
-  gap: 24px;
-  padding: 0 20px;
+  gap: 14px;
+  padding: 0 16px;
   position: sticky;
   top: 0;
   z-index: 20;
@@ -42,7 +43,7 @@ header.top .brand b { font-size: 17px; display: block; line-height: 1.1; }
 header.top .brand span { font-size: 12px; opacity: .85; }
 nav.tabs { display: flex; gap: 2px; align-self: stretch; }
 nav.tabs button {
-  background: none; border: 0; color: #dcebdf; padding: 0 18px; font: inherit; font-size: 15px;
+  background: none; border: 0; color: #dcebdf; padding: 0 12px; font: inherit; font-size: 15px;
   cursor: pointer; border-bottom: 4px solid transparent;
 }
 nav.tabs button:hover { background: rgba(255,255,255,.1); }
@@ -50,7 +51,7 @@ nav.tabs button.active { color: #fff; font-weight: 600; border-bottom-color: #ff
 .top .spacer { flex: 1; }
 .globalsearch { position: relative; }
 .globalsearch .gs-input {
-  width: 220px; padding: 6px 10px; border-radius: 6px; border: 0; font: inherit; background: rgba(255,255,255,.92);
+  width: 170px; padding: 6px 10px; border-radius: 6px; border: 0; font: inherit; background: rgba(255,255,255,.92);
 }
 .globalsearch-results {
   display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
@@ -75,6 +76,7 @@ nav.tabs button.active { color: #fff; font-weight: 600; border-bottom-color: #ff
   padding: 6px 12px; border-radius: 6px; font: inherit; cursor: pointer;
 }
 .top button.quit:hover { background: rgba(255,255,255,.28); }
+.top button.help { padding: 6px 0; width: 34px; font-weight: 700; margin-left: auto; }
 
 main { padding: 18px 20px 60px; max-width: 1700px; margin: 0 auto; }
 h2 { margin: 0 0 12px; font-size: 20px; }
@@ -185,6 +187,9 @@ dialog { border: 0; border-radius: 10px; padding: 0; box-shadow: 0 10px 40px rgb
 dialog::backdrop { background: rgba(20, 30, 22, .5); }
 dialog .dhead { padding: 14px 18px; background: var(--green); color: #fff; font-weight: 600; font-size: 16px; border-radius: 10px 10px 0 0; }
 dialog .dbody { padding: 18px; max-height: 70vh; overflow: auto; }
+dialog.viewer { max-width: min(1000px, 96vw); }
+dialog.viewer .dbody { padding: 0; max-height: none; overflow: hidden; }
+dialog.viewer iframe { display: block; width: 100%; height: 74vh; border: 0; background: #fff; }
 dialog .dfoot { padding: 12px 18px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--line); background: #fafbf8; border-radius: 0 0 10px 10px; }
 
 /* Meldungen */
@@ -198,6 +203,9 @@ dialog .dfoot { padding: 12px 18px; display: flex; gap: 10px; justify-content: f
 .footer { margin-top: 26px; color: var(--muted); font-size: 12px; }
 ul.plain { margin: 6px 0 0; padding-left: 20px; }
 
+@media (max-width: 1350px) {
+  header.top { flex-wrap: wrap; padding: 6px 12px; }
+}
 @media (max-width: 900px) {
   .split { grid-template-columns: 1fr; }
   header.top { flex-wrap: wrap; padding: 6px 12px; gap: 10px; }
@@ -270,3 +278,28 @@ td.diffwarn { color: var(--err); font-weight: 600; }
 .checklist li { padding: 3px 0; }
 .checklist li.ok { color: var(--ok); }
 .checklist li.warn { color: var(--warn); }
+
+/* Einführungsrundgang */
+.tour { position: fixed; right: 20px; bottom: 20px; width: min(390px, calc(100vw - 32px)); z-index: 60;
+  background: var(--card); border-radius: 12px; border-top: 5px solid #ffc83d; padding: 16px 18px 14px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+.tour .tstep { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.tour h3 { margin: 0 0 6px; font-size: 16px; color: var(--green-dark); }
+.tour p { margin: 0 0 14px; line-height: 1.5; }
+.tour .skip { position: absolute; top: 8px; right: 12px; background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
+.tour .skip:hover { color: var(--text); }
+.tour .tfoot { display: flex; align-items: center; gap: 8px; }
+.tour .dots { display: flex; gap: 5px; flex: 1; }
+.tour .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.tour .dots i.on { background: var(--green); }
+.tour-hl { outline: 3px solid #ffc83d !important; outline-offset: 3px; border-radius: 6px; animation: tourpulse 1.4s ease-in-out infinite; }
+@keyframes tourpulse { 0%, 100% { outline-color: #ffc83d; } 50% { outline-color: #fff0b3; } }
+@media (prefers-reduced-motion: reduce) { .tour-hl { animation: none; } }
+
+/* Schriftgröße */
+.zoom { white-space: nowrap; }
+.zoombtn { border: 1px solid var(--line); background: #fff; border-radius: 5px; padding: 1px 8px; font: inherit; font-size: 12px; cursor: pointer; color: var(--text); }
+.zoombtn:disabled { opacity: .4; cursor: default; }
+
+/* Haken stehen auf Höhe der Beschriftung */
+input[type=checkbox] { vertical-align: middle; margin: 0 4px 2px 0; }

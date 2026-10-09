@@ -32,6 +32,33 @@ const (
 	rowH   = 5.1
 )
 
+// adressZeile schreibt eine Zeile des Anschriftenfelds (höchstens 90 mm breit, wie ein Fensterbrief es
+// verlangt). Passt der Text nicht, wird die Schrift bis 8 pt verkleinert, danach auf zwei Zeilen umbrochen,
+// damit er nie über den Rand läuft. Gibt die belegte Höhe zurück (mindestens eine Zeile).
+func adressZeile(pdf *fpdf.Fpdf, x, y float64, txt, style string) float64 {
+	const maxW = 90.0
+	size := 10.0
+	pdf.SetFont("lib", style, size)
+	for size > 8 && pdf.GetStringWidth(txt) > maxW {
+		size -= 0.5
+		pdf.SetFont("lib", style, size)
+	}
+	pdf.SetXY(x, y)
+	if pdf.GetStringWidth(txt) <= maxW {
+		pdf.CellFormat(maxW, rowH, txt, "", 0, "L", false, 0, "")
+		pdf.SetFont("lib", style, 10)
+		return rowH
+	}
+	pdf.SetFont("lib", style, 9)
+	pdf.MultiCell(maxW, 4.4, txt, "", "L", false)
+	h := pdf.GetY() - y + 0.7
+	pdf.SetFont("lib", style, 10)
+	if h < rowH {
+		h = rowH
+	}
+	return h
+}
+
 // invoiceNumber bildet die Rechnungsnummer, z. B. 100-35-95.
 func invoiceNumber(s Settings, p Paechter) string {
 	return strings.TrimSpace(s.RechnungsnrPraefix) + "-" + strings.TrimSpace(p.Mitgliedsnr)
@@ -52,19 +79,122 @@ func epcQRPayload(s Settings, p Paechter, betrag float64) string {
 	return strings.Join(lines, "\n")
 }
 
-func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) {
-	if !r.Vollstaendig {
-		return nil, errors.New("Rechnung unvollständig: " + r.Status)
+// ibanGueltig prüft Länge, Zeichen und die Prüfziffer (Modulo 97) einer IBAN.
+func ibanGueltig(iban string) bool {
+	iban = strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(iban), " ", ""))
+	if len(iban) < 15 || len(iban) > 34 {
+		return false
 	}
+	if iban[0] < 'A' || iban[0] > 'Z' || iban[1] < 'A' || iban[1] > 'Z' || iban[2] < '0' || iban[2] > '9' || iban[3] < '0' || iban[3] > '9' {
+		return false
+	}
+	rest := 0
+	for _, c := range iban[4:] + iban[:4] {
+		switch {
+		case c >= '0' && c <= '9':
+			rest = (rest*10 + int(c-'0')) % 97
+		case c >= 'A' && c <= 'Z':
+			rest = (rest*100 + int(c-'A') + 10) % 97
+		default:
+			return false
+		}
+	}
+	return rest == 1
+}
+
+// invoiceMaxY ist die tiefste erlaubte Position (Oberkante) der letzten Zeile der Rechnung.
+const invoiceMaxY = 290.0
+
+// buildInvoice erzeugt die Rechnung auf einer A4-Seite. Das Standardlayout bleibt unverändert;
+// nur wenn ein längerer Hinweistext die Seite sprengen würde, werden einige Leerabstände im
+// oberen Teil schrittweise verkleinert, bis alles passt.
+func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) {
+	_, out, err := layoutFit(s, p, a, r, true)
+	return out, err
+}
+
+// layoutFit ermittelt, wie stark die Leerabstände verkleinert werden müssen, damit die Rechnung auf
+// eine Seite passt (0 = Standardlayout). Mit wantPDF wird die fertige PDF des erfolgreichen Versuchs
+// gleich mitgeliefert, sonst nur gezeichnet (günstiger, z. B. für Sammeldateien).
+func layoutFit(s Settings, p Paechter, a Ablesung, r Result, wantPDF bool) (float64, []byte, error) {
+	if !r.Vollstaendig {
+		return 0, nil, errors.New("Rechnung unvollständig: " + r.Status)
+	}
+	for squeeze := 0.0; squeeze <= 1.0001; squeeze += 0.1 {
+		pdf := newInvoiceDoc("Rechnung "+invoiceNumber(s, p), s)
+		if ende := drawInvoicePage(pdf, s, p, a, r, squeeze); ende > invoiceMaxY {
+			continue
+		}
+		if !wantPDF {
+			return squeeze, nil, nil
+		}
+		var buf bytes.Buffer
+		if err := pdf.Output(&buf); err != nil {
+			return 0, nil, err
+		}
+		return squeeze, buf.Bytes(), nil
+	}
+	return 0, nil, errors.New("Rechnung passt nicht auf eine Seite (Hinweistext zu lang?)")
+}
+
+// invoiceItem sind die Angaben einer Rechnung, wie sie im Archiv festgeschrieben sind.
+type invoiceItem struct {
+	S Settings
+	P Paechter
+	A Ablesung
+	R Result
+}
+
+// buildInvoicesCombined setzt mehrere Rechnungen (je eine Seite) in einer PDF-Datei zusammen,
+// z. B. zum Ausdrucken aller Postsendungen in einem Rutsch.
+func buildInvoicesCombined(items []invoiceItem, title string) ([]byte, error) {
+	if len(items) == 0 {
+		return nil, errors.New("keine Rechnungen zum Zusammenstellen")
+	}
+	pdf := newInvoiceDoc(title, items[0].S)
+	for _, it := range items {
+		sq, _, err := layoutFit(it.S, it.P, it.A, it.R, false)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", invoiceNumber(it.S, it.P), err)
+		}
+		drawInvoicePage(pdf, it.S, it.P, it.A, it.R, sq)
+	}
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func newInvoiceDoc(title string, s Settings) *fpdf.Fpdf {
 	pdf := fpdf.New("P", "mm", "A4", "")
 	pdf.AddUTF8FontFromBytes("lib", "", fontRegular)
 	pdf.AddUTF8FontFromBytes("lib", "B", fontBold)
-	tr := func(s string) string { return s }
 	pdf.SetMargins(leftX, 12, 20)
 	pdf.SetAutoPageBreak(false, 0)
-	pdf.SetTitle(tr("Rechnung "+invoiceNumber(s, p)), true)
-	pdf.SetAuthor(tr(s.VereinName), true)
+	pdf.SetTitle(title, true)
+	pdf.SetAuthor(s.VereinName, true)
 	pdf.SetCreator(appName, true)
+	return pdf
+}
+
+// renderInvoice zeichnet eine einzelne Rechnung; squeeze (0 bis 1) verkleinert die Leerabstände
+// zwischen den Blöcken im Kopfbereich. Gibt zusätzlich die Position der letzten Zeile zurück.
+func renderInvoice(s Settings, p Paechter, a Ablesung, r Result, squeeze float64) ([]byte, float64, error) {
+	pdf := newInvoiceDoc("Rechnung "+invoiceNumber(s, p), s)
+	y := drawInvoicePage(pdf, s, p, a, r, squeeze)
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, 0, err
+	}
+	return buf.Bytes(), y, nil
+}
+
+// drawInvoicePage fügt dem Dokument eine Seite mit der Rechnung hinzu und gibt die Position
+// der letzten Zeile zurück.
+func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Result, squeeze float64) float64 {
+	gap := func(mm float64) float64 { return mm * (1 - 0.8*squeeze) }
+	tr := func(s string) string { return s }
 	pdf.AddPage()
 
 	y := 0.0
@@ -104,20 +234,14 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	text(leftX, rightX-leftX, p.Versand, "R")
 
 	// Anschrift
-	next(5)
-	font("", 10)
-	text(leftX, 90, p.Anrede, "L")
-	next(rowH)
-	font("B", 10)
-	text(leftX, 90, p.Name, "L")
-	next(rowH)
-	font("", 10)
-	text(leftX, 90, p.Strasse, "L")
-	next(rowH)
-	text(leftX, 90, p.PLZOrt, "L")
+	next(gap(5))
+	next(adressZeile(pdf, leftX, y, p.Anrede, ""))
+	next(adressZeile(pdf, leftX, y, p.Name, "B"))
+	next(adressZeile(pdf, leftX, y, p.Strasse, ""))
+	next(adressZeile(pdf, leftX, y, p.PLZOrt, "") - rowH)
 
 	// Rechnungsdaten rechts
-	next(rowH + 4)
+	next(rowH + gap(4))
 	meta := [][2]string{
 		{"Mitgliedsnr.:", p.Mitgliedsnr},
 		{"Rechnungsdatum:", germanDate(s.Rechnungsdatum)},
@@ -135,7 +259,7 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	}
 
 	// Überschriften
-	next(5)
+	next(gap(5))
 	font("B", 12)
 	pdf.SetXY(leftX, y)
 	pdf.CellFormat(rightX-leftX, 6, tr(fmt.Sprintf("Rechnung Jahresendabrechnung %d", s.Jahr)), "", 0, "L", false, 0, "")
@@ -240,15 +364,16 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	posten("Sonstige Auslagen:", a.Auslagen)
 	font("U", 8.5)
 	text(leftX, 40, "Hinweis/Erläuterung:", "L")
+	hinweisH := rowH
 	if h := strings.TrimSpace(a.Hinweis); h != "" {
 		font("", 9)
 		pdf.SetXY(colX[1], y)
 		pdf.MultiCell(rightX-colX[1], 4.4, tr(h), "", "L", false)
-		if pdf.GetY() > y {
-			y = pdf.GetY()
+		if hh := pdf.GetY() - y; hh > hinweisH {
+			hinweisH = hh
 		}
 	}
-	next(rowH + 1)
+	next(hinweisH + 1)
 	font("", 10)
 	span(4, 5, "Zwischensumme:", "R")
 	font("B", 10)
@@ -297,7 +422,7 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	const qrSize = 24.0
 	textW := rightX - leftX
 	var qrPNG []byte
-	if !guthaben && r.Gesamt != 0 && strings.TrimSpace(s.IBAN) != "" {
+	if !guthaben && r.Gesamt != 0 && ibanGueltig(s.IBAN) {
 		if png, err := qrcode.Encode(epcQRPayload(s, p, absf(r.Gesamt)), qrcode.Medium, 300); err == nil {
 			qrPNG = png
 			textW = rightX - leftX - qrSize - 5
@@ -309,8 +434,11 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	pdf.MultiCell(textW, 4.7, tr(pay), "", "L", false)
 	y = pdf.GetY()
 	if qrPNG != nil {
-		pdf.RegisterImageOptionsReader("girocode", fpdf.ImageOptions{ImageType: "PNG"}, bytes.NewReader(qrPNG))
-		pdf.ImageOptions("girocode", rightX-qrSize, qrTop, qrSize, qrSize, false, fpdf.ImageOptions{ImageType: "PNG"}, 0, "")
+		// eigener Name je Seite: fpdf legt Bilder nach Namen ab, ein gemeinsamer Name würde in einer
+		// Sammeldatei den QR-Code (und damit den Betrag) der ersten Rechnung auf alle Seiten übertragen
+		imgName := fmt.Sprintf("girocode-%d", pdf.PageNo())
+		pdf.RegisterImageOptionsReader(imgName, fpdf.ImageOptions{ImageType: "PNG"}, bytes.NewReader(qrPNG))
+		pdf.ImageOptions(imgName, rightX-qrSize, qrTop, qrSize, qrSize, false, fpdf.ImageOptions{ImageType: "PNG"}, 0, "")
 		font("", 6.5)
 		pdf.SetXY(rightX-qrSize, qrTop+qrSize+0.6)
 		pdf.CellFormat(qrSize, 3, tr("GiroCode zum Bezahlen"), "", 0, "C", false, 0, "")
@@ -328,14 +456,7 @@ func buildInvoice(s Settings, p Paechter, a Ablesung, r Result) ([]byte, error) 
 	font("", 8)
 	text(leftX, rightX-leftX, "Die Rechnung wird maschinell erstellt und ist ohne Unterschrift gültig.", "L")
 
-	if y > 290 {
-		return nil, errors.New("Rechnung passt nicht auf eine Seite (Hinweistext zu lang?)")
-	}
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return y
 }
 
 // buildMahnung erzeugt eine einfache Zahlungserinnerung für eine offene,
@@ -389,16 +510,10 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	text(leftX, rightX-leftX, p.Versand, "R")
 
 	next(5)
-	font("", 10)
-	text(leftX, 90, p.Anrede, "L")
-	next(rowH)
-	font("B", 10)
-	text(leftX, 90, p.Name, "L")
-	next(rowH)
-	font("", 10)
-	text(leftX, 90, p.Strasse, "L")
-	next(rowH)
-	text(leftX, 90, p.PLZOrt, "L")
+	next(adressZeile(pdf, leftX, y, p.Anrede, ""))
+	next(adressZeile(pdf, leftX, y, p.Name, "B"))
+	next(adressZeile(pdf, leftX, y, p.Strasse, ""))
+	next(adressZeile(pdf, leftX, y, p.PLZOrt, "") - rowH)
 
 	next(rowH + 4)
 	meta := [][2]string{

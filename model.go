@@ -162,6 +162,9 @@ type Data struct {
 	AuditLog []AuditEntry `json:"auditLog,omitempty"`
 	// GartenHistorie: Belegungshistorie je Garten (unabhängig vom Abrechnungsjahr).
 	GartenHistorie []GartenEintrag `json:"gartenHistorie,omitempty"`
+	// TutorialGesehen: der Einführungsrundgang wurde durchlaufen oder übersprungen
+	// und erscheint nicht mehr automatisch (über die Hilfe jederzeit abrufbar).
+	TutorialGesehen bool `json:"tutorialGesehen,omitempty"`
 }
 
 func defaultSettings() Settings {
@@ -197,7 +200,7 @@ func defaultSettings() Settings {
 func newData() *Data {
 	s := defaultSettings()
 	return &Data{
-		Version:  1,
+		Version:  datenVersion,
 		Settings: s,
 		Paechter: []Paechter{},
 		Jahre:    map[string]*Jahr{yearKey(s.Jahr): {Ablesungen: map[string]Ablesung{}}},
