@@ -999,6 +999,16 @@ async function imPdfProgrammOeffnen(id) {
   catch (e) { handleErr(e); }
 }
 
+// Öffnet das E-Mail-Programm mit Empfänger, Betreff und Text zur Rechnung und zeigt die PDF-Datei im
+// Ordner an (zum Anhängen). Verschickt wird nichts automatisch.
+async function emailVorbereiten(id) {
+  try {
+    const r = await api('POST', `/api/invoice-email/${id}`);
+    toast(`E-Mail an ${r.email} ist im E-Mail-Programm vorbereitet. Bitte die markierte Datei »${r.datei}« anhängen und abschicken.`, 'ok');
+    await reload();
+  } catch (e) { handleErr(e); }
+}
+
 // Öffnet ein serverseitig erzeugtes PDF zum Drucken: im Programmfenster im PDF-Programm des Rechners
 // (voller Druckdialog), sonst als Vorschau bzw. neuer Tab im Browser.
 async function pdfDrucken({ url, oeffnenUrl, titel, meldung }) {
@@ -1109,12 +1119,18 @@ function viewAusstellen() {
       if (inNativeWindow() && inf && !showLive) {
         bar.append(h('button', { class: 'btn', title: 'Im PDF-Programm des Rechners öffnen und dort drucken', onclick: () => imPdfProgrammOeffnen(inf.id) }, 'Im PDF-Programm öffnen'));
       }
+      if (inf && !showLive) {
+        bar.append(h('button', { class: 'btn', disabled: !p.email,
+          title: p.email ? `Öffnet das E-Mail-Programm mit einer fertigen Nachricht an ${p.email}; die PDF-Datei wird im Ordner markiert und muss nur noch angehängt werden`
+            : 'Für diesen Pächter ist keine E-Mail-Adresse eingetragen (Admin → Pächter)',
+          onclick: () => emailVorbereiten(inf.id) }, inf.emailAm ? '✉ E-Mail erneut vorbereiten' : '✉ E-Mail vorbereiten'));
+      }
     }
     right.append(bar);
 
     if (inf) {
       right.append(h('div', { class: 'banner info' },
-        `Ausgestellt am ${fmtWhen(inf.ausgestellt)} · Rechnungs-Nr. ${inf.nummer}${inf.version > 1 ? ` (Version ${inf.version})` : ''} · ${eur(inf.gesamt)}. Diese Rechnung ist gespeichert und ändert sich nicht mehr.`));
+        `Ausgestellt am ${fmtWhen(inf.ausgestellt)} · Rechnungs-Nr. ${inf.nummer}${inf.version > 1 ? ` (Version ${inf.version})` : ''} · ${eur(inf.gesamt)}. Diese Rechnung ist gespeichert und ändert sich nicht mehr.${inf.emailAm ? ` E-Mail vorbereitet am ${fmtWhen(inf.emailAm)}.` : ''}`));
       if (inf.geaendert) {
         right.append(h('div', { class: 'banner warn' },
           'Seit der Ausstellung wurden Werte geändert (Zählerstände, Preise oder Pächterdaten). Die ausgestellte Rechnung bleibt unverändert. ',
@@ -1143,7 +1159,8 @@ function viewAusstellen() {
       const tip = inf ? (inf.geaendert ? 'ausgestellt, danach geändert' : 'ausgestellt') : ok ? 'bereit zum Ausstellen' : 'unvollständig';
       items.append(h('button', { class: 'item' + (p.id === S.selInvoice ? ' active' : ''), onclick: () => { S.selInvoice = p.id; S.invView = 'archiv'; drawList(); drawPreview(); } },
         h('span', { class: 'dot ' + cls, title: tip }),
-        h('span', { class: 'nr' }, p.mitgliedsnr), h('span', null, p.name)));
+        h('span', { class: 'nr' }, p.mitgliedsnr), h('span', null, p.name),
+        inf && inf.emailAm ? h('span', { title: `E-Mail vorbereitet am ${fmtWhen(inf.emailAm)}`, style: 'margin-left:auto' }, '✉') : null));
     }
     if (!list.length) items.append(h('div', { class: 'empty' }, 'Keine Pächter.'));
   };
@@ -1165,10 +1182,18 @@ function viewAusstellen() {
   const postBtn = h('button', { class: 'btn', disabled: !nPost,
     title: 'Alle ausgestellten Rechnungen mit Versandart Postversand als eine PDF-Datei, nach Mitgliedsnummer sortiert',
     onclick: () => postRechnungenDrucken(st.year) }, `Postversand drucken (${nPost})`);
+  // E-Mail-Versand nacheinander: springt zur nächsten ausgestellten Rechnung mit Versandart Emailsendung,
+  // deren E-Mail noch nicht vorbereitet wurde
+  const mailOffen = list.filter((p) => p.versand === 'Emailsendung' && p.email && issuedOf(p) && !issuedOf(p).emailAm);
+  const ohneAdresse = list.filter((p) => p.versand === 'Emailsendung' && !p.email && issuedOf(p)).length;
+  const mailBtn = h('button', { class: 'btn', disabled: !mailOffen.length,
+    title: `Bereitet die E-Mail für die nächste Rechnung mit Versandart Emailsendung vor${ohneAdresse ? ` (${ohneAdresse} ohne eingetragene E-Mail-Adresse)` : ''}`,
+    onclick: async () => { const p = mailOffen[0]; S.selInvoice = p.id; S.invView = 'archiv'; await emailVorbereiten(issuedOf(p).id); } },
+  `✉ Nächste E-Mail (${mailOffen.length} offen)`);
 
   return h('div', null,
     h('p', { class: 'hint' }, 'Wähle links einen Pächter und prüfe die Rechnung. Mit »Ausstellen« wird sie festgeschrieben, als PDF gespeichert und ins Archiv gelegt. Punkte: grau = unvollständig, grün = bereit, blau = ausgestellt, orange = ausgestellt, danach geändert.'),
-    h('div', { class: 'toolbar' }, allBtn, h('span', { class: 'hint' }, `${nIss} von ${list.length} ausgestellt`), h('div', { class: 'spacer' }), postBtn,
+    h('div', { class: 'toolbar' }, allBtn, h('span', { class: 'hint' }, `${nIss} von ${list.length} ausgestellt`), h('div', { class: 'spacer' }), st.readOnly ? null : mailBtn, postBtn,
       h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'rechnungen', year: st.year }).catch(handleErr) }, 'Rechnungsordner öffnen')),
     h('div', { class: 'split' }, items, right));
 }

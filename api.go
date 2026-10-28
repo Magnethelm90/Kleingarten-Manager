@@ -1573,6 +1573,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/invoice/{id}", a.handleInvoice)
 	mux.HandleFunc("POST /api/invoices/issue", a.handleIssue)
 	mux.HandleFunc("POST /api/open-invoice/{id}", a.handleOpenInvoice)
+	mux.HandleFunc("POST /api/invoice-email/{id}", a.handleRechnungEmail)
 	mux.HandleFunc("GET /api/ablesebogen", a.handleAblesebogen)
 	mux.HandleFunc("POST /api/ablesebogen/oeffnen", a.handleAblesebogenOeffnen)
 	mux.HandleFunc("GET /api/admin/rechnungen-druck", a.admin(a.handleDruckPost))

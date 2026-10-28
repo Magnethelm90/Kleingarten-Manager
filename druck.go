@@ -172,38 +172,10 @@ func (a *App) handleOpenInvoice(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, notFound("Rechnung nicht im Archiv gefunden"))
 		return
 	}
-	if rec.Bereinigt {
-		writeErr(w, apiError{http.StatusGone, "Die Aufbewahrungsfrist dieser Rechnung ist abgelaufen, der Personenbezug wurde entfernt"})
-		return
-	}
-	full, err := a.rechnungsDatei(rec.Datei)
+	full, err := a.rechnungsPDFBereit(rec)
 	if err != nil {
-		writeErr(w, bad(err.Error()))
+		writeErr(w, err)
 		return
-	}
-	fi, statErr := os.Lstat(full)
-	switch {
-	case statErr == nil && !fi.Mode().IsRegular():
-		// z. B. ein Verweis (Symlink): nie hindurchschreiben oder öffnen
-		writeErr(w, bad("Die gespeicherte Rechnungsdatei ist keine gewöhnliche Datei"))
-		return
-	case statErr != nil && !os.IsNotExist(statErr):
-		writeErr(w, statErr)
-		return
-	case statErr != nil:
-		pdf, err := buildInvoice(rec.Settings, rec.Paechter, rec.Ablesung, rec.Result)
-		if err != nil {
-			writeErr(w, bad(err.Error()))
-			return
-		}
-		if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
-			writeErr(w, err)
-			return
-		}
-		if err := os.WriteFile(full, pdf, 0o600); err != nil {
-			writeErr(w, err)
-			return
-		}
 	}
 	openPathFn(full)
 	writeJSON(w, 200, map[string]bool{"ok": true})
