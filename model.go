@@ -59,14 +59,14 @@ type GartenEintrag struct {
 
 // Paechter sind die Stammdaten eines Pächters (ändern sich selten).
 type Paechter struct {
-	ID               string   `json:"id"`
-	Mitgliedsnr      string   `json:"mitgliedsnr"`
-	Gartennr         string   `json:"gartennr"`
-	Anrede           string   `json:"anrede"`
-	Name             string   `json:"name"`
-	Strasse          string   `json:"strasse"`
-	PLZOrt           string   `json:"plzOrt"`
-	Versand          string   `json:"versand"`
+	ID          string `json:"id"`
+	Mitgliedsnr string `json:"mitgliedsnr"`
+	Gartennr    string `json:"gartennr"`
+	Anrede      string `json:"anrede"`
+	Name        string `json:"name"`
+	Strasse     string `json:"strasse"`
+	PLZOrt      string `json:"plzOrt"`
+	Versand     string `json:"versand"`
 	// Email und Telefon: Kontakt für Rückfragen; die E-Mail-Adresse wird beim
 	// Vorbereiten der Rechnungs-E-Mail als Empfänger eingesetzt.
 	Email            string   `json:"email,omitempty"`
