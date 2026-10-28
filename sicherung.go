@@ -57,11 +57,18 @@ func sicherungArt(name string) string {
 	return "Tagessicherung"
 }
 
-// sicherungen liest die neuesten Sicherungen und prüft, ob sie sich wiederherstellen lassen.
+// sicherungen liest die neuesten Sicherungen und prüft, ob sie sich wiederherstellen lassen. Die
+// Sicherungen vor dem Jahreswechsel erscheinen immer, auch wenn sie älter als die übrigen sind.
 func (s *Store) sicherungen() []sicherungInfo {
-	names := s.sicherungsNamen()
-	if len(names) > maxAngezeigteSicherungen {
-		names = names[:maxAngezeigteSicherungen]
+	alle := s.sicherungsNamen()
+	names := alle
+	if len(alle) > maxAngezeigteSicherungen {
+		names = append([]string(nil), alle[:maxAngezeigteSicherungen]...)
+		for _, n := range alle[maxAngezeigteSicherungen:] {
+			if isJahresSicherung(n) {
+				names = append(names, n)
+			}
+		}
 	}
 	out := make([]sicherungInfo, 0, len(names))
 	for _, n := range names {
@@ -135,6 +142,7 @@ func (a *App) handleSicherungWiederherstellen(w http.ResponseWriter, r *http.Req
 	}
 	a.st.snapshotBackup("vor-Wiederherstellung")
 	a.st.d = d
+	a.st.zweiteSicherungGeaendert() // die Sicherung kann einen anderen zweiten Ordner enthalten
 	a.st.ensureYear(d.Settings.Jahr)
 	a.st.migriereBelege()
 	a.st.audit("Sicherung wiederhergestellt: %s", in.Name)
@@ -145,4 +153,17 @@ func (a *App) handleSicherungWiederherstellen(w http.ResponseWriter, r *http.Req
 	}
 	a.st.leereDruckOrdner()
 	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// handleSicherungJetzt legt sofort eine Sicherung an und kopiert sie in den zweiten Sicherungsordner,
+// z. B. gleich nachdem der USB-Stick eingesteckt wurde.
+func (a *App) handleSicherungJetzt(w http.ResponseWriter, r *http.Request) {
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	if err := a.st.saveLocked(); err != nil { // aktueller Stand liegt sicher auf der Platte
+		writeErr(w, err)
+		return
+	}
+	a.st.snapshotBackup("manuell")
+	writeJSON(w, 200, a.st.zweiteSicherungLocked())
 }

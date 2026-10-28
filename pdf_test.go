@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/go-pdf/fpdf"
 )
 
 func rechnungFixture() (Settings, Paechter, Ablesung) {
@@ -100,6 +102,44 @@ func TestLangeAnschriftBleibtAufEinerSeite(t *testing.T) {
 		}
 		if n := len(seitenRegexp.FindAll(m, -1)); n != 1 {
 			t.Errorf("Mahnung für %.20q...: %d Seiten", name, n)
+		}
+	}
+}
+
+func TestPassendKleinBleibtInDerSpalte(t *testing.T) {
+	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf.AddUTF8FontFromBytes("lib", "", fontRegular)
+	const maxW = 46.0
+	kurz := passendKlein(pdf, "Zähler-Nr.: W-1001", maxW, 8, 6.5)
+	if kurz != "Zähler-Nr.: W-1001" {
+		t.Errorf("kurze Nummer wurde verändert: %q", kurz)
+	}
+	for _, nr := range []string{"WZ-ÄÖÜ-ß-12345678901234", strings.Repeat("9", 40)} {
+		got := passendKlein(pdf, "Zähler-Nr.: "+nr, maxW, 8, 6.5)
+		if w := pdf.GetStringWidth(got); w > maxW {
+			t.Errorf("%q ist %.1f mm breit, erlaubt %.1f mm", got, w, maxW)
+		}
+		if !strings.HasPrefix(got, "Zähler-Nr.: ") {
+			t.Errorf("Beschriftung abgeschnitten: %q", got)
+		}
+	}
+}
+
+// Die Zahlungserinnerung druckt den GiroCode nur mit gültiger IBAN, genau wie die Rechnung.
+func TestMahnungGiroCodeNurMitGueltigerIBAN(t *testing.T) {
+	s, p, _ := rechnungFixture()
+	rec := &Rechnung{Paechter: p, Result: Result{Gesamt: 150}, Nummer: "100-1"}
+	for _, c := range []struct {
+		iban   string
+		bilder int
+	}{{"DE89370400440532013000", 1}, {"DE00 0000 0000 0000 0000 00", 0}, {"", 0}} {
+		s.IBAN = c.iban
+		pdf, err := buildMahnung(s, p, rec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := len(bilderRegexp.FindAll(pdf, -1)); n != c.bilder {
+			t.Errorf("IBAN %q: %d GiroCode-Bilder, erwartet %d", c.iban, n, c.bilder)
 		}
 	}
 }

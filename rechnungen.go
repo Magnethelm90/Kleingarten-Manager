@@ -44,6 +44,10 @@ type Rechnung struct {
 	// Bereinigt: Aufbewahrungsfrist abgelaufen, Personenbezug entfernt, PDF-Datei gelöscht.
 	// Die Beträge bleiben für die Statistik, die Rechnung selbst lässt sich nicht mehr drucken.
 	Bereinigt bool `json:"bereinigt,omitempty"`
+
+	// EmailAm: wann die E-Mail zu dieser Rechnung zuletzt im E-Mail-Programm vorbereitet wurde (RFC3339).
+	// Ob sie wirklich abgeschickt wurde, weiß das Programm nicht.
+	EmailAm string `json:"emailAm,omitempty"`
 }
 
 // issuedInfo beschreibt die gültige Rechnung eines Pächters im aktuellen Jahr.
@@ -54,6 +58,7 @@ type issuedInfo struct {
 	Ausgestellt string  `json:"ausgestellt"`
 	Gesamt      float64 `json:"gesamt"`
 	Geaendert   bool    `json:"geaendert"` // Werte weichen seit der Ausstellung ab
+	EmailAm     string  `json:"emailAm,omitempty"`
 }
 
 // archiveEntry ist eine Zeile im Rechnungsarchiv.
@@ -75,6 +80,7 @@ type archiveEntry struct {
 	BezahltAm     string   `json:"bezahltAm"`
 	BezahltBetrag *float64 `json:"bezahltBetrag"`
 	Notiz         string   `json:"notiz"`
+	EmailAm       string   `json:"emailAm,omitempty"`
 }
 
 func archiveEntryFrom(r *Rechnung) archiveEntry {
@@ -82,6 +88,7 @@ func archiveEntryFrom(r *Rechnung) archiveEntry {
 		ID: r.ID, Jahr: r.Jahr, Mitgliedsnr: r.Paechter.Mitgliedsnr, Name: r.Paechter.Name, Nummer: r.Nummer,
 		Version: r.Version, Status: r.Status, Ausgestellt: r.Ausgestellt, Gesamt: r.Result.Gesamt, Datei: r.Datei,
 		Versand: r.Paechter.Versand, Faellig: r.Settings.Zahlungsziel, BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz,
+		EmailAm: r.EmailAm,
 	}
 }
 
@@ -140,10 +147,10 @@ func (s *Store) archiveViewLocked(v yearView) (map[string]issuedInfo, []archiveE
 		if r.Status != statusGueltig {
 			continue
 		}
-		info := issuedInfo{ID: r.ID, Nummer: r.Nummer, Version: r.Version, Ausgestellt: r.Ausgestellt, Gesamt: r.Result.Gesamt}
+		info := issuedInfo{ID: r.ID, Nummer: r.Nummer, Version: r.Version, Ausgestellt: r.Ausgestellt, Gesamt: r.Result.Gesamt, EmailAm: r.EmailAm}
 		if p, ok := pByID[r.PaechterID]; ok {
 			info.Geaendert = !reflect.DeepEqual(r.Settings, v.Settings) ||
-				!reflect.DeepEqual(r.Paechter, p) ||
+				!reflect.DeepEqual(aufRechnung(r.Paechter), aufRechnung(p)) ||
 				!reflect.DeepEqual(r.Ablesung, v.Ablesungen[r.PaechterID])
 		} else {
 			info.Geaendert = true // Pächter wurde inzwischen gelöscht
@@ -157,6 +164,14 @@ func (s *Store) archiveViewLocked(v yearView) (map[string]issuedInfo, []archiveE
 		return archive[i].Version < archive[j].Version
 	})
 	return issued, archive
+}
+
+// aufRechnung blendet die Pächterangaben aus, die nicht auf der Rechnung stehen (Notiz, Kontakt,
+// Papierkorb-Vermerk). Wer nachträglich eine E-Mail-Adresse oder Notiz einträgt, ändert die
+// Rechnung nicht und soll nicht zum Neu-Ausstellen aufgefordert werden.
+func aufRechnung(p Paechter) Paechter {
+	p.Notiz, p.Email, p.Telefon, p.Geloescht, p.GeloeschtAm = "", "", "", false, ""
+	return p
 }
 
 // natLess sortiert Mitgliedsnummern natürlich (10-2 vor 10-10).

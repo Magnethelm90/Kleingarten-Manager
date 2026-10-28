@@ -523,6 +523,22 @@ type kassenbericht struct {
 	Saldo          float64 `json:"saldo"`
 	Anfangsbestand float64 `json:"anfangsbestand"`
 	Kassenbestand  float64 `json:"kassenbestand"`
+
+	// VorjahrEndbestand: der heutige Kassenbestand des Vorjahres. Weicht er vom Anfangsbestand ab
+	// (z. B. weil eine Vorjahresrechnung erst nach dem Jahreswechsel bezahlt wurde), bietet der
+	// Kassenbericht an, den Anfangsbestand anzugleichen. Leer, wenn es kein Vorjahr gibt.
+	VorjahrEndbestand *float64 `json:"vorjahrEndbestand,omitempty"`
+}
+
+// kassenberichtMitVorjahrLocked ergänzt den Kassenbericht um den aktuellen Endbestand des Vorjahres.
+// Der Aufrufer hält s.mu.
+func (s *Store) kassenberichtMitVorjahrLocked(v yearView) kassenbericht {
+	k := s.kassenberichtLocked(v)
+	if vj, ok := s.viewLocked(v.Jahr - 1); ok {
+		end := s.kassenberichtLocked(vj).Kassenbestand
+		k.VorjahrEndbestand = &end
+	}
+	return k
 }
 
 // kassenberichtLocked summiert alle Posten eines Jahres. Grundlage der Beträge je
@@ -627,7 +643,7 @@ func (a *App) handleKassenbericht(w http.ResponseWriter, r *http.Request) {
 	v, ok := a.st.viewLocked(year)
 	var k kassenbericht
 	if ok {
-		k = a.st.kassenberichtLocked(v)
+		k = a.st.kassenberichtMitVorjahrLocked(v)
 	}
 	a.st.mu.Unlock()
 	if !ok {
@@ -665,7 +681,7 @@ func (a *App) handleVersorger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, _ := a.st.viewLocked(year)
-	writeJSON(w, 200, a.st.kassenberichtLocked(v))
+	writeJSON(w, 200, a.st.kassenberichtMitVorjahrLocked(v))
 }
 
 // handleAnfangsbestand setzt den Kassenbestand zu Jahresbeginn von Hand.
@@ -695,7 +711,7 @@ func (a *App) handleAnfangsbestand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, _ := a.st.viewLocked(year)
-	writeJSON(w, 200, a.st.kassenberichtLocked(v))
+	writeJSON(w, 200, a.st.kassenberichtMitVorjahrLocked(v))
 }
 
 func (a *App) handleKassenberichtExport(w http.ResponseWriter, r *http.Request) {

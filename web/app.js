@@ -231,6 +231,7 @@ function render() {
       h('button', { class: 'quit', onclick: quitApp, title: 'Programm beenden' }, 'Beenden'),
     ),
     h('main', null,
+      demoBanner(st),
       sicherungBanner(st),
       openRechnungenBanner(st),
       st.readOnly && S.tab !== 'admin' && S.tab !== 'zahlungen'
@@ -343,7 +344,7 @@ function globalSearchBox(st) {
         h('span', { class: 'hint' }, p.mitgliedsnr)));
   };
   const input = h('input', {
-    type: 'search', placeholder: '🔍 Pächter suchen', class: 'gs-input', autocomplete: 'off',
+    type: 'search', placeholder: '🔍 Suchen', title: 'Pächter suchen (Name, Mitglieds- oder Gartennummer)', class: 'gs-input', autocomplete: 'off',
     value: S.globalSearchQ,
     oninput: (e) => { S.globalSearchQ = e.target.value; draw(); },
     onkeydown: (e) => {
@@ -476,6 +477,77 @@ function jubilaeumBanner(st, istAdmin) {
     h('button', { class: 'btn small', onclick: () => { S.jubilaeumDismissed = true; render(); } }, 'Ausblenden'));
 }
 
+// Beispieldaten: in einen leeren Datenbestand laden und mit einem Klick wieder entfernen.
+async function beispieldatenLaden() {
+  try {
+    await api('POST', '/api/admin/beispieldaten');
+    toast('Beispieldaten geladen. Schau dich in Ruhe um, du kannst nichts kaputt machen.', 'ok');
+    S.dashKasse = null; S.dashJubilaeen = null;
+    await reload();
+  } catch (e) { handleErr(e); }
+}
+
+async function beispieldatenEntfernen() {
+  const ok = await confirmBox('Alle Beispieldaten entfernen und mit einem leeren Programm beginnen? Auch alles, was du in der Zwischenzeit selbst eingegeben oder ausgestellt hast, wird entfernt. Ein Admin-Passwort und der zweite Sicherungsordner bleiben erhalten.', 'Beispieldaten entfernen', true);
+  if (!ok) return;
+  try {
+    await api('DELETE', '/api/admin/beispieldaten');
+    toast('Beispieldaten entfernt. Jetzt kannst du deinen Verein eintragen.', 'ok');
+    S.dashKasse = null; S.dashJubilaeen = null; S.tab = 'uebersicht';
+    await reload();
+  } catch (e) { handleErr(e); }
+}
+
+function demoBanner(st) {
+  if (!st.demo) return null;
+  const istAdmin = !st.hasPassword || st.loggedIn;
+  return h('div', { class: 'banner info' },
+    '🧪 Du siehst Beispieldaten: ein erfundener Verein mit erfundenen Namen und Zahlen zum Ausprobieren.',
+    istAdmin ? [' ', h('button', { class: 'btn small', onclick: beispieldatenEntfernen }, 'Beispieldaten entfernen und eigene Daten anlegen')] : null);
+}
+
+function beispieldatenKarte(st, istAdmin) {
+  if (!st.leer || !istAdmin) return null;
+  return h('div', { class: 'card', style: 'margin-bottom:14px' },
+    h('h3', { style: 'margin-top:0' }, 'Erst einmal ausprobieren?'),
+    h('p', { class: 'hint' }, 'Lade einen erfundenen Verein mit 12 Pächtern, Zählerständen und ein paar Kassenbuchungen. So siehst du sofort, wie Rechnungen, Zahlungen und der Kassenbericht aussehen. Die Beispieldaten lassen sich danach mit einem Klick wieder vollständig entfernen.'),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn primary', onclick: beispieldatenLaden }, 'Mit Beispieldaten ausprobieren'),
+      h('button', { class: 'btn', onclick: () => { S.tab = 'admin'; S.adminTab = 'paechter'; render(); } }, 'Gleich eigene Pächter anlegen')));
+}
+
+// Erinnerung an die Datensicherung außer Haus: ohne zweiten Sicherungsordner (USB-Stick, Netzlaufwerk)
+// liegen alle Sicherungen auf derselben Festplatte wie die Daten.
+async function sicherungJetzt() {
+  try {
+    const z = await api('POST', '/api/admin/sicherung-jetzt');
+    if (!z.eingerichtet) toast('Sicherung angelegt (nur auf diesem Rechner, kein zweiter Ordner eingerichtet).', 'ok');
+    else if (z.fehler) toast(`${z.fehler}. Ist der USB-Stick eingesteckt bzw. das Netzlaufwerk verbunden?`, 'err');
+    else toast('Sicherung angelegt und in den zweiten Sicherungsordner kopiert.', 'ok');
+    await reload();
+  } catch (e) { handleErr(e); }
+}
+
+function zweiteSicherungBanner(st, istAdmin) {
+  const z = st.zweiteSicherung || {};
+  if (S.zweiteDismissed || !istAdmin || !st.paechter.length) return null;
+  const knoepfe = (mitJetzt) => [' ',
+    mitJetzt ? h('button', { class: 'btn small', onclick: sicherungJetzt }, 'Jetzt sichern') : null, mitJetzt ? ' ' : null,
+    h('button', { class: 'btn small', onclick: () => { S.tab = 'admin'; S.adminTab = 'daten'; render(); } }, 'Zu den Einstellungen'), ' ',
+    h('button', { class: 'btn small', onclick: () => { S.zweiteDismissed = true; render(); } }, 'Ausblenden')];
+  if (!z.eingerichtet) {
+    return h('div', { class: 'banner info' },
+      '💾 Alle Sicherungen liegen bisher nur auf diesem Rechner. Geht die Festplatte kaputt, sind auch sie weg. Richte einen zweiten Sicherungsordner ein, zum Beispiel auf einem USB-Stick.', ...knoepfe(false));
+  }
+  if (z.fehler) return h('div', { class: 'banner warn' }, `💾 ${z.fehler}. Ist der USB-Stick eingesteckt?`, ...knoepfe(true));
+  const tage = z.zuletzt ? Math.floor((Date.parse(todayIso()) - Date.parse(z.zuletzt)) / 86400000) : null;
+  if (tage === null || tage > 30) {
+    return h('div', { class: 'banner warn' },
+      `💾 ${tage === null ? 'Im zweiten Sicherungsordner liegt noch keine Kopie.' : `Die letzte Kopie im zweiten Sicherungsordner ist vom ${deDate(z.zuletzt)} (vor ${tage} Tagen).`} Einfach USB-Stick einstecken und »Jetzt sichern« wählen.`, ...knoepfe(true));
+  }
+  return null;
+}
+
 function viewUebersicht() {
   const st = S.state;
   const istAdmin = !st.hasPassword || st.loggedIn;
@@ -502,8 +574,10 @@ function viewUebersicht() {
 
   return h('div', null,
     h('h2', null, `Willkommen beim Kleingarten-Manager ${st.currentYear}`),
-    h('p', { class: 'hint' }, `${st.settings.vereinName}. Kurzer Überblick über den aktuellen Stand.`),
+    h('p', { class: 'hint' }, `${st.settings.vereinName.replace(/\.\s*$/, '')}. Kurzer Überblick über den aktuellen Stand.`),
+    beispieldatenKarte(st, istAdmin),
     jubilaeumBanner(st, istAdmin),
+    st.demo ? null : zweiteSicherungBanner(st, istAdmin),
     h('div', { class: 'cards' }, cards),
     h('div', { class: 'actions', style: 'margin-top:6px' },
       h('button', { class: 'btn primary', onclick: () => { S.tab = 'eingabe'; render(); } }, 'Zu den Zählerständen'),
@@ -999,6 +1073,16 @@ async function imPdfProgrammOeffnen(id) {
   catch (e) { handleErr(e); }
 }
 
+// Öffnet das E-Mail-Programm mit Empfänger, Betreff und Text zur Rechnung und zeigt die PDF-Datei im
+// Ordner an (zum Anhängen). Verschickt wird nichts automatisch.
+async function emailVorbereiten(id) {
+  try {
+    const r = await api('POST', `/api/invoice-email/${id}`);
+    toast(`E-Mail an ${r.email} ist im E-Mail-Programm vorbereitet. Bitte die markierte Datei »${r.datei}« anhängen und abschicken.`, 'ok');
+    await reload();
+  } catch (e) { handleErr(e); }
+}
+
 // Öffnet ein serverseitig erzeugtes PDF zum Drucken: im Programmfenster im PDF-Programm des Rechners
 // (voller Druckdialog), sonst als Vorschau bzw. neuer Tab im Browser.
 async function pdfDrucken({ url, oeffnenUrl, titel, meldung }) {
@@ -1109,12 +1193,18 @@ function viewAusstellen() {
       if (inNativeWindow() && inf && !showLive) {
         bar.append(h('button', { class: 'btn', title: 'Im PDF-Programm des Rechners öffnen und dort drucken', onclick: () => imPdfProgrammOeffnen(inf.id) }, 'Im PDF-Programm öffnen'));
       }
+      if (inf && !showLive) {
+        bar.append(h('button', { class: 'btn', disabled: !p.email,
+          title: p.email ? `Öffnet das E-Mail-Programm mit einer fertigen Nachricht an ${p.email}; die PDF-Datei wird im Ordner markiert und muss nur noch angehängt werden`
+            : 'Für diesen Pächter ist keine E-Mail-Adresse eingetragen (Admin → Pächter)',
+          onclick: () => emailVorbereiten(inf.id) }, inf.emailAm ? '✉ E-Mail erneut vorbereiten' : '✉ E-Mail vorbereiten'));
+      }
     }
     right.append(bar);
 
     if (inf) {
       right.append(h('div', { class: 'banner info' },
-        `Ausgestellt am ${fmtWhen(inf.ausgestellt)} · Rechnungs-Nr. ${inf.nummer}${inf.version > 1 ? ` (Version ${inf.version})` : ''} · ${eur(inf.gesamt)}. Diese Rechnung ist gespeichert und ändert sich nicht mehr.`));
+        `Ausgestellt am ${fmtWhen(inf.ausgestellt)} · Rechnungs-Nr. ${inf.nummer}${inf.version > 1 ? ` (Version ${inf.version})` : ''} · ${eur(inf.gesamt)}. Diese Rechnung ist gespeichert und ändert sich nicht mehr.${inf.emailAm ? ` E-Mail vorbereitet am ${fmtWhen(inf.emailAm)}.` : ''}`));
       if (inf.geaendert) {
         right.append(h('div', { class: 'banner warn' },
           'Seit der Ausstellung wurden Werte geändert (Zählerstände, Preise oder Pächterdaten). Die ausgestellte Rechnung bleibt unverändert. ',
@@ -1143,7 +1233,8 @@ function viewAusstellen() {
       const tip = inf ? (inf.geaendert ? 'ausgestellt, danach geändert' : 'ausgestellt') : ok ? 'bereit zum Ausstellen' : 'unvollständig';
       items.append(h('button', { class: 'item' + (p.id === S.selInvoice ? ' active' : ''), onclick: () => { S.selInvoice = p.id; S.invView = 'archiv'; drawList(); drawPreview(); } },
         h('span', { class: 'dot ' + cls, title: tip }),
-        h('span', { class: 'nr' }, p.mitgliedsnr), h('span', null, p.name)));
+        h('span', { class: 'nr' }, p.mitgliedsnr), h('span', null, p.name),
+        inf && inf.emailAm ? h('span', { title: `E-Mail vorbereitet am ${fmtWhen(inf.emailAm)}`, style: 'margin-left:auto' }, '✉') : null));
     }
     if (!list.length) items.append(h('div', { class: 'empty' }, 'Keine Pächter.'));
   };
@@ -1165,10 +1256,18 @@ function viewAusstellen() {
   const postBtn = h('button', { class: 'btn', disabled: !nPost,
     title: 'Alle ausgestellten Rechnungen mit Versandart Postversand als eine PDF-Datei, nach Mitgliedsnummer sortiert',
     onclick: () => postRechnungenDrucken(st.year) }, `Postversand drucken (${nPost})`);
+  // E-Mail-Versand nacheinander: springt zur nächsten ausgestellten Rechnung mit Versandart Emailsendung,
+  // deren E-Mail noch nicht vorbereitet wurde
+  const mailOffen = list.filter((p) => p.versand === 'Emailsendung' && p.email && issuedOf(p) && !issuedOf(p).emailAm);
+  const ohneAdresse = list.filter((p) => p.versand === 'Emailsendung' && !p.email && issuedOf(p)).length;
+  const mailBtn = h('button', { class: 'btn', disabled: !mailOffen.length,
+    title: `Bereitet die E-Mail für die nächste Rechnung mit Versandart Emailsendung vor${ohneAdresse ? ` (${ohneAdresse} ohne eingetragene E-Mail-Adresse)` : ''}`,
+    onclick: async () => { const p = mailOffen[0]; S.selInvoice = p.id; S.invView = 'archiv'; await emailVorbereiten(issuedOf(p).id); } },
+  `✉ Nächste E-Mail (${mailOffen.length} offen)`);
 
   return h('div', null,
     h('p', { class: 'hint' }, 'Wähle links einen Pächter und prüfe die Rechnung. Mit »Ausstellen« wird sie festgeschrieben, als PDF gespeichert und ins Archiv gelegt. Punkte: grau = unvollständig, grün = bereit, blau = ausgestellt, orange = ausgestellt, danach geändert.'),
-    h('div', { class: 'toolbar' }, allBtn, h('span', { class: 'hint' }, `${nIss} von ${list.length} ausgestellt`), h('div', { class: 'spacer' }), postBtn,
+    h('div', { class: 'toolbar' }, allBtn, h('span', { class: 'hint' }, `${nIss} von ${list.length} ausgestellt`), h('div', { class: 'spacer' }), st.readOnly ? null : mailBtn, postBtn,
       h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'rechnungen', year: st.year }).catch(handleErr) }, 'Rechnungsordner öffnen')),
     h('div', { class: 'split' }, items, right));
 }
@@ -1399,13 +1498,15 @@ function viewPruefShell() {
 function paechterDialog(p) {
   const isNew = !p;
   const cur = p || { mitgliedsnr: '', gartennr: '', anrede: 'Herr', name: '', strasse: '', plzOrt: S.state.settings.ort, versand: 'Emailsendung',
-    gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '', notiz: '' };
+    email: '', telefon: '', gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '', notiz: '' };
   const t = (val, ph) => h('input', { type: 'text', value: val || '', placeholder: ph || '', maxlength: 100, autocomplete: 'off' });
   const f = {
     mitgliedsnr: t(cur.mitgliedsnr, 'z. B. 35-95'), gartennr: t(cur.gartennr, 'z. B. 35'),
     anrede: h('select', { value: cur.anrede }, ['Herr', 'Frau', 'Familie', 'Herr und Frau', ''].map((a) => h('option', { value: a }, a || '(keine)'))),
     name: t(cur.name), strasse: t(cur.strasse), plzOrt: t(cur.plzOrt),
     versand: h('select', { value: cur.versand }, ['Emailsendung', 'Postversand'].map((a) => h('option', { value: a }, a))),
+    email: h('input', { type: 'email', value: cur.email || '', placeholder: 'name@beispiel.de', maxlength: 100, autocomplete: 'off' }),
+    telefon: h('input', { type: 'tel', value: cur.telefon || '', maxlength: 40, autocomplete: 'off' }),
     gartengroesse: t(numIn(cur.gartengroesse || null)),
     umlage: t(numIn(cur.umlageAbweichend), `leer = Standard (${eur(S.state.settings.umlageStandard)})`),
     wz: t(cur.wasserzaehlerNr), sz: t(cur.stromzaehlerNr),
@@ -1418,6 +1519,7 @@ function paechterDialog(p) {
     fld('Mitgliedsnummer *', f.mitgliedsnr), fld('Gartennummer', f.gartennr), fld('Anrede', f.anrede),
     fld('Name *', f.name), fld('Straße und Hausnummer', f.strasse), fld('PLZ und Ort', f.plzOrt),
     fld('Versandart', f.versand, 'Steht oben rechts auf der Rechnung'),
+    fld('E-Mail-Adresse', f.email, 'Empfänger beim Vorbereiten der Rechnungs-E-Mail'), fld('Telefon', f.telefon),
     fld('Gartengröße in m² *', f.gartengroesse), fld('Umlage abweichend in €', f.umlage, 'Nur ausfüllen, wenn dieser Pächter nicht die Standard-Umlage zahlt'),
     fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz),
     fld('Notiz (nur intern, steht nicht auf der Rechnung – bitte keine Gesundheitsdaten oder sonstige sensible Angaben)', f.notiz, null, true));
@@ -1427,8 +1529,9 @@ function paechterDialog(p) {
       const gg = parseNum(f.gartengroesse.value), um = parseNum(f.umlage.value);
       if (Number.isNaN(gg) || Number.isNaN(um) || (gg !== null && gg < 0) || (um !== null && um < 0)) { toast('Gartengröße und Umlage müssen Zahlen ab 0 sein.', 'err'); return false; }
       const data = { mitgliedsnr: f.mitgliedsnr.value, gartennr: f.gartennr.value, anrede: f.anrede.value, name: f.name.value,
-        strasse: f.strasse.value, plzOrt: f.plzOrt.value, versand: f.versand.value, gartengroesse: gg ?? 0, umlageAbweichend: um,
+        strasse: f.strasse.value, plzOrt: f.plzOrt.value, versand: f.versand.value, email: f.email.value.trim(), telefon: f.telefon.value, gartengroesse: gg ?? 0, umlageAbweichend: um,
         wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value, notiz: f.notiz.value.trim() };
+      if (data.versand === 'Emailsendung' && !data.email && !(await confirmBox('Versandart ist »Emailsendung«, aber es ist keine E-Mail-Adresse eingetragen. Trotzdem speichern?', 'Trotzdem speichern'))) return false;
       const gnr = data.gartennr.trim().toLowerCase();
       const gleich = gnr ? S.state.paechter.find((q) => q.id !== cur.id && (q.gartennr || '').trim().toLowerCase() === gnr) : null;
       if (gleich && !(await confirmBox(`Die Gartennummer ${data.gartennr.trim()} ist schon bei ${gleich.name} (${gleich.mitgliedsnr}) eingetragen. Trotzdem speichern?`, 'Trotzdem speichern'))) return false;
@@ -1448,12 +1551,13 @@ function adminPaechter() {
   const fill = () => {
     tbody.replaceChildren();
     const q = S.filter.trim().toLowerCase();
-    const shown = list.filter((p) => !q || [p.mitgliedsnr, p.name, p.gartennr, p.strasse].some((x) => (x || '').toLowerCase().includes(q)));
+    const shown = list.filter((p) => !q || [p.mitgliedsnr, p.name, p.gartennr, p.strasse, p.email, p.telefon].some((x) => (x || '').toLowerCase().includes(q)));
     for (const p of shown) {
       tbody.append(h('tr', null,
         h('td', null, p.mitgliedsnr), h('td', null, p.gartennr),
         h('td', { class: 'name', title: p.name }, p.name, p.notiz ? h('span', { title: p.notiz, style: 'margin-left:4px;cursor:help' }, '📝') : null),
         h('td', null, [p.strasse, p.plzOrt].filter(Boolean).join(', ')),
+        h('td', null, [p.telefon, p.email].filter(Boolean).map((x, i) => [i ? h('br') : null, x])),
         h('td', { class: 'num' }, nfFlex.format(p.gartengroesse) + ' m²'),
         h('td', { class: 'num' }, p.umlageAbweichend == null ? 'Standard' : eur(p.umlageAbweichend)),
         h('td', null, p.wasserzaehlerNr), h('td', null, p.stromzaehlerNr),
@@ -1466,7 +1570,7 @@ function adminPaechter() {
             try { await api('DELETE', `/api/admin/paechter/${p.id}`); toast('In den Papierkorb gelegt', 'ok'); S.papierkorb = null; await reload(); } catch (e) { handleErr(e); }
           } }, 'Löschen'))));
     }
-    if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 9, class: 'empty' }, list.length ? 'Keine Treffer.' : 'Noch keine Pächter. Lege den ersten mit »Pächter anlegen« an oder importiere eine Liste.')));
+    if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 10, class: 'empty' }, list.length ? 'Keine Treffer.' : 'Noch keine Pächter. Lege den ersten mit »Pächter anlegen« an oder importiere eine Liste.')));
   };
   fill();
   return h('div', null,
@@ -1478,7 +1582,7 @@ function adminPaechter() {
       h('div', { class: 'spacer' }),
       h('button', { class: 'btn', title: 'Liste aller Pächter mit Anschrift als PDF zum Ausdrucken', onclick: paechterlisteDrucken }, 'Pächterliste drucken')),
     h('div', { class: 'tablewrap' }, h('table', null,
-      h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Größe', 'Umlage', 'Wasserzähler', 'Stromzähler', ''].map((x) => h('th', null, x)))), tbody)),
+      h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Kontakt', 'Größe', 'Umlage', 'Wasserzähler', 'Stromzähler', ''].map((x) => h('th', null, x)))), tbody)),
     papierkorbCard());
 }
 
@@ -1821,6 +1925,19 @@ function ausgabeDialog(a) {
   ].filter(Boolean));
 }
 
+// Hinweis, wenn sich der Kassenbestand des Vorjahres nach dem Jahreswechsel noch geändert hat (z. B. eine
+// Vorjahresrechnung wurde erst jetzt bezahlt): sonst fehlt dieses Geld im Kassenbestand des laufenden Jahres.
+function anfangsbestandHinweis(k, pruefMode) {
+  const vj = k.vorjahrEndbestand;
+  if (vj == null || Math.abs(vj - k.anfangsbestand) < 0.005) return null;
+  const text = `Der Kassenbestand Ende ${k.jahr - 1} beträgt inzwischen ${eur(vj)}, der Anfangsbestand ${k.jahr} ist ${eur(k.anfangsbestand)} (Unterschied ${eur(vj - k.anfangsbestand)}). Das passiert zum Beispiel, wenn eine Vorjahresrechnung erst nach dem Jahreswechsel bezahlt oder eine Ausgabe nachgetragen wurde.`;
+  if (pruefMode || vj < 0) return h('div', { class: 'banner warn' }, text);
+  return h('div', { class: 'banner warn' }, text, ' ',
+    h('button', { class: 'btn small', onclick: async () => {
+      try { S.kasse = await api('PUT', `/api/admin/anfangsbestand?year=${k.jahr}`, { betrag: vj }); S.kasseVerlauf = null; S.dashKasse = null; toast(`Anfangsbestand auf ${eur(vj)} gesetzt`, 'ok'); render(); } catch (e) { handleErr(e); }
+    } }, `Anfangsbestand auf ${eur(vj)} setzen`));
+}
+
 function adminKassenbericht(pruefMode) {
   const st = S.state;
   if (S.kasseYear == null) S.kasseYear = st.currentYear;
@@ -1920,6 +2037,7 @@ function adminKassenbericht(pruefMode) {
     h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), yearSel),
     h('p', { class: 'hint' }, `Übersicht für ${S.kasseYear}: ${k.paechter} Pächter (${k.ausgestellt} aus ausgestellten Rechnungen, ${k.berechnet} berechnet, aber noch nicht ausgestellt${k.unvollstaendig.length ? `, ${k.unvollstaendig.length} unvollständig` : ''}). Die Beträge »sonstige Ausgaben« sind Vereinskosten neben der Pächterabrechnung, z. B. Kontoführungsgebühren, Anwaltskosten oder Anschaffungen.`),
     k.unvollstaendig.length ? h('div', { class: 'banner warn' }, `Nicht enthalten (Angaben fehlen): ${k.unvollstaendig.join(', ')}`) : null,
+    anfangsbestandHinweis(k, pruefMode),
     h('div', { class: 'card', style: 'margin-bottom:14px' },
       h('div', { class: 'toolbar' },
         h('label', null, 'Anfangsbestand der Kasse'),
@@ -2021,7 +2139,7 @@ function adminData() {
   wrap.append(
     h('div', { class: 'card', style: 'margin-bottom:16px' },
       h('h3', { style: 'margin-top:0' }, 'Pächter aus Excel oder CSV importieren'),
-      h('p', { class: 'hint' }, 'Die Datei braucht eine Kopfzeile mit mindestens »Mitgliedsnr.« und »Name«. Weitere Spalten werden automatisch erkannt: Gartennr., Anrede, Straße, PLZ Ort, Versandart, Gartengröße, Umlage abweichend, Wasserzähler-Nr., Stromzähler-Nr., Wasser/Energie Stand Vorjahr und aktuell, Arbeitsstunden, Versicherung, Grundsteuer, Auslagen, Hinweis, Abschlag. Eine passend aufgebaute Excel-Vorlage (Blatt »Mitglieder«) funktioniert direkt.'),
+      h('p', { class: 'hint' }, 'Die Datei braucht eine Kopfzeile mit mindestens »Mitgliedsnr.« und »Name«. Weitere Spalten werden automatisch erkannt: Gartennr., Anrede, Straße, PLZ Ort, Versandart, E-Mail, Telefon, Gartengröße, Umlage abweichend, Wasserzähler-Nr., Stromzähler-Nr., Wasser/Energie Stand Vorjahr und aktuell, Arbeitsstunden, Versicherung, Grundsteuer, Auslagen, Hinweis, Abschlag. Eine passend aufgebaute Excel-Vorlage (Blatt »Mitglieder«) funktioniert direkt.'),
       file, previewBox),
     h('div', { class: 'card', style: 'margin-bottom:16px' },
       h('h3', { style: 'margin-top:0' }, 'Export'),
@@ -2029,8 +2147,9 @@ function adminData() {
       h('a', { class: 'btn', href: `/api/export?year=${st.year}` }, `Jahresübersicht ${st.year} als Excel`)),
     h('div', { class: 'card' },
       h('h3', { style: 'margin-top:0' }, 'Datensicherung'),
-      h('p', { class: 'hint' }, 'Das Programm legt bei Änderungen automatisch eine Tagessicherung an (die letzten 60 Tage) und vor dem Jahreswechsel, Löschen und Import zusätzlich eine eigene. Du kannst außerdem den gesamten Datenbestand herunterladen. Eine Sicherung spielst du direkt hier unten wieder ein.'),
+      h('p', { class: 'hint' }, 'Das Programm legt bei Änderungen automatisch eine Tagessicherung an (die letzten 60 Tage) und vor Löschen und Import zusätzlich eine eigene. Die Sicherung vor jedem Jahreswechsel bleibt 12 Jahre erhalten, so lässt sich der Stand jedes Abrechnungsjahres über die ganze Aufbewahrungsfrist zurückholen. Du kannst außerdem den gesamten Datenbestand herunterladen. Eine Sicherung spielst du direkt hier unten wieder ein.'),
       h('div', { class: 'actions', style: 'margin-top:8px' },
+        h('button', { class: 'btn', title: 'Sofort eine Sicherung anlegen und in den zweiten Sicherungsordner kopieren', onclick: sicherungJetzt }, 'Jetzt sichern'),
         h('a', { class: 'btn', href: '/api/admin/backup' }, 'Gesamten Datenbestand herunterladen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'sicherungen' }).catch(handleErr) }, 'Sicherungsordner öffnen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'daten' }).catch(handleErr) }, 'Datenordner öffnen')),

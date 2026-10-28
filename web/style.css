@@ -70,6 +70,7 @@ nav.tabs button.active { color: #fff; font-weight: 600; border-bottom-color: #ff
 .top label { font-size: 12px; opacity: .9; margin-right: 6px; }
 .top select {
   font: inherit; padding: 5px 8px; border-radius: 6px; border: 0; background: #fff; color: var(--text);
+  max-width: 145px; /* sonst macht »JJJJ (abgeschlossen)« in der Liste das Feld zu breit */
 }
 .top button.quit {
   background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.4);
@@ -94,7 +95,7 @@ p.hint { color: var(--muted); margin: 4px 0 12px; }
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 .toolbar .spacer { flex: 1; }
 .toolbar .stat { color: var(--muted); }
-input[type=text], input[type=search], input[type=password], input[type=date], input[type=number], select, textarea {
+input[type=text], input[type=email], input[type=tel], input[type=search], input[type=password], input[type=date], input[type=number], select, textarea {
   font: inherit; padding: 6px 8px; border: 1px solid #b9bdb2; border-radius: 6px; background: #fff; color: var(--text);
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid #79b287; outline-offset: 0; border-color: var(--green); }
@@ -203,12 +204,17 @@ dialog .dfoot { padding: 12px 18px; display: flex; gap: 10px; justify-content: f
 .footer { margin-top: 26px; color: var(--muted); font-size: 12px; }
 ul.plain { margin: 6px 0 0; padding-left: 20px; }
 
-@media (max-width: 1350px) {
-  header.top { flex-wrap: wrap; padding: 6px 12px; }
+@media (max-width: 1450px) {
+  /* etwas enger, damit der Kopf im Programmfenster (1280 px breit) und auf Laptops (1366 px) in eine Zeile passt */
+  header.top { flex-wrap: wrap; padding: 6px 12px; gap: 10px; }
+  nav.tabs button { padding: 0 9px; }
+  .globalsearch .gs-input { width: 130px; }
 }
 @media (max-width: 900px) {
   .split { grid-template-columns: 1fr; }
   header.top { flex-wrap: wrap; padding: 6px 12px; gap: 10px; }
+  nav.tabs { flex-wrap: wrap; }
+  nav.tabs button { padding: 8px 9px; }
 }
 
 .dot.iss { background: #2f6fbd; }

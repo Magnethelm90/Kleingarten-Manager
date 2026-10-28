@@ -38,7 +38,17 @@ const (
 	fAusl
 	fHinweis
 	fAbschlag
+	fEmail
+	fTelefon
 )
+
+// exportBerechnet sind die berechneten Spalten des Excel-Exports. Beim erneuten Einlesen des eigenen
+// Exports werden sie (richtigerweise) ignoriert, aber nicht als »unbekannte Spalte« gemeldet.
+var exportBerechnet = []string{
+	"Wasserverbrauch (m³)", "Kosten Wasser (€)", "Energieverbrauch (kWh)", "Kosten Energie (€)", "Nachzahlung fehlende Stunden (€)",
+	"Zwischensumme 1 (€)", "Pacht Garten (€)", "Pacht Vereinsfläche (€)", "Pacht freie Gärten (€)", "Mitgliedsbeitrag (€)", "Umlage (€)",
+	"Zwischensumme 2 (€)", "Vergütung Arbeitsstunden (€)", "Gesamtbetrag (€)", "Prüfung",
+}
 
 // normHeader macht aus einer Spaltenüberschrift einen Vergleichsschlüssel.
 func normHeader(s string) string {
@@ -91,6 +101,10 @@ func classify(n string) field {
 		return fPLZ
 	case pre("versand"):
 		return fVersand
+	case pre("email", "mail") || has("emailadr", "mailadr"):
+		return fEmail
+	case pre("telefon", "tel", "handy", "mobil", "fon"):
+		return fTelefon
 	case pre("gartengroesse", "groesse", "flaeche", "quadratmeter"):
 		return fGroesse
 	case pre("umlageabw"):
@@ -194,9 +208,13 @@ func parseImport(table [][]string, raw bool, st Settings, existing []Paechter) (
 		return nil, nil, errors.New("Keine Kopfzeile gefunden. Es werden mindestens die Spalten »Mitgliedsnr.« und »Name« erwartet")
 	}
 	warn := []string{}
+	berechnet := map[string]bool{}
+	for _, h := range exportBerechnet {
+		berechnet[normHeader(h)] = true
+	}
 	var ignoriert []string
 	for c, cell := range table[hdr] {
-		if _, ok := colField[c]; !ok && strings.TrimSpace(cell) != "" {
+		if _, ok := colField[c]; !ok && strings.TrimSpace(cell) != "" && !berechnet[normHeader(cell)] {
 			ignoriert = append(ignoriert, "»"+trim(strings.TrimSpace(cell), 40)+"«")
 		}
 	}
@@ -208,11 +226,12 @@ func parseImport(table [][]string, raw bool, st Settings, existing []Paechter) (
 	names := map[field]string{fGarten: "Gartennr.", fAnrede: "Anrede", fStrasse: "Straße", fPLZ: "PLZ Ort", fVersand: "Versandart",
 		fGroesse: "Gartengröße", fUmlageAbw: "Umlage abweichend", fUmlage: "Umlage", fWZ: "Wasserzähler-Nr.", fSZ: "Stromzähler-Nr.",
 		fWVJ: "Wasser Vorjahr", fWAkt: "Wasser aktuell", fSVJ: "Energie Vorjahr", fSAkt: "Energie aktuell", fStd: "Arbeitsstunden",
-		fVers: "Versicherung", fGrund: "Grundsteuer", fAusl: "Auslagen", fHinweis: "Hinweis", fAbschlag: "Abschlag"}
+		fVers: "Versicherung", fGrund: "Grundsteuer", fAusl: "Auslagen", fHinweis: "Hinweis", fAbschlag: "Abschlag",
+		fEmail: "E-Mail", fTelefon: "Telefon"}
 	for _, f := range colField {
 		present[f] = true
 	}
-	for f := fGarten; f <= fAbschlag; f++ {
+	for f := fGarten; f <= fTelefon; f++ {
 		if present[f] && names[f] != "" {
 			felder = append(felder, names[f])
 		}
@@ -258,6 +277,7 @@ func parseImport(table [][]string, raw bool, st Settings, existing []Paechter) (
 		p := Paechter{Mitgliedsnr: nr, Name: name,
 			Gartennr: trim(get(fGarten), 20), Anrede: trim(get(fAnrede), 30), Strasse: trim(get(fStrasse), 100),
 			PLZOrt: trim(get(fPLZ), 100), Versand: trim(get(fVersand), 30),
+			Email: trim(get(fEmail), 100), Telefon: trim(get(fTelefon), 40),
 			WasserzaehlerNr: trim(get(fWZ), 40), StromzaehlerNr: trim(get(fSZ), 40)}
 		if g := get(fGroesse); g != "" {
 			if v, ok := parseNumber(g, raw); ok && validNum(v) {
@@ -274,6 +294,10 @@ func parseImport(table [][]string, raw bool, st Settings, existing []Paechter) (
 			if v, ok := parseNumber(u, raw); ok && validNum(v) && math.Abs(v-st.UmlageStandard) > 0.004 {
 				p.UmlageAbweichend = &v
 			}
+		}
+		if p.Email != "" && !emailGueltig(p.Email) {
+			row.Warnungen = append(row.Warnungen, "E-Mail-Adresse »"+p.Email+"« nicht lesbar – bitte von Hand nachtragen")
+			p.Email = ""
 		}
 		if strings.HasPrefix(strings.ToLower(p.Versand), "e") {
 			p.Versand = "Emailsendung"
@@ -366,11 +390,10 @@ func exportOverview(v yearView) ([]byte, error) {
 	head := []string{"Mitgliedsnr.", "Gartennr.", "Anrede", "Name", "Straße", "PLZ Ort", "Versandart", "Gartengröße (m²)",
 		"Wasserzähler-Nr.", "Wasser Stand Vorjahr", "Wasser Stand aktuell", "Stromzähler-Nr.", "Energie Stand Vorjahr", "Energie Stand aktuell",
 		"Erbrachte Arbeitsstunden", "Versicherung (€)", "Grundsteuer (€)", "Sonstige Auslagen (€)", "Hinweis / Erläuterung", "Abschlagszahlung (€)",
-		"Umlage abweichend (€)",
-		"Wasserverbrauch (m³)", "Kosten Wasser (€)", "Energieverbrauch (kWh)", "Kosten Energie (€)", "Nachzahlung fehlende Stunden (€)",
-		"Zwischensumme 1 (€)", "Pacht Garten (€)", "Pacht Vereinsfläche (€)", "Pacht freie Gärten (€)", "Mitgliedsbeitrag (€)", "Umlage (€)",
-		"Zwischensumme 2 (€)", "Vergütung Arbeitsstunden (€)", "Gesamtbetrag (€)", "Prüfung"}
-	widths := []float64{12, 9, 9, 22, 22, 16, 14, 11, 13, 11, 11, 13, 11, 11, 11, 11, 11, 11, 24, 12, 12, 11, 11, 11, 11, 13, 12, 11, 11, 11, 11, 10, 12, 12, 13, 30}
+		"Umlage abweichend (€)", "E-Mail", "Telefon"}
+	nEingabe := len(head)
+	head = append(head, exportBerechnet...)
+	widths := []float64{12, 9, 9, 22, 22, 16, 14, 11, 13, 11, 11, 13, 11, 11, 11, 11, 11, 11, 24, 12, 12, 26, 16, 11, 11, 11, 11, 13, 12, 11, 11, 11, 11, 10, 12, 12, 13, 30}
 	hdrRow := make([]xCell, len(head))
 	for i, h := range head {
 		hdrRow[i] = xCell{h, stHeader}
@@ -395,14 +418,14 @@ func exportOverview(v yearView) ([]byte, error) {
 			{p.WasserzaehlerNr, stNormal}, {np(a.WasserVJ), stNum}, {np(a.WasserAkt), stNum},
 			{p.StromzaehlerNr, stNormal}, {np(a.StromVJ), stNum}, {np(a.StromAkt), stNum},
 			{np(a.Stunden), stNum}, {a.Versicherung, stEUR}, {a.Grundsteuer, stEUR}, {a.Auslagen, stEUR},
-			{a.Hinweis, stNormal}, {a.Abschlag, stEUR}, {umlAbw, stEUR},
+			{a.Hinweis, stNormal}, {a.Abschlag, stEUR}, {umlAbw, stEUR}, {p.Email, stNormal}, {p.Telefon, stNormal},
 			{np(r.WasserVerbrauch), stNum}, {r.KostenWasser, stEUR}, {np(r.EnergieVerbrauch), stNum}, {r.KostenEnergie, stEUR},
 			{r.NachzahlungStunden, stEUR}, {r.Zwischensumme1, stEUR}, {r.PachtGarten, stEUR}, {r.PachtVerein, stEUR},
 			{r.PachtFrei, stEUR}, {r.Mitgliedsbeitrag, stEUR}, {r.Umlage, stEUR}, {r.Zwischensumme2, stEUR},
 			{r.Verguetung, stEUR}, {r.Gesamt, stEURb}, {r.Status, stNormal},
 		}
 		if !r.Vollstaendig {
-			row[34] = xCell{nil, stEURb}
+			row[nEingabe+13] = xCell{nil, stEURb} // Gesamtbetrag
 		}
 		rows = append(rows, row)
 	}

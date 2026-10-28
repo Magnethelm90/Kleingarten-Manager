@@ -353,7 +353,7 @@ func TestExcelRundreise(t *testing.T) {
 		t.Errorf("importierte Zeile: %+v %+v", r.Paechter, r.Ablesung)
 	}
 	// Gesamtbetrag im Export = 129,83
-	if got := table[1][34]; got != "129.83" {
+	if got := table[1][36]; got != "129.83" {
 		t.Errorf("Gesamtbetrag im Export: %q", got)
 	}
 	// Datei, die keine Excel-Datei ist

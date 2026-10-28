@@ -536,6 +536,11 @@ type stateResp struct {
 	// SicherungFehler: Hinweistext, falls die jüngste Sicherung beschädigt ist (leer = alles gut).
 	SicherungFehler string `json:"sicherungFehler,omitempty"`
 	TutorialGesehen bool   `json:"tutorialGesehen"`
+	// ZweiteSicherung: ob ein zweiter Sicherungsordner eingerichtet ist und wann er zuletzt erreicht wurde.
+	ZweiteSicherung zweiteSicherungStand `json:"zweiteSicherung"`
+	// Demo: Beispieldaten sind geladen; Leer: noch nichts eingegeben (Beispieldaten können geladen werden).
+	Demo bool `json:"demo"`
+	Leer bool `json:"leer"`
 	// OffeneVorjahre: noch nicht (voll) bezahlte, gültige Rechnungen aus allen anderen Jahren als dem
 	// angezeigten, damit sie nach einem Jahreswechsel nicht aus dem Blick geraten.
 	OffeneVorjahre []archiveEntry `json:"offeneVorjahre"`
@@ -577,6 +582,8 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	}
 	res.SicherungFehler = a.st.pruefeSicherung()
 	res.TutorialGesehen = a.st.d.TutorialGesehen
+	res.ZweiteSicherung = a.st.zweiteSicherungLocked()
+	res.Demo, res.Leer = a.st.d.Demo, a.st.datenbestandLeer()
 	res.OffeneVorjahre = a.st.offeneAndererJahreLocked(year)
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
@@ -731,6 +738,11 @@ func cleanPaechter(p Paechter) (Paechter, error) {
 	p.Strasse = trim(p.Strasse, 100)
 	p.PLZOrt = trim(p.PLZOrt, 100)
 	p.Versand = trim(p.Versand, 30)
+	p.Email = trim(p.Email, 100)
+	p.Telefon = trim(p.Telefon, 40)
+	if p.Email != "" && !emailGueltig(p.Email) {
+		return p, bad("Die E-Mail-Adresse »" + p.Email + "« sieht nicht richtig aus (Beispiel: name@beispiel.de)")
+	}
 	p.WasserzaehlerNr = trim(p.WasserzaehlerNr, 40)
 	p.StromzaehlerNr = trim(p.StromzaehlerNr, 40)
 	p.Notiz = trim(p.Notiz, 300)
@@ -1010,6 +1022,9 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if in.ZweiteSicherung != a.st.d.Settings.ZweiteSicherung {
+		a.st.zweiteSicherungGeaendert()
+	}
 	a.st.d.Settings = in
 	a.st.audit("Preise und Einstellungen geändert")
 	if err := a.st.saveLocked(); err != nil {
@@ -1058,7 +1073,7 @@ func (a *App) handleNextYear(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, bad("Das Folgejahr existiert schon"))
 		return
 	}
-	a.st.snapshotBackup("vor-Jahreswechsel")
+	a.st.snapshotBackup(jahreswechselAnlass)
 	old := a.st.ensureYear(cur)
 	cs := clone(d.Settings)
 	old.Settings = &cs
@@ -1231,11 +1246,20 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 			if !has["Stromzähler-Nr."] {
 				p.StromzaehlerNr = old.StromzaehlerNr
 			}
+			if !has["E-Mail"] {
+				p.Email = old.Email
+			}
+			if !has["Telefon"] {
+				p.Telefon = old.Telefon
+			}
+			p.Notiz = old.Notiz // gibt es in keiner Importdatei, darf beim Aktualisieren nicht verloren gehen
 			a.st.d.Paechter[idx] = p
+			a.st.gartenWechsel(p.ID, old.Gartennr, p.Gartennr, p.Mitgliedsnr, p.Name)
 			updated++
 		} else {
 			p.ID = newID()
 			a.st.d.Paechter = append(a.st.d.Paechter, p)
+			a.st.gartenOeffnen(p.ID, p.Gartennr, p.Mitgliedsnr, p.Name)
 			added++
 		}
 		if row.Ablesung != nil {
@@ -1277,6 +1301,7 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 			j.Ablesungen[p.ID] = Ablesung{}
 		}
 	}
+	a.st.audit("Import: %d Pächter neu angelegt, %d aktualisiert", added, updated)
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return
@@ -1558,6 +1583,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/invoice/{id}", a.handleInvoice)
 	mux.HandleFunc("POST /api/invoices/issue", a.handleIssue)
 	mux.HandleFunc("POST /api/open-invoice/{id}", a.handleOpenInvoice)
+	mux.HandleFunc("POST /api/invoice-email/{id}", a.handleRechnungEmail)
 	mux.HandleFunc("GET /api/ablesebogen", a.handleAblesebogen)
 	mux.HandleFunc("POST /api/ablesebogen/oeffnen", a.handleAblesebogenOeffnen)
 	mux.HandleFunc("GET /api/admin/rechnungen-druck", a.admin(a.handleDruckPost))
@@ -1589,6 +1615,9 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/admin/paechter/{id}/auskunft", a.admin(a.handleAuskunft))
 	mux.HandleFunc("GET /api/admin/sicherungen", a.admin(a.handleSicherungen))
 	mux.HandleFunc("POST /api/admin/sicherungen/wiederherstellen", a.admin(a.handleSicherungWiederherstellen))
+	mux.HandleFunc("POST /api/admin/sicherung-jetzt", a.admin(a.handleSicherungJetzt))
+	mux.HandleFunc("POST /api/admin/beispieldaten", a.admin(a.handleDemoLaden))
+	mux.HandleFunc("DELETE /api/admin/beispieldaten", a.admin(a.handleDemoEntfernen))
 	mux.HandleFunc("GET /api/admin/datenschutz", a.admin(a.handleDatenschutz))
 	mux.HandleFunc("POST /api/admin/datenschutz/bereinigen", a.admin(a.handleBereinigen))
 	mux.HandleFunc("DELETE /api/admin/paechter/{id}/endgueltig", a.admin(a.handlePaechterEndgueltig))
