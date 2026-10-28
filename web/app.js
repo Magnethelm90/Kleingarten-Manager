@@ -502,7 +502,7 @@ function viewUebersicht() {
 
   return h('div', null,
     h('h2', null, `Willkommen beim Kleingarten-Manager ${st.currentYear}`),
-    h('p', { class: 'hint' }, `${st.settings.vereinName}. Kurzer Überblick über den aktuellen Stand.`),
+    h('p', { class: 'hint' }, `${st.settings.vereinName.replace(/\.\s*$/, '')}. Kurzer Überblick über den aktuellen Stand.`),
     jubilaeumBanner(st, istAdmin),
     h('div', { class: 'cards' }, cards),
     h('div', { class: 'actions', style: 'margin-top:6px' },

@@ -1,5 +1,43 @@
 # Kleingarten-Manager
 
+**Die Jahresabrechnung für euren Kleingartenverein.** Pächter einmal anlegen, jedes Jahr nur noch die
+Zählerstände eintragen – die Rechnungen kommen fertig als PDF heraus, mit QR-Code zum Bezahlen.
+
+### [⬇ Zum Download (Windows und macOS)](https://github.com/Magnethelm90/Kleingarten-Manager/releases/latest)
+
+- **Kostenlos**, ohne Anmeldung und ohne Abo
+- **Keine Installation:** eine Datei herunterladen und doppelklicken
+- **Eure Daten bleiben bei euch:** alles liegt auf dem eigenen Rechner, nichts wird ins Internet gesendet
+- **Für Vorstand und Kassenwart gemacht:** Zählerstände, Rechnungen, Zahlungen, Mahnungen, Kassenbericht,
+  Jahreswechsel, Pächterliste und Ablesebogen zum Ausdrucken
+- **Mit Einführung:** beim ersten Start zeigt ein kurzer Rundgang, was wohin gehört
+
+## So sieht es aus
+
+| | |
+| --- | --- |
+| ![Einführung beim ersten Start](docs/bilder/einfuehrung.png) | ![Zählerstände eintragen](docs/bilder/zaehlerstaende.png) |
+| **Einführung** beim ersten Start – fünf kurze Schritte | **Zählerstände:** Nummer eintippen, nur die neuen Stände eingeben |
+| ![Rechnungen prüfen und ausstellen](docs/bilder/rechnungen.png) | ![Zahlungen verfolgen](docs/bilder/zahlungen.png) |
+| **Rechnungen** prüfen und mit einem Klick für alle ausstellen | **Zahlungen** abhaken, offene Posten und Mahnungen |
+| ![Pächter verwalten](docs/bilder/paechter.png) | ![Beispielrechnung](docs/bilder/rechnung-beispiel.png) |
+| **Pächter** einmal anlegen oder aus Excel übernehmen | **Die fertige Rechnung** als PDF, mit GiroCode zum Bezahlen |
+
+<sub>Alle Namen und Zahlen in den Bildern sind erfunden.</sub>
+
+## In drei Schritten zur ersten Rechnung
+
+1. **Herunterladen und starten:** Die Datei aus dem [Download](https://github.com/Magnethelm90/Kleingarten-Manager/releases/latest)
+   in einen eigenen Ordner legen und doppelklicken. Windows zeigt beim ersten Start eventuell
+   „Der Computer wurde durch Windows geschützt“, weil das Programm nicht kostenpflichtig signiert ist:
+   auf **Weitere Informationen → Trotzdem ausführen** klicken.
+2. **Einrichten:** unter *Admin → Preise & Einstellungen* Verein, Preise und Bankverbindung eintragen und
+   die Pächter anlegen (oder eine vorhandene Excel-Liste importieren).
+3. **Abrechnen:** unter *Zählerstände* die neuen Stände eingeben, dann unter *Rechnungen* auf
+   „Alle offenen ausstellen“ – fertig sind die PDFs zum Mailen oder Ausdrucken.
+
+## Über das Programm
+
 Kleines Programm für Kleingartenvereine (Windows und macOS): Pächter einmal anlegen, jedes Jahr nur noch die
 Zählerstände eintragen, daraus werden die Rechnungen als PDF erzeugt. Daneben auch Lageplan, Kassenbericht mit
 Kassenprüfer-Zugang, Mahnungen und mehr – daher der Name: es ist inzwischen mehr als reine Abrechnung
@@ -113,6 +151,9 @@ Alle Namen, Adressen und die Bankverbindung in den Voreinstellungen sind Platzha
 Programmfenster (kein Konsolenfenster, kein Browser). Windows 10/11 bringt die dafür nötige
 WebView2-Komponente serienmäßig mit (Teil von Microsoft Edge); auf sehr alten oder stark abgespeckten
 Windows-Installationen installiert Windows Update sie bei Bedarf automatisch nach.
+Weil die `.exe` nicht mit einem kostenpflichtigen Zertifikat signiert ist, warnt Windows beim ersten Start
+eventuell („Der Computer wurde durch Windows geschützt“): **Weitere Informationen → Trotzdem ausführen**.
+Danach startet das Programm ohne Rückfrage.
 Die Daten liegen im selben Ordner:
 
 | Datei / Ordner | Inhalt |
