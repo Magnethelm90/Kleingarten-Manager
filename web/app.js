@@ -1399,13 +1399,15 @@ function viewPruefShell() {
 function paechterDialog(p) {
   const isNew = !p;
   const cur = p || { mitgliedsnr: '', gartennr: '', anrede: 'Herr', name: '', strasse: '', plzOrt: S.state.settings.ort, versand: 'Emailsendung',
-    gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '', notiz: '' };
+    email: '', telefon: '', gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '', notiz: '' };
   const t = (val, ph) => h('input', { type: 'text', value: val || '', placeholder: ph || '', maxlength: 100, autocomplete: 'off' });
   const f = {
     mitgliedsnr: t(cur.mitgliedsnr, 'z. B. 35-95'), gartennr: t(cur.gartennr, 'z. B. 35'),
     anrede: h('select', { value: cur.anrede }, ['Herr', 'Frau', 'Familie', 'Herr und Frau', ''].map((a) => h('option', { value: a }, a || '(keine)'))),
     name: t(cur.name), strasse: t(cur.strasse), plzOrt: t(cur.plzOrt),
     versand: h('select', { value: cur.versand }, ['Emailsendung', 'Postversand'].map((a) => h('option', { value: a }, a))),
+    email: h('input', { type: 'email', value: cur.email || '', placeholder: 'name@beispiel.de', maxlength: 100, autocomplete: 'off' }),
+    telefon: h('input', { type: 'tel', value: cur.telefon || '', maxlength: 40, autocomplete: 'off' }),
     gartengroesse: t(numIn(cur.gartengroesse || null)),
     umlage: t(numIn(cur.umlageAbweichend), `leer = Standard (${eur(S.state.settings.umlageStandard)})`),
     wz: t(cur.wasserzaehlerNr), sz: t(cur.stromzaehlerNr),
@@ -1418,6 +1420,7 @@ function paechterDialog(p) {
     fld('Mitgliedsnummer *', f.mitgliedsnr), fld('Gartennummer', f.gartennr), fld('Anrede', f.anrede),
     fld('Name *', f.name), fld('Straße und Hausnummer', f.strasse), fld('PLZ und Ort', f.plzOrt),
     fld('Versandart', f.versand, 'Steht oben rechts auf der Rechnung'),
+    fld('E-Mail-Adresse', f.email, 'Empfänger beim Vorbereiten der Rechnungs-E-Mail'), fld('Telefon', f.telefon),
     fld('Gartengröße in m² *', f.gartengroesse), fld('Umlage abweichend in €', f.umlage, 'Nur ausfüllen, wenn dieser Pächter nicht die Standard-Umlage zahlt'),
     fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz),
     fld('Notiz (nur intern, steht nicht auf der Rechnung – bitte keine Gesundheitsdaten oder sonstige sensible Angaben)', f.notiz, null, true));
@@ -1427,8 +1430,9 @@ function paechterDialog(p) {
       const gg = parseNum(f.gartengroesse.value), um = parseNum(f.umlage.value);
       if (Number.isNaN(gg) || Number.isNaN(um) || (gg !== null && gg < 0) || (um !== null && um < 0)) { toast('Gartengröße und Umlage müssen Zahlen ab 0 sein.', 'err'); return false; }
       const data = { mitgliedsnr: f.mitgliedsnr.value, gartennr: f.gartennr.value, anrede: f.anrede.value, name: f.name.value,
-        strasse: f.strasse.value, plzOrt: f.plzOrt.value, versand: f.versand.value, gartengroesse: gg ?? 0, umlageAbweichend: um,
+        strasse: f.strasse.value, plzOrt: f.plzOrt.value, versand: f.versand.value, email: f.email.value.trim(), telefon: f.telefon.value, gartengroesse: gg ?? 0, umlageAbweichend: um,
         wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value, notiz: f.notiz.value.trim() };
+      if (data.versand === 'Emailsendung' && !data.email && !(await confirmBox('Versandart ist »Emailsendung«, aber es ist keine E-Mail-Adresse eingetragen. Trotzdem speichern?', 'Trotzdem speichern'))) return false;
       const gnr = data.gartennr.trim().toLowerCase();
       const gleich = gnr ? S.state.paechter.find((q) => q.id !== cur.id && (q.gartennr || '').trim().toLowerCase() === gnr) : null;
       if (gleich && !(await confirmBox(`Die Gartennummer ${data.gartennr.trim()} ist schon bei ${gleich.name} (${gleich.mitgliedsnr}) eingetragen. Trotzdem speichern?`, 'Trotzdem speichern'))) return false;
@@ -1448,12 +1452,13 @@ function adminPaechter() {
   const fill = () => {
     tbody.replaceChildren();
     const q = S.filter.trim().toLowerCase();
-    const shown = list.filter((p) => !q || [p.mitgliedsnr, p.name, p.gartennr, p.strasse].some((x) => (x || '').toLowerCase().includes(q)));
+    const shown = list.filter((p) => !q || [p.mitgliedsnr, p.name, p.gartennr, p.strasse, p.email, p.telefon].some((x) => (x || '').toLowerCase().includes(q)));
     for (const p of shown) {
       tbody.append(h('tr', null,
         h('td', null, p.mitgliedsnr), h('td', null, p.gartennr),
         h('td', { class: 'name', title: p.name }, p.name, p.notiz ? h('span', { title: p.notiz, style: 'margin-left:4px;cursor:help' }, '📝') : null),
         h('td', null, [p.strasse, p.plzOrt].filter(Boolean).join(', ')),
+        h('td', null, [p.telefon, p.email].filter(Boolean).map((x, i) => [i ? h('br') : null, x])),
         h('td', { class: 'num' }, nfFlex.format(p.gartengroesse) + ' m²'),
         h('td', { class: 'num' }, p.umlageAbweichend == null ? 'Standard' : eur(p.umlageAbweichend)),
         h('td', null, p.wasserzaehlerNr), h('td', null, p.stromzaehlerNr),
@@ -1466,7 +1471,7 @@ function adminPaechter() {
             try { await api('DELETE', `/api/admin/paechter/${p.id}`); toast('In den Papierkorb gelegt', 'ok'); S.papierkorb = null; await reload(); } catch (e) { handleErr(e); }
           } }, 'Löschen'))));
     }
-    if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 9, class: 'empty' }, list.length ? 'Keine Treffer.' : 'Noch keine Pächter. Lege den ersten mit »Pächter anlegen« an oder importiere eine Liste.')));
+    if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 10, class: 'empty' }, list.length ? 'Keine Treffer.' : 'Noch keine Pächter. Lege den ersten mit »Pächter anlegen« an oder importiere eine Liste.')));
   };
   fill();
   return h('div', null,
@@ -1478,7 +1483,7 @@ function adminPaechter() {
       h('div', { class: 'spacer' }),
       h('button', { class: 'btn', title: 'Liste aller Pächter mit Anschrift als PDF zum Ausdrucken', onclick: paechterlisteDrucken }, 'Pächterliste drucken')),
     h('div', { class: 'tablewrap' }, h('table', null,
-      h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Größe', 'Umlage', 'Wasserzähler', 'Stromzähler', ''].map((x) => h('th', null, x)))), tbody)),
+      h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Kontakt', 'Größe', 'Umlage', 'Wasserzähler', 'Stromzähler', ''].map((x) => h('th', null, x)))), tbody)),
     papierkorbCard());
 }
 
@@ -2021,7 +2026,7 @@ function adminData() {
   wrap.append(
     h('div', { class: 'card', style: 'margin-bottom:16px' },
       h('h3', { style: 'margin-top:0' }, 'Pächter aus Excel oder CSV importieren'),
-      h('p', { class: 'hint' }, 'Die Datei braucht eine Kopfzeile mit mindestens »Mitgliedsnr.« und »Name«. Weitere Spalten werden automatisch erkannt: Gartennr., Anrede, Straße, PLZ Ort, Versandart, Gartengröße, Umlage abweichend, Wasserzähler-Nr., Stromzähler-Nr., Wasser/Energie Stand Vorjahr und aktuell, Arbeitsstunden, Versicherung, Grundsteuer, Auslagen, Hinweis, Abschlag. Eine passend aufgebaute Excel-Vorlage (Blatt »Mitglieder«) funktioniert direkt.'),
+      h('p', { class: 'hint' }, 'Die Datei braucht eine Kopfzeile mit mindestens »Mitgliedsnr.« und »Name«. Weitere Spalten werden automatisch erkannt: Gartennr., Anrede, Straße, PLZ Ort, Versandart, E-Mail, Telefon, Gartengröße, Umlage abweichend, Wasserzähler-Nr., Stromzähler-Nr., Wasser/Energie Stand Vorjahr und aktuell, Arbeitsstunden, Versicherung, Grundsteuer, Auslagen, Hinweis, Abschlag. Eine passend aufgebaute Excel-Vorlage (Blatt »Mitglieder«) funktioniert direkt.'),
       file, previewBox),
     h('div', { class: 'card', style: 'margin-bottom:16px' },
       h('h3', { style: 'margin-top:0' }, 'Export'),

@@ -67,6 +67,10 @@ type Paechter struct {
 	Strasse          string   `json:"strasse"`
 	PLZOrt           string   `json:"plzOrt"`
 	Versand          string   `json:"versand"`
+	// Email und Telefon: Kontakt für Rückfragen; die E-Mail-Adresse wird beim
+	// Vorbereiten der Rechnungs-E-Mail als Empfänger eingesetzt.
+	Email            string   `json:"email,omitempty"`
+	Telefon          string   `json:"telefon,omitempty"`
 	Gartengroesse    float64  `json:"gartengroesse"`
 	UmlageAbweichend *float64 `json:"umlageAbweichend"`
 	WasserzaehlerNr  string   `json:"wasserzaehlerNr"`
@@ -232,6 +236,25 @@ func trim(s string, max int) string {
 		r = r[:max]
 	}
 	return string(r)
+}
+
+// emailGueltig prüft eine E-Mail-Adresse grob (ein @, Domain mit Punkt, keine Leer- oder
+// Sonderzeichen). Bewusst streng bei Zeichen wie ? & # %, die in einem mailto-Link stören würden;
+// echte Vereinsadressen enthalten sie praktisch nie.
+func emailGueltig(s string) bool {
+	if len(s) > 100 || strings.ContainsAny(s, " \t\r\n\"(),:;<>[]\\?&#%") {
+		return false
+	}
+	for _, r := range s {
+		if r < 0x21 || r == 0x7f {
+			return false
+		}
+	}
+	lokal, domain, ok := strings.Cut(s, "@")
+	if !ok || lokal == "" || strings.Contains(domain, "@") {
+		return false
+	}
+	return strings.Contains(domain, ".") && !strings.HasPrefix(domain, ".") && !strings.HasSuffix(domain, ".") && !strings.Contains(domain, "..")
 }
 
 func parseDate(s string) (time.Time, error) { return time.Parse("2006-01-02", s) }

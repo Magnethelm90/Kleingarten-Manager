@@ -731,6 +731,11 @@ func cleanPaechter(p Paechter) (Paechter, error) {
 	p.Strasse = trim(p.Strasse, 100)
 	p.PLZOrt = trim(p.PLZOrt, 100)
 	p.Versand = trim(p.Versand, 30)
+	p.Email = trim(p.Email, 100)
+	p.Telefon = trim(p.Telefon, 40)
+	if p.Email != "" && !emailGueltig(p.Email) {
+		return p, bad("Die E-Mail-Adresse »" + p.Email + "« sieht nicht richtig aus (Beispiel: name@beispiel.de)")
+	}
 	p.WasserzaehlerNr = trim(p.WasserzaehlerNr, 40)
 	p.StromzaehlerNr = trim(p.StromzaehlerNr, 40)
 	p.Notiz = trim(p.Notiz, 300)
@@ -1231,11 +1236,20 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 			if !has["Stromzähler-Nr."] {
 				p.StromzaehlerNr = old.StromzaehlerNr
 			}
+			if !has["E-Mail"] {
+				p.Email = old.Email
+			}
+			if !has["Telefon"] {
+				p.Telefon = old.Telefon
+			}
+			p.Notiz = old.Notiz // gibt es in keiner Importdatei, darf beim Aktualisieren nicht verloren gehen
 			a.st.d.Paechter[idx] = p
+			a.st.gartenWechsel(p.ID, old.Gartennr, p.Gartennr, p.Mitgliedsnr, p.Name)
 			updated++
 		} else {
 			p.ID = newID()
 			a.st.d.Paechter = append(a.st.d.Paechter, p)
+			a.st.gartenOeffnen(p.ID, p.Gartennr, p.Mitgliedsnr, p.Name)
 			added++
 		}
 		if row.Ablesung != nil {
@@ -1277,6 +1291,7 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 			j.Ablesungen[p.ID] = Ablesung{}
 		}
 	}
+	a.st.audit("Import: %d Pächter neu angelegt, %d aktualisiert", added, updated)
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return

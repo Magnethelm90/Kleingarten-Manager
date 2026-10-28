@@ -14,7 +14,7 @@ import (
 )
 
 // buildMitgliederliste erzeugt die Pächterliste als A4-Querformat: Garten, Name, Anschrift, Größe,
-// Versandart und Zähler, nach Gartennummer (ersatzweise Mitgliedsnummer) sortiert.
+// Versandart, Kontakt und Zähler, nach Gartennummer (ersatzweise Mitgliedsnummer) sortiert.
 func buildMitgliederliste(s Settings, ps []Paechter) ([]byte, error) {
 	if len(ps) == 0 {
 		return nil, errors.New("Es sind keine Pächter angelegt")
@@ -38,7 +38,8 @@ func buildMitgliederliste(s Settings, ps []Paechter) ([]byte, error) {
 		titel string
 		w     float64
 	}{
-		{"Garten", 16}, {"Mitgl.-Nr.", 22}, {"Name", 58}, {"Anschrift", 92}, {"Größe m²", 20}, {"Versand", 31}, {"Zähler Wasser / Strom", 38},
+		{"Garten", 16}, {"Mitgl.-Nr.", 20}, {"Name", 48}, {"Anschrift", 66}, {"Größe m²", 18}, {"Versand", 25},
+		{"Telefon / E-Mail", 50}, {"Zähler Wasser / Strom", 34},
 	}
 	pdf := fpdf.New("L", "mm", "A4", "")
 	pdf.AddUTF8FontFromBytes("lib", "", fontRegular)
@@ -91,16 +92,18 @@ func buildMitgliederliste(s Settings, ps []Paechter) ([]byte, error) {
 		}
 		anschrift := strings.TrimSpace(strings.Join(nonEmpty(p.Strasse, p.PLZOrt), ", "))
 		zaehler := strings.TrimSpace(strings.Join(nonEmpty(p.WasserzaehlerNr, p.StromzaehlerNr), " / "))
+		kontakt := strings.Join(nonEmpty(p.Telefon, p.Email), " · ")
 		cells := []struct {
 			txt, style string
 			align      string
+			size       float64
 		}{
-			{p.Gartennr, "B", "C"}, {p.Mitgliedsnr, "", "C"}, {p.Name, "", "L"}, {anschrift, "", "L"},
-			{fmtFlex(p.Gartengroesse), "", "R"}, {p.Versand, "", "L"}, {zaehler, "", "L"},
+			{p.Gartennr, "B", "C", 9}, {p.Mitgliedsnr, "", "C", 9}, {p.Name, "", "L", 9}, {anschrift, "", "L", 9},
+			{fmtFlex(p.Gartengroesse), "", "R", 9}, {p.Versand, "", "L", 9}, {kontakt, "", "L", 8}, {zaehler, "", "L", 8},
 		}
 		x := left
 		for i, c := range cells {
-			pdf.SetFont("lib", c.style, 9)
+			pdf.SetFont("lib", c.style, c.size)
 			pdf.SetXY(x, y)
 			pdf.CellFormat(cols[i].w, rowH, fit(strings.TrimSpace(c.txt), cols[i].w), "1", 0, c.align, false, 0, "")
 			x += cols[i].w

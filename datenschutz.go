@@ -53,7 +53,7 @@ func (r *Rechnung) ausstellungsjahr() int {
 // Versandart und Umlage bleiben, sie sagen ohne Namen nichts über eine Person aus.
 func anonymisiere(p *Paechter, text string) {
 	p.Mitgliedsnr, p.Anrede, p.Name, p.Strasse, p.PLZOrt = "", "", text, "", ""
-	p.WasserzaehlerNr, p.StromzaehlerNr, p.Notiz = "", "", ""
+	p.WasserzaehlerNr, p.StromzaehlerNr, p.Notiz, p.Email, p.Telefon = "", "", "", "", ""
 }
 
 // entfernePerson löscht einen Pächter aus dem Datenbestand und entfernt seine Spuren, soweit
