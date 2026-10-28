@@ -536,6 +536,8 @@ type stateResp struct {
 	// SicherungFehler: Hinweistext, falls die jüngste Sicherung beschädigt ist (leer = alles gut).
 	SicherungFehler string `json:"sicherungFehler,omitempty"`
 	TutorialGesehen bool   `json:"tutorialGesehen"`
+	// ZweiteSicherung: ob ein zweiter Sicherungsordner eingerichtet ist und wann er zuletzt erreicht wurde.
+	ZweiteSicherung zweiteSicherungStand `json:"zweiteSicherung"`
 	// OffeneVorjahre: noch nicht (voll) bezahlte, gültige Rechnungen aus allen anderen Jahren als dem
 	// angezeigten, damit sie nach einem Jahreswechsel nicht aus dem Blick geraten.
 	OffeneVorjahre []archiveEntry `json:"offeneVorjahre"`
@@ -577,6 +579,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	}
 	res.SicherungFehler = a.st.pruefeSicherung()
 	res.TutorialGesehen = a.st.d.TutorialGesehen
+	res.ZweiteSicherung = a.st.zweiteSicherungLocked()
 	res.OffeneVorjahre = a.st.offeneAndererJahreLocked(year)
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
@@ -1015,6 +1018,9 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if in.ZweiteSicherung != a.st.d.Settings.ZweiteSicherung {
+		a.st.zweiteSicherungGeaendert()
+	}
 	a.st.d.Settings = in
 	a.st.audit("Preise und Einstellungen geändert")
 	if err := a.st.saveLocked(); err != nil {
@@ -1063,7 +1069,7 @@ func (a *App) handleNextYear(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, bad("Das Folgejahr existiert schon"))
 		return
 	}
-	a.st.snapshotBackup("vor-Jahreswechsel")
+	a.st.snapshotBackup(jahreswechselAnlass)
 	old := a.st.ensureYear(cur)
 	cs := clone(d.Settings)
 	old.Settings = &cs
@@ -1605,6 +1611,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/admin/paechter/{id}/auskunft", a.admin(a.handleAuskunft))
 	mux.HandleFunc("GET /api/admin/sicherungen", a.admin(a.handleSicherungen))
 	mux.HandleFunc("POST /api/admin/sicherungen/wiederherstellen", a.admin(a.handleSicherungWiederherstellen))
+	mux.HandleFunc("POST /api/admin/sicherung-jetzt", a.admin(a.handleSicherungJetzt))
 	mux.HandleFunc("GET /api/admin/datenschutz", a.admin(a.handleDatenschutz))
 	mux.HandleFunc("POST /api/admin/datenschutz/bereinigen", a.admin(a.handleBereinigen))
 	mux.HandleFunc("DELETE /api/admin/paechter/{id}/endgueltig", a.admin(a.handlePaechterEndgueltig))

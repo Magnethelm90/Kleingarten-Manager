@@ -33,6 +33,13 @@ type Store struct {
 	// komplette jüngste Sicherungsdatei gelesen und geparst wird.
 	sicherungGeprueft string // Dateiname der zuletzt geprüften Sicherung
 	sicherungFehler   string
+
+	// Stand des zweiten Sicherungsordners (nur im Speicher): wann dort zuletzt erfolgreich eine Kopie
+	// abgelegt wurde und ob der letzte Versuch scheiterte. zweiteBekannt: einmal aus dem Ordner gelesen.
+	zweiteBekannt bool
+	zweiteZuletzt time.Time
+	zweiteFehler  string
+	zweiteVersuch time.Time
 }
 
 func newID() string {
@@ -202,21 +209,67 @@ func (s *Store) audit(format string, args ...any) {
 
 // mirrorToSecondary kopiert eine Sicherungsdatei zusätzlich in den (optionalen,
 // vom Vorstand frei gewählten) zweiten Sicherungsordner, z. B. einen USB-Stick
-// oder ein Netzlaufwerk. Fehler (Ordner nicht erreichbar, USB-Stick nicht
-// eingesteckt, ...) werden bewusst nur ins Konsolenfenster geschrieben, damit
-// das Hauptprogramm trotzdem normal weiterläuft.
+// oder ein Netzlaufwerk, und räumt dort nach denselben Regeln auf wie im
+// eigenen Sicherungsordner. Fehler (Ordner nicht erreichbar, USB-Stick nicht
+// eingesteckt, ...) halten das Programm nicht auf; sie werden gemerkt und in
+// der Übersicht als Erinnerung angezeigt.
 func (s *Store) mirrorToSecondary(name string, data []byte) {
 	dir := strings.TrimSpace(s.d.Settings.ZweiteSicherung)
 	if dir == "" {
 		return
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		fmt.Fprintln(os.Stderr, "Zweiter Sicherungsordner nicht erreichbar:", err)
+	s.zweiteVersuch = time.Now()
+	err := os.MkdirAll(dir, 0o700)
+	if err == nil {
+		err = os.WriteFile(filepath.Join(dir, name), data, 0o600)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Sicherung konnte nicht in den zweiten Ordner geschrieben werden:", err)
+		s.zweiteFehler = "Der zweite Sicherungsordner war bei der letzten Sicherung nicht erreichbar"
 		return
 	}
-	if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
-		fmt.Fprintln(os.Stderr, "Sicherung konnte nicht in den zweiten Ordner geschrieben werden:", err)
+	s.zweiteFehler, s.zweiteZuletzt, s.zweiteBekannt = "", time.Now(), true
+	raeumeSicherungenAuf(dir)
+}
+
+// zweiteSicherungStand beschreibt den zweiten Sicherungsordner für die Erinnerung in der Übersicht.
+type zweiteSicherungStand struct {
+	Eingerichtet bool   `json:"eingerichtet"`
+	Zuletzt      string `json:"zuletzt,omitempty"` // JJJJ-MM-TT der jüngsten Kopie dort
+	Fehler       string `json:"fehler,omitempty"`
+}
+
+// zweiteSicherungLocked liefert den Stand des zweiten Sicherungsordners. Beim ersten Aufruf nach dem
+// Programmstart (oder nach dem Ändern des Ordners) wird die jüngste vorhandene Kopie im Ordner gesucht.
+func (s *Store) zweiteSicherungLocked() zweiteSicherungStand {
+	dir := strings.TrimSpace(s.d.Settings.ZweiteSicherung)
+	if dir == "" {
+		return zweiteSicherungStand{}
 	}
+	if !s.zweiteBekannt {
+		s.zweiteBekannt = true
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, e := range entries {
+				n := e.Name()
+				if !strings.HasSuffix(n, ".json") || !(strings.HasPrefix(n, backupPrefix) || strings.HasPrefix(n, legacyBackupPrefix)) {
+					continue
+				}
+				if fi, err := e.Info(); err == nil && fi.Mode().IsRegular() && fi.ModTime().After(s.zweiteZuletzt) {
+					s.zweiteZuletzt = fi.ModTime()
+				}
+			}
+		}
+	}
+	z := zweiteSicherungStand{Eingerichtet: true, Fehler: s.zweiteFehler}
+	if !s.zweiteZuletzt.IsZero() {
+		z.Zuletzt = s.zweiteZuletzt.Format("2006-01-02")
+	}
+	return z
+}
+
+// zweiteSicherungGeaendert setzt den gemerkten Stand zurück, wenn ein anderer Ordner eingetragen wurde.
+func (s *Store) zweiteSicherungGeaendert() {
+	s.zweiteBekannt, s.zweiteZuletzt, s.zweiteFehler, s.zweiteVersuch = false, time.Time{}, "", time.Time{}
 }
 
 // ---------------------------------------------------------------- Gartenverlauf
@@ -361,11 +414,43 @@ func (s *Store) dailyBackup() {
 	base := backupPrefix + time.Now().Format("2006-01-02") + ".json"
 	name := filepath.Join(dir, base)
 	if _, err := os.Stat(name); err == nil {
-		return // heute schon gesichert
+		// heute schon gesichert; war der zweite Ordner dabei nicht erreichbar (USB-Stick nicht
+		// eingesteckt), höchstens alle paar Minuten einen neuen Versuch machen
+		if s.zweiteFehler != "" && time.Since(s.zweiteVersuch) > 5*time.Minute {
+			if heute, err := os.ReadFile(name); err == nil {
+				s.mirrorToSecondary(base, heute)
+			}
+		}
+		return
 	}
 	_ = os.WriteFile(name, old, 0o600)
-	pruneBackups(dir, isDailyBackup, 60)
+	raeumeSicherungenAuf(dir)
 	s.mirrorToSecondary(base, old)
+}
+
+// Aufbewahrung der Sicherungen: die letzten 60 Tagessicherungen, die letzten 60 Sicherungen zu
+// Ereignissen (Löschen, Import, ...) und davon getrennt die Sicherungen vor dem Jahreswechsel, damit
+// sich der Stand jedes Abrechnungsjahres über die ganze Aufbewahrungsfrist zurückholen lässt.
+const (
+	behalteTagessicherungen  = 60
+	behalteEreignissicherung = 60
+	behalteJahressicherungen = aufbewahrungJahre + 2
+	jahreswechselAnlass      = "vor-Jahreswechsel"
+)
+
+func istSicherung(n string) bool {
+	return (strings.HasPrefix(n, backupPrefix) || strings.HasPrefix(n, legacyBackupPrefix)) && strings.HasSuffix(n, ".json")
+}
+
+func isJahresSicherung(n string) bool {
+	return istSicherung(n) && strings.HasSuffix(n, "-"+jahreswechselAnlass+".json")
+}
+
+// raeumeSicherungenAuf löscht in einem Sicherungsordner die überzähligen alten Sicherungen.
+func raeumeSicherungenAuf(dir string) {
+	pruneBackups(dir, isDailyBackup, behalteTagessicherungen)
+	pruneBackups(dir, func(n string) bool { return istSicherung(n) && !isDailyBackup(n) && !isJahresSicherung(n) }, behalteEreignissicherung)
+	pruneBackups(dir, isJahresSicherung, behalteJahressicherungen)
 }
 
 // backupPrefix ist der aktuelle Dateiname-Präfix für Sicherungen.
@@ -427,9 +512,7 @@ func (s *Store) snapshotBackup(label string) {
 	}
 	name := fmt.Sprintf("%s%s-%s.json", backupPrefix, time.Now().Format("2006-01-02_150405"), label)
 	_ = os.WriteFile(filepath.Join(dir, name), old, 0o600)
-	pruneBackups(dir, func(n string) bool {
-		return (strings.HasPrefix(n, backupPrefix) || strings.HasPrefix(n, legacyBackupPrefix)) && strings.HasSuffix(n, ".json") && !isDailyBackup(n)
-	}, 60)
+	raeumeSicherungenAuf(dir)
 	s.mirrorToSecondary(name, old)
 }
 

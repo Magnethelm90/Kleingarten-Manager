@@ -476,6 +476,38 @@ function jubilaeumBanner(st, istAdmin) {
     h('button', { class: 'btn small', onclick: () => { S.jubilaeumDismissed = true; render(); } }, 'Ausblenden'));
 }
 
+// Erinnerung an die Datensicherung außer Haus: ohne zweiten Sicherungsordner (USB-Stick, Netzlaufwerk)
+// liegen alle Sicherungen auf derselben Festplatte wie die Daten.
+async function sicherungJetzt() {
+  try {
+    const z = await api('POST', '/api/admin/sicherung-jetzt');
+    if (!z.eingerichtet) toast('Sicherung angelegt (nur auf diesem Rechner, kein zweiter Ordner eingerichtet).', 'ok');
+    else if (z.fehler) toast(`${z.fehler}. Ist der USB-Stick eingesteckt bzw. das Netzlaufwerk verbunden?`, 'err');
+    else toast('Sicherung angelegt und in den zweiten Sicherungsordner kopiert.', 'ok');
+    await reload();
+  } catch (e) { handleErr(e); }
+}
+
+function zweiteSicherungBanner(st, istAdmin) {
+  const z = st.zweiteSicherung || {};
+  if (S.zweiteDismissed || !istAdmin || !st.paechter.length) return null;
+  const knoepfe = (mitJetzt) => [' ',
+    mitJetzt ? h('button', { class: 'btn small', onclick: sicherungJetzt }, 'Jetzt sichern') : null, mitJetzt ? ' ' : null,
+    h('button', { class: 'btn small', onclick: () => { S.tab = 'admin'; S.adminTab = 'daten'; render(); } }, 'Zu den Einstellungen'), ' ',
+    h('button', { class: 'btn small', onclick: () => { S.zweiteDismissed = true; render(); } }, 'Ausblenden')];
+  if (!z.eingerichtet) {
+    return h('div', { class: 'banner info' },
+      '💾 Alle Sicherungen liegen bisher nur auf diesem Rechner. Geht die Festplatte kaputt, sind auch sie weg. Richte einen zweiten Sicherungsordner ein, zum Beispiel auf einem USB-Stick.', ...knoepfe(false));
+  }
+  if (z.fehler) return h('div', { class: 'banner warn' }, `💾 ${z.fehler}. Ist der USB-Stick eingesteckt?`, ...knoepfe(true));
+  const tage = z.zuletzt ? Math.floor((Date.parse(todayIso()) - Date.parse(z.zuletzt)) / 86400000) : null;
+  if (tage === null || tage > 30) {
+    return h('div', { class: 'banner warn' },
+      `💾 ${tage === null ? 'Im zweiten Sicherungsordner liegt noch keine Kopie.' : `Die letzte Kopie im zweiten Sicherungsordner ist vom ${deDate(z.zuletzt)} (vor ${tage} Tagen).`} Einfach USB-Stick einstecken und »Jetzt sichern« wählen.`, ...knoepfe(true));
+  }
+  return null;
+}
+
 function viewUebersicht() {
   const st = S.state;
   const istAdmin = !st.hasPassword || st.loggedIn;
@@ -504,6 +536,7 @@ function viewUebersicht() {
     h('h2', null, `Willkommen beim Kleingarten-Manager ${st.currentYear}`),
     h('p', { class: 'hint' }, `${st.settings.vereinName.replace(/\.\s*$/, '')}. Kurzer Überblick über den aktuellen Stand.`),
     jubilaeumBanner(st, istAdmin),
+    zweiteSicherungBanner(st, istAdmin),
     h('div', { class: 'cards' }, cards),
     h('div', { class: 'actions', style: 'margin-top:6px' },
       h('button', { class: 'btn primary', onclick: () => { S.tab = 'eingabe'; render(); } }, 'Zu den Zählerständen'),
@@ -2059,8 +2092,9 @@ function adminData() {
       h('a', { class: 'btn', href: `/api/export?year=${st.year}` }, `Jahresübersicht ${st.year} als Excel`)),
     h('div', { class: 'card' },
       h('h3', { style: 'margin-top:0' }, 'Datensicherung'),
-      h('p', { class: 'hint' }, 'Das Programm legt bei Änderungen automatisch eine Tagessicherung an (die letzten 60 Tage) und vor dem Jahreswechsel, Löschen und Import zusätzlich eine eigene. Du kannst außerdem den gesamten Datenbestand herunterladen. Eine Sicherung spielst du direkt hier unten wieder ein.'),
+      h('p', { class: 'hint' }, 'Das Programm legt bei Änderungen automatisch eine Tagessicherung an (die letzten 60 Tage) und vor Löschen und Import zusätzlich eine eigene. Die Sicherung vor jedem Jahreswechsel bleibt 12 Jahre erhalten, so lässt sich der Stand jedes Abrechnungsjahres über die ganze Aufbewahrungsfrist zurückholen. Du kannst außerdem den gesamten Datenbestand herunterladen. Eine Sicherung spielst du direkt hier unten wieder ein.'),
       h('div', { class: 'actions', style: 'margin-top:8px' },
+        h('button', { class: 'btn', title: 'Sofort eine Sicherung anlegen und in den zweiten Sicherungsordner kopieren', onclick: sicherungJetzt }, 'Jetzt sichern'),
         h('a', { class: 'btn', href: '/api/admin/backup' }, 'Gesamten Datenbestand herunterladen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'sicherungen' }).catch(handleErr) }, 'Sicherungsordner öffnen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'daten' }).catch(handleErr) }, 'Datenordner öffnen')),
