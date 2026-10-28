@@ -11,6 +11,7 @@ Zählerstände eintragen – die Rechnungen kommen fertig als PDF heraus, mit QR
 - **Für Vorstand und Kassenwart gemacht:** Zählerstände, Rechnungen, Zahlungen, Mahnungen, Kassenbericht,
   Jahreswechsel, Pächterliste und Ablesebogen zum Ausdrucken
 - **Mit Einführung:** beim ersten Start zeigt ein kurzer Rundgang, was wohin gehört
+- **Erst ausprobieren:** auf Knopfdruck mit einem erfundenen Beispielverein, der sich danach mit einem Klick wieder entfernen lässt
 
 ## So sieht es aus
 
@@ -52,7 +53,11 @@ Cloud-Anbindung.
 ## Funktionen
 
 - **Übersicht:** Startseite mit Kennzahlen auf einen Blick – Kassenbestand, offene Rechnungen, unvollständige
-  Pächter, Datum der letzten Sicherung
+  Pächter, Datum der letzten Sicherung; erinnert, wenn noch kein zweiter Sicherungsordner (USB-Stick) eingerichtet
+  ist oder die letzte Kopie dort älter als 30 Tage ist
+- **Beispieldaten:** solange noch nichts eingegeben ist, lässt sich ein erfundener Verein mit 12 Pächtern,
+  Zählerständen und Kassenbuchungen laden, um alles gefahrlos auszuprobieren; »Beispieldaten entfernen« setzt das
+  Programm danach wieder auf den Anfang zurück
 - **Einführung im Programm:** beim ersten Start führt ein kurzer Rundgang in 5 Schritten durch das Programm (einrichten,
   Zählerstände, Rechnungen, Zahlungen, Jahresabschluss). Jeder Schritt wechselt selbst zur passenden Stelle und
   markiert den Reiter; über den runden »?«-Knopf oben rechts lässt er sich jederzeit wieder aufrufen
@@ -62,14 +67,14 @@ Cloud-Anbindung.
   Verarbeitungsverzeichnis und Mitgliederinformation: [DATENSCHUTZ.md](DATENSCHUTZ.md)
 - **Globale Suche:** Suchfeld im Kopfbereich, von jeder Seite aus erreichbar – Name, Gartennummer, Mitgliedsnummer
   oder Straße eingeben, springt direkt zur Schnellansicht des passenden Pächters
-- **Admin-Bereich:** Pächter anlegen, ändern, löschen (Nummer, Name, Anschrift, Gartengröße, Umlage, Zählernummern),
+- **Admin-Bereich:** Pächter anlegen, ändern, löschen (Nummer, Name, Anschrift, E-Mail, Telefon, Gartengröße, Umlage, Zählernummern),
   Preise und Regeln einstellen (Wasser, Strom, Pacht, Arbeitsstunden, Bankverbindung, Rechnungsdatum), optionales Passwort.
   Gelöschte Pächter landen im Papierkorb (Zählerstände und Rechnungen bleiben erhalten) und lassen sich
   wiederherstellen oder endgültig entfernen
 - **Schnelleingabe:** Nummer eintippen, Stammdaten und Vorjahresstände erscheinen automatisch, nur neue Zählerstände eingeben
 - **Ablesebogen:** Liste aller Gärten mit Zählernummern, Vorjahresständen und leeren Feldern zum Ausdrucken für den
   Ablese-Rundgang (A4 quer, nach Gartennummer sortiert)
-- **Pächterliste:** Garten, Name, Anschrift, Größe, Versandart und Zähler aller Pächter als PDF zum Ausdrucken (nur mit
+- **Pächterliste:** Garten, Name, Anschrift, Größe, Versandart, Telefon/E-Mail und Zähler aller Pächter als PDF zum Ausdrucken (nur mit
   Admin-Zugang, Admin → Pächter)
 - **Rechnungen:** PDF pro Pächter oder alle auf einmal, ausgestellte Rechnungen werden mit den damaligen Werten
   festgeschrieben und archiviert (spätere Änderungen verändern sie nicht); das Archiv lässt sich auch über alle
@@ -77,6 +82,10 @@ Cloud-Anbindung.
 - **Drucken für den Postversand:** »Postversand drucken« fasst alle ausgestellten Rechnungen mit Versandart Postversand
   in einer PDF-Datei zusammen (nach Mitgliedsnummer sortiert, jede Seite mit ihrem eigenen GiroCode); im Programmfenster
   öffnet »Im PDF-Programm öffnen« die Rechnung bzw. die Sammeldatei im PDF-Programm des Rechners
+- **Rechnung per E-Mail vorbereiten:** öffnet das E-Mail-Programm des Rechners mit Empfänger, Betreff und fertigem
+  Text (Betrag, Zahlungsziel, Konto, Verwendungszweck) und markiert die PDF-Datei im Ordner, sie muss nur noch
+  angehängt werden; »Nächste E-Mail« arbeitet alle Rechnungen mit Versandart Emailsendung der Reihe nach ab.
+  Das Programm verschickt selbst nichts und braucht keine Zugangsdaten zum Mailkonto
 - **Zahlungen:** bezahlt abhaken (mit Datum), Teilzahlungen, Liste der offenen Posten, Excel-Export
 - **GiroCode auf der Rechnung:** QR-Code zum Bezahlen, die Banking-App füllt IBAN, Betrag und Verwendungszweck
   automatisch aus
@@ -93,7 +102,8 @@ Cloud-Anbindung.
   (z. B. Vorder- und Rückseite einer Quittung) und Kassenprüfer-Haken, optional als jährlich wiederkehrend
   markierbar – wird dann beim Jahreswechsel automatisch als Vorschlag fürs neue Jahr übernommen, z. B.
   Kontoführungsgebühren) und führt mit einem Anfangsbestand einen
-  echten Kassenbestand (wird beim Jahreswechsel automatisch fortgeschrieben); dazu ein Verlauf über die Jahre für
+  echten Kassenbestand (wird beim Jahreswechsel automatisch fortgeschrieben; ändert sich der Vorjahresbestand
+  danach noch, z. B. durch eine späte Zahlung, weist der Kassenbericht darauf hin); dazu ein Verlauf über die Jahre für
   den Verein insgesamt; als Excel-Datei für die Kassenprüfung exportierbar
 - Beim Öffnen ein Hinweis, wenn noch Rechnungen offen oder überfällig sind
 - **Jahreswechsel**, Import der Mitglieder aus Excel/CSV, Excel-Export, automatische Sicherungen
@@ -102,7 +112,9 @@ Cloud-Anbindung.
 - **Zahlungserinnerung (Mahnung):** bei den Zahlungen gezielt offene Rechnungen anhaken und eine Mahnung als PDF
   erzeugen (mit GiroCode); es wird nie automatisch nach einer festen Frist gemahnt, immer nur die ausgewählten
 - **Zweiter Sicherungsordner** (optional, frei wählbarer Pfad, z. B. USB-Stick oder Netzlaufwerk): Sicherungen
-  werden zusätzlich dorthin gespiegelt; nicht erreichbar (Stick nicht eingesteckt) ⇒ das Programm läuft trotzdem normal weiter
+  werden zusätzlich dorthin gespiegelt und dort wie im Hauptordner aufgeräumt; nicht erreichbar (Stick nicht
+  eingesteckt) ⇒ das Programm läuft normal weiter, erinnert in der Übersicht und holt die Kopie nach (oder sofort
+  per »Jetzt sichern«)
 - **Änderungsprotokoll:** hält fest, wann welcher Pächter oder welche Preise geändert wurden (Zeitpunkt und Art
   der Änderung; es gibt nur ein gemeinsames Admin-Passwort, daher keine Zuordnung zu einer Person)
 - **Kassenprüfer-Zugang:** eigenes, optionales Passwort mit Lesezugriff auf den Kassenbericht (inkl.
@@ -160,7 +172,7 @@ Die Daten liegen im selben Ordner:
 | --- | --- |
 | `kleingarten-manager-daten.json` | alle Daten (Pächter, Zählerstände, Rechnungsarchiv, Zahlungen) |
 | `Rechnungen/<Jahr>/` | fertige PDF-Rechnungen |
-| `Sicherungen/` | automatische Tages- und Ereignissicherungen |
+| `Sicherungen/` | automatische Sicherungen: die letzten 60 Tage, die letzten 60 Ereignisse (Löschen, Import, …) und die Sicherung vor jedem Jahreswechsel für 12 Jahre |
 | `Druck/` | kurzlebige Druckdateien (Sammel-PDF, Ablesebogen, Pächterliste), wird beim Start und beim Löschen von Personen geleert |
 
 ### macOS

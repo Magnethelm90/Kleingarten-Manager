@@ -33,7 +33,7 @@ vorher prüfen.
 
 **Endgültig löschen** entfernt sofort:
 
-- Stammdaten, interne Notiz, Zählernummern, offene (nicht abgeschlossene) Zählerstände,
+- Stammdaten (inkl. E-Mail und Telefon), interne Notiz, Zählernummern, offene (nicht abgeschlossene) Zählerstände,
 - den Namen und die Mitgliedsnummer in der Garten-Historie und im Änderungsprotokoll,
 - Hinweis- und Notizfelder in aufbewahrten Rechnungen und Jahresunterlagen,
 - **alles Genannte auch in allen vorhandenen Sicherungen** (inkl. zweitem Sicherungsordner, sofern erreichbar).
@@ -48,7 +48,7 @@ abgeschlossener Jahre. Sie sind Buchungsunterlagen und unterliegen der steuerlic
 **Frist im Programm:** 10 Jahre, gerechnet ab Ende des Kalenderjahres der Ausstellung (konservativ: Bücher und
 Jahresabschlüsse 10 Jahre; für reine Buchungsbelege gilt seit 2025 meist 8 Jahre). Welche Frist für euch gilt, klärt
 ihr mit Steuerberatung oder Kassenprüfern. Nach Ablauf entfernt **Admin → Datenschutz → Abgelaufene Unterlagen
-bereinigen** Name, Anschrift und Zählernummern aus Rechnungen und Jahresunterlagen, löscht die PDF-Dateien (auch aus
+bereinigen** Name, Anschrift, Kontaktdaten und Zählernummern aus Rechnungen und Jahresunterlagen, löscht die PDF-Dateien (auch aus
 den Sicherungen) und sperrt den Nachdruck. Die Beträge bleiben für die Statistik.
 
 Das Programm erinnert nicht von selbst: einmal im Jahr (z. B. beim Jahreswechsel) unter Admin → Datenschutz
@@ -83,7 +83,7 @@ nachsehen.
 | Zweck | Verwaltung der Pachtverhältnisse, Abrechnung von Wasser, Strom, Pacht und Beiträgen, Zahlungsüberwachung, Kassenführung des Vereins |
 | Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Pacht-/Mitgliedschaftsvertrag), lit. c (steuerliche Aufbewahrungspflichten), lit. f (Vereinsverwaltung) |
 | Betroffene | Pächterinnen und Pächter, Mitglieder |
-| Datenkategorien | Name, Anrede, Anschrift, Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, interne Notiz |
+| Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, interne Notiz |
 | Empfänger | Vorstand/Kassenwart; Kassenprüfer (Lesezugriff auf den Kassenbericht); Steuerberatung, Bank bei Zahlungsvorgängen; keine Auftragsverarbeiter |
 | Drittlandübermittlung | keine |
 | Löschfristen | Stammdaten: nach Ende der Mitgliedschaft bzw. des Pachtverhältnisses; Rechnungen und Jahresunterlagen: [10] Jahre ab Ende des Ausstellungsjahres |
@@ -92,7 +92,7 @@ nachsehen.
 ## 6. Vorlage: Information für Mitglieder (Art. 13)
 
 > **Datenschutzhinweis**
-> Der [Vereinsname], [Anschrift], verarbeitet eure Daten (Name, Anschrift, Mitglieds- und Gartennummer,
+> Der [Vereinsname], [Anschrift], verarbeitet eure Daten (Name, Anschrift, E-Mail-Adresse und Telefonnummer, sofern ihr sie angegeben habt, Mitglieds- und Gartennummer,
 > Zählerstände, Arbeitsstunden, Rechnungs- und Zahlungsdaten), um das Pachtverhältnis zu verwalten und
 > abzurechnen (Art. 6 Abs. 1 lit. b DSGVO) sowie um steuerliche Aufbewahrungspflichten zu erfüllen
 > (lit. c). Die Daten werden ausschließlich auf einem Vereinsrechner gespeichert und nicht an Dritte
