@@ -24,3 +24,17 @@ func TestImportSynonymeUndWarnungen(t *testing.T) {
 		t.Errorf("ignorierte Spalte nicht gemeldet: %v", warn)
 	}
 }
+
+// Wer den eigenen Excel-Export wieder einliest, soll keine Warnung über die berechneten Spalten bekommen.
+func TestImportEigenerExportOhneSpaltenWarnung(t *testing.T) {
+	head := append([]string{"Mitgliedsnr.", "Name"}, exportBerechnet...)
+	row := make([]string, len(head))
+	row[0], row[1] = "1", "Anna"
+	_, warn, err := parseImport([][]string{head, row}, true, Settings{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warn) != 0 {
+		t.Errorf("unerwartete Warnung beim eigenen Export: %v", warn)
+	}
+}

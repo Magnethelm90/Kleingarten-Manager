@@ -40,6 +40,14 @@ const (
 	fAbschlag
 )
 
+// exportBerechnet sind die berechneten Spalten des Excel-Exports. Beim erneuten Einlesen des eigenen
+// Exports werden sie (richtigerweise) ignoriert, aber nicht als »unbekannte Spalte« gemeldet.
+var exportBerechnet = []string{
+	"Wasserverbrauch (m³)", "Kosten Wasser (€)", "Energieverbrauch (kWh)", "Kosten Energie (€)", "Nachzahlung fehlende Stunden (€)",
+	"Zwischensumme 1 (€)", "Pacht Garten (€)", "Pacht Vereinsfläche (€)", "Pacht freie Gärten (€)", "Mitgliedsbeitrag (€)", "Umlage (€)",
+	"Zwischensumme 2 (€)", "Vergütung Arbeitsstunden (€)", "Gesamtbetrag (€)", "Prüfung",
+}
+
 // normHeader macht aus einer Spaltenüberschrift einen Vergleichsschlüssel.
 func normHeader(s string) string {
 	s = strings.ToLower(s)
@@ -194,9 +202,13 @@ func parseImport(table [][]string, raw bool, st Settings, existing []Paechter) (
 		return nil, nil, errors.New("Keine Kopfzeile gefunden. Es werden mindestens die Spalten »Mitgliedsnr.« und »Name« erwartet")
 	}
 	warn := []string{}
+	berechnet := map[string]bool{}
+	for _, h := range exportBerechnet {
+		berechnet[normHeader(h)] = true
+	}
 	var ignoriert []string
 	for c, cell := range table[hdr] {
-		if _, ok := colField[c]; !ok && strings.TrimSpace(cell) != "" {
+		if _, ok := colField[c]; !ok && strings.TrimSpace(cell) != "" && !berechnet[normHeader(cell)] {
 			ignoriert = append(ignoriert, "»"+trim(strings.TrimSpace(cell), 40)+"«")
 		}
 	}
@@ -366,10 +378,8 @@ func exportOverview(v yearView) ([]byte, error) {
 	head := []string{"Mitgliedsnr.", "Gartennr.", "Anrede", "Name", "Straße", "PLZ Ort", "Versandart", "Gartengröße (m²)",
 		"Wasserzähler-Nr.", "Wasser Stand Vorjahr", "Wasser Stand aktuell", "Stromzähler-Nr.", "Energie Stand Vorjahr", "Energie Stand aktuell",
 		"Erbrachte Arbeitsstunden", "Versicherung (€)", "Grundsteuer (€)", "Sonstige Auslagen (€)", "Hinweis / Erläuterung", "Abschlagszahlung (€)",
-		"Umlage abweichend (€)",
-		"Wasserverbrauch (m³)", "Kosten Wasser (€)", "Energieverbrauch (kWh)", "Kosten Energie (€)", "Nachzahlung fehlende Stunden (€)",
-		"Zwischensumme 1 (€)", "Pacht Garten (€)", "Pacht Vereinsfläche (€)", "Pacht freie Gärten (€)", "Mitgliedsbeitrag (€)", "Umlage (€)",
-		"Zwischensumme 2 (€)", "Vergütung Arbeitsstunden (€)", "Gesamtbetrag (€)", "Prüfung"}
+		"Umlage abweichend (€)"}
+	head = append(head, exportBerechnet...)
 	widths := []float64{12, 9, 9, 22, 22, 16, 14, 11, 13, 11, 11, 13, 11, 11, 11, 11, 11, 11, 24, 12, 12, 11, 11, 11, 11, 13, 12, 11, 11, 11, 11, 10, 12, 12, 13, 30}
 	hdrRow := make([]xCell, len(head))
 	for i, h := range head {
