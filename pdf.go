@@ -584,7 +584,7 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	const qrSize = 24.0
 	textW := rightX - leftX
 	var qrPNG []byte
-	if strings.TrimSpace(s.IBAN) != "" {
+	if ibanGueltig(s.IBAN) { // wie bei der Rechnung: kein GiroCode mit Platzhalter- oder Tipp-Fehler-IBAN
 		if png, err := qrcode.Encode(epcQRPayload(s, p, offen), qrcode.Medium, 300); err == nil {
 			qrPNG = png
 			textW = rightX - leftX - qrSize - 5

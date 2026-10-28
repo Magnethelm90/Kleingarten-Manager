@@ -124,3 +124,22 @@ func TestPassendKleinBleibtInDerSpalte(t *testing.T) {
 		}
 	}
 }
+
+// Die Zahlungserinnerung druckt den GiroCode nur mit gültiger IBAN, genau wie die Rechnung.
+func TestMahnungGiroCodeNurMitGueltigerIBAN(t *testing.T) {
+	s, p, _ := rechnungFixture()
+	rec := &Rechnung{Paechter: p, Result: Result{Gesamt: 150}, Nummer: "100-1"}
+	for _, c := range []struct {
+		iban   string
+		bilder int
+	}{{"DE89370400440532013000", 1}, {"DE00 0000 0000 0000 0000 00", 0}, {"", 0}} {
+		s.IBAN = c.iban
+		pdf, err := buildMahnung(s, p, rec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := len(bilderRegexp.FindAll(pdf, -1)); n != c.bilder {
+			t.Errorf("IBAN %q: %d GiroCode-Bilder, erwartet %d", c.iban, n, c.bilder)
+		}
+	}
+}
