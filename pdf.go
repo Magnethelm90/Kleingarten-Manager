@@ -59,6 +59,24 @@ func adressZeile(pdf *fpdf.Fpdf, x, y float64, txt, style string) float64 {
 	return h
 }
 
+// passendKlein setzt die Schrift für txt so klein wie nötig (von size bis minSize in halben Punkten),
+// damit der Text in maxW passt, und kürzt ihn notfalls mit »…«. Die Schriftgröße bleibt eingestellt.
+func passendKlein(pdf *fpdf.Fpdf, txt string, maxW, size, minSize float64) string {
+	pdf.SetFont("lib", "", size)
+	for size > minSize && pdf.GetStringWidth(txt) > maxW {
+		size -= 0.5
+		pdf.SetFont("lib", "", size)
+	}
+	if pdf.GetStringWidth(txt) <= maxW {
+		return txt
+	}
+	r := []rune(txt)
+	for len(r) > 1 && pdf.GetStringWidth(string(r)+"…") > maxW {
+		r = r[:len(r)-1]
+	}
+	return string(r) + "…"
+}
+
 // invoiceNumber bildet die Rechnungsnummer, z. B. 100-35-95.
 func invoiceNumber(s Settings, p Paechter) string {
 	return strings.TrimSpace(s.RechnungsnrPraefix) + "-" + strings.TrimSpace(p.Mitgliedsnr)
@@ -282,9 +300,13 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 		span(6, 6, fmtFlex(*verbrauch)+" "+unit, "R")
 		next(rowH)
 		if strings.TrimSpace(zaehlerNr) != "" {
-			font("", 8)
+			// Platz bis kurz vor die Beschriftung »Grundpreis:« rechts daneben; lange Zählernummern
+			// werden kleiner gesetzt und notfalls gekürzt, damit sie nicht in die Beschriftung laufen.
+			font("", 10)
+			maxW := colX[1] + colW[1] - pdf.GetStringWidth(gpLabel) - 2 - colX[0]
+			zt := passendKlein(pdf, "Zähler-Nr.: "+strings.TrimSpace(zaehlerNr), maxW, 8, 6.5)
 			pdf.SetTextColor(70, 70, 70)
-			text(colX[0], colW[0], "Zähler-Nr.: "+zaehlerNr, "L")
+			text(colX[0], maxW, zt, "L")
 			pdf.SetTextColor(0, 0, 0)
 		}
 		font("", 10)

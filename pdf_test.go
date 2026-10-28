@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/go-pdf/fpdf"
 )
 
 func rechnungFixture() (Settings, Paechter, Ablesung) {
@@ -100,6 +102,25 @@ func TestLangeAnschriftBleibtAufEinerSeite(t *testing.T) {
 		}
 		if n := len(seitenRegexp.FindAll(m, -1)); n != 1 {
 			t.Errorf("Mahnung für %.20q...: %d Seiten", name, n)
+		}
+	}
+}
+
+func TestPassendKleinBleibtInDerSpalte(t *testing.T) {
+	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf.AddUTF8FontFromBytes("lib", "", fontRegular)
+	const maxW = 46.0
+	kurz := passendKlein(pdf, "Zähler-Nr.: W-1001", maxW, 8, 6.5)
+	if kurz != "Zähler-Nr.: W-1001" {
+		t.Errorf("kurze Nummer wurde verändert: %q", kurz)
+	}
+	for _, nr := range []string{"WZ-ÄÖÜ-ß-12345678901234", strings.Repeat("9", 40)} {
+		got := passendKlein(pdf, "Zähler-Nr.: "+nr, maxW, 8, 6.5)
+		if w := pdf.GetStringWidth(got); w > maxW {
+			t.Errorf("%q ist %.1f mm breit, erlaubt %.1f mm", got, w, maxW)
+		}
+		if !strings.HasPrefix(got, "Zähler-Nr.: ") {
+			t.Errorf("Beschriftung abgeschnitten: %q", got)
 		}
 	}
 }
