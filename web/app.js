@@ -1925,6 +1925,19 @@ function ausgabeDialog(a) {
   ].filter(Boolean));
 }
 
+// Hinweis, wenn sich der Kassenbestand des Vorjahres nach dem Jahreswechsel noch geändert hat (z. B. eine
+// Vorjahresrechnung wurde erst jetzt bezahlt): sonst fehlt dieses Geld im Kassenbestand des laufenden Jahres.
+function anfangsbestandHinweis(k, pruefMode) {
+  const vj = k.vorjahrEndbestand;
+  if (vj == null || Math.abs(vj - k.anfangsbestand) < 0.005) return null;
+  const text = `Der Kassenbestand Ende ${k.jahr - 1} beträgt inzwischen ${eur(vj)}, der Anfangsbestand ${k.jahr} ist ${eur(k.anfangsbestand)} (Unterschied ${eur(vj - k.anfangsbestand)}). Das passiert zum Beispiel, wenn eine Vorjahresrechnung erst nach dem Jahreswechsel bezahlt oder eine Ausgabe nachgetragen wurde.`;
+  if (pruefMode || vj < 0) return h('div', { class: 'banner warn' }, text);
+  return h('div', { class: 'banner warn' }, text, ' ',
+    h('button', { class: 'btn small', onclick: async () => {
+      try { S.kasse = await api('PUT', `/api/admin/anfangsbestand?year=${k.jahr}`, { betrag: vj }); S.kasseVerlauf = null; S.dashKasse = null; toast(`Anfangsbestand auf ${eur(vj)} gesetzt`, 'ok'); render(); } catch (e) { handleErr(e); }
+    } }, `Anfangsbestand auf ${eur(vj)} setzen`));
+}
+
 function adminKassenbericht(pruefMode) {
   const st = S.state;
   if (S.kasseYear == null) S.kasseYear = st.currentYear;
@@ -2024,6 +2037,7 @@ function adminKassenbericht(pruefMode) {
     h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), yearSel),
     h('p', { class: 'hint' }, `Übersicht für ${S.kasseYear}: ${k.paechter} Pächter (${k.ausgestellt} aus ausgestellten Rechnungen, ${k.berechnet} berechnet, aber noch nicht ausgestellt${k.unvollstaendig.length ? `, ${k.unvollstaendig.length} unvollständig` : ''}). Die Beträge »sonstige Ausgaben« sind Vereinskosten neben der Pächterabrechnung, z. B. Kontoführungsgebühren, Anwaltskosten oder Anschaffungen.`),
     k.unvollstaendig.length ? h('div', { class: 'banner warn' }, `Nicht enthalten (Angaben fehlen): ${k.unvollstaendig.join(', ')}`) : null,
+    anfangsbestandHinweis(k, pruefMode),
     h('div', { class: 'card', style: 'margin-bottom:14px' },
       h('div', { class: 'toolbar' },
         h('label', null, 'Anfangsbestand der Kasse'),
