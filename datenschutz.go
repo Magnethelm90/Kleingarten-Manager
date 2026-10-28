@@ -42,6 +42,27 @@ func jahrAusZeit(s string) int {
 // fristAbgelaufen: Ausgestellt im Jahr y, die Frist endet am 31.12. von y+aufbewahrungJahre.
 func fristAbgelaufen(y, aktuell int) bool { return y > 0 && aktuell > y+aufbewahrungJahre }
 
+// fristJahrJeAbrechnungsjahr liefert je Abrechnungsjahr das Jahr, ab dem die Aufbewahrungsfrist seiner
+// Jahresunterlagen läuft: das späteste Ausstellungsjahr seiner Rechnungen (meist das Folgejahr, bei
+// einer später neu ausgestellten Rechnung auch später), mindestens das Abrechnungsjahr selbst. So
+// verlieren die Jahresunterlagen ihren Personenbezug nicht vor den zugehörigen Rechnungen.
+func (d *Data) fristJahrJeAbrechnungsjahr() map[int]int {
+	out := map[int]int{}
+	for _, r := range d.Rechnungen {
+		if a := r.ausstellungsjahr(); a > out[r.Jahr] {
+			out[r.Jahr] = a
+		}
+	}
+	return out
+}
+
+func fristBasis(y int, je map[int]int) int {
+	if je[y] > y {
+		return je[y]
+	}
+	return y
+}
+
 func (r *Rechnung) ausstellungsjahr() int {
 	if y := jahrAusZeit(r.Ausgestellt); y > 0 {
 		return y
@@ -141,9 +162,10 @@ func (d *Data) bereinigeAbgelaufene(aktuell int) (rechnungen int, jahre int, dat
 		}
 		rechnungen++
 	}
+	je := d.fristJahrJeAbrechnungsjahr()
 	for key, j := range d.Jahre {
 		y, err := strconv.Atoi(key)
-		if err != nil || !j.Abgeschlossen || !fristAbgelaufen(y, aktuell) {
+		if err != nil || !j.Abgeschlossen || !fristAbgelaufen(fristBasis(y, je), aktuell) {
 			continue
 		}
 		geaendert := false
@@ -360,9 +382,10 @@ func (s *Store) datenschutzInfoLocked(aktuell int) datenschutzInfo {
 			}
 		}
 	}
+	je := s.d.fristJahrJeAbrechnungsjahr()
 	for key, j := range s.d.Jahre {
 		y, err := strconv.Atoi(key)
-		if err != nil || !j.Abgeschlossen || !fristAbgelaufen(y, aktuell) {
+		if err != nil || !j.Abgeschlossen || !fristAbgelaufen(fristBasis(y, je), aktuell) {
 			continue
 		}
 		for _, p := range j.Paechter {

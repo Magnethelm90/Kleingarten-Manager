@@ -229,3 +229,32 @@ func TestBereinigungJahresunterlagen(t *testing.T) {
 		t.Error("zweiter Lauf muss idempotent sein")
 	}
 }
+
+// Die Jahresunterlagen eines Abrechnungsjahres (Pächterliste mit Namen) müssen so lange bleiben wie
+// seine Rechnungen. Die werden meist erst im Folgejahr ausgestellt, die Frist beginnt also ein Jahr später.
+func TestJahresunterlagenSoLangeWieIhreRechnungen(t *testing.T) {
+	d := &Data{
+		Jahre: map[string]*Jahr{
+			"2015": {Abgeschlossen: true, Paechter: []Paechter{{ID: "a", Name: "Anna"}}, Ablesungen: map[string]Ablesung{}},
+			"2014": {Abgeschlossen: true, Paechter: []Paechter{{ID: "a", Name: "Anna"}}, Ablesungen: map[string]Ablesung{}},
+		},
+		Rechnungen: []*Rechnung{
+			{Jahr: 2015, Ausgestellt: "2016-01-10T10:00:00+01:00", Paechter: Paechter{Name: "Anna"}},
+			{Jahr: 2014, Ausgestellt: "2015-01-10T10:00:00+01:00", Paechter: Paechter{Name: "Anna"}},
+		},
+	}
+	// 2026: Rechnungen aus 2015 sind abgelaufen (2014er), die aus 2016 (2015er) noch nicht
+	r, jahre, _ := d.bereinigeAbgelaufene(2026)
+	if r != 1 || jahre != 1 {
+		t.Fatalf("2026: %d Rechnungen, %d Jahre bereinigt, erwartet je 1", r, jahre)
+	}
+	if d.Jahre["2015"].Paechter[0].Name != "Anna" {
+		t.Error("Jahresunterlagen 2015 vor ihren Rechnungen (ausgestellt 2016) anonymisiert")
+	}
+	if d.Jahre["2014"].Paechter[0].Name != fristAbgelaufenText {
+		t.Error("Jahresunterlagen 2014 hätten anonymisiert werden müssen")
+	}
+	if r, jahre, _ := d.bereinigeAbgelaufene(2027); r != 1 || jahre != 1 || d.Jahre["2015"].Paechter[0].Name != fristAbgelaufenText {
+		t.Errorf("2027: %d Rechnungen, %d Jahre", r, jahre)
+	}
+}
