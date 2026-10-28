@@ -169,6 +169,8 @@ type Data struct {
 	// TutorialGesehen: der Einführungsrundgang wurde durchlaufen oder übersprungen
 	// und erscheint nicht mehr automatisch (über die Hilfe jederzeit abrufbar).
 	TutorialGesehen bool `json:"tutorialGesehen,omitempty"`
+	// Demo: der Datenbestand besteht aus Beispieldaten (erfundener Verein zum Ausprobieren).
+	Demo bool `json:"demo,omitempty"`
 }
 
 func defaultSettings() Settings {

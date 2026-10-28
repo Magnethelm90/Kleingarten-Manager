@@ -231,6 +231,7 @@ function render() {
       h('button', { class: 'quit', onclick: quitApp, title: 'Programm beenden' }, 'Beenden'),
     ),
     h('main', null,
+      demoBanner(st),
       sicherungBanner(st),
       openRechnungenBanner(st),
       st.readOnly && S.tab !== 'admin' && S.tab !== 'zahlungen'
@@ -343,7 +344,7 @@ function globalSearchBox(st) {
         h('span', { class: 'hint' }, p.mitgliedsnr)));
   };
   const input = h('input', {
-    type: 'search', placeholder: '🔍 Pächter suchen', class: 'gs-input', autocomplete: 'off',
+    type: 'search', placeholder: '🔍 Suchen', title: 'Pächter suchen (Name, Mitglieds- oder Gartennummer)', class: 'gs-input', autocomplete: 'off',
     value: S.globalSearchQ,
     oninput: (e) => { S.globalSearchQ = e.target.value; draw(); },
     onkeydown: (e) => {
@@ -476,6 +477,45 @@ function jubilaeumBanner(st, istAdmin) {
     h('button', { class: 'btn small', onclick: () => { S.jubilaeumDismissed = true; render(); } }, 'Ausblenden'));
 }
 
+// Beispieldaten: in einen leeren Datenbestand laden und mit einem Klick wieder entfernen.
+async function beispieldatenLaden() {
+  try {
+    await api('POST', '/api/admin/beispieldaten');
+    toast('Beispieldaten geladen. Schau dich in Ruhe um, du kannst nichts kaputt machen.', 'ok');
+    S.dashKasse = null; S.dashJubilaeen = null;
+    await reload();
+  } catch (e) { handleErr(e); }
+}
+
+async function beispieldatenEntfernen() {
+  const ok = await confirmBox('Alle Beispieldaten entfernen und mit einem leeren Programm beginnen? Auch alles, was du in der Zwischenzeit selbst eingegeben oder ausgestellt hast, wird entfernt. Ein Admin-Passwort und der zweite Sicherungsordner bleiben erhalten.', 'Beispieldaten entfernen', true);
+  if (!ok) return;
+  try {
+    await api('DELETE', '/api/admin/beispieldaten');
+    toast('Beispieldaten entfernt. Jetzt kannst du deinen Verein eintragen.', 'ok');
+    S.dashKasse = null; S.dashJubilaeen = null; S.tab = 'uebersicht';
+    await reload();
+  } catch (e) { handleErr(e); }
+}
+
+function demoBanner(st) {
+  if (!st.demo) return null;
+  const istAdmin = !st.hasPassword || st.loggedIn;
+  return h('div', { class: 'banner info' },
+    '🧪 Du siehst Beispieldaten: ein erfundener Verein mit erfundenen Namen und Zahlen zum Ausprobieren.',
+    istAdmin ? [' ', h('button', { class: 'btn small', onclick: beispieldatenEntfernen }, 'Beispieldaten entfernen und eigene Daten anlegen')] : null);
+}
+
+function beispieldatenKarte(st, istAdmin) {
+  if (!st.leer || !istAdmin) return null;
+  return h('div', { class: 'card', style: 'margin-bottom:14px' },
+    h('h3', { style: 'margin-top:0' }, 'Erst einmal ausprobieren?'),
+    h('p', { class: 'hint' }, 'Lade einen erfundenen Verein mit 12 Pächtern, Zählerständen und ein paar Kassenbuchungen. So siehst du sofort, wie Rechnungen, Zahlungen und der Kassenbericht aussehen. Die Beispieldaten lassen sich danach mit einem Klick wieder vollständig entfernen.'),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn primary', onclick: beispieldatenLaden }, 'Mit Beispieldaten ausprobieren'),
+      h('button', { class: 'btn', onclick: () => { S.tab = 'admin'; S.adminTab = 'paechter'; render(); } }, 'Gleich eigene Pächter anlegen')));
+}
+
 // Erinnerung an die Datensicherung außer Haus: ohne zweiten Sicherungsordner (USB-Stick, Netzlaufwerk)
 // liegen alle Sicherungen auf derselben Festplatte wie die Daten.
 async function sicherungJetzt() {
@@ -535,8 +575,9 @@ function viewUebersicht() {
   return h('div', null,
     h('h2', null, `Willkommen beim Kleingarten-Manager ${st.currentYear}`),
     h('p', { class: 'hint' }, `${st.settings.vereinName.replace(/\.\s*$/, '')}. Kurzer Überblick über den aktuellen Stand.`),
+    beispieldatenKarte(st, istAdmin),
     jubilaeumBanner(st, istAdmin),
-    zweiteSicherungBanner(st, istAdmin),
+    st.demo ? null : zweiteSicherungBanner(st, istAdmin),
     h('div', { class: 'cards' }, cards),
     h('div', { class: 'actions', style: 'margin-top:6px' },
       h('button', { class: 'btn primary', onclick: () => { S.tab = 'eingabe'; render(); } }, 'Zu den Zählerständen'),

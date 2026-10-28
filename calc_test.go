@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-func fp(x float64) *float64 { return &x }
-
 func near(a, b float64) bool { return math.Abs(a-b) < 0.0001 }
 
 // Die Werte stammen aus der echten Rechnung 2025 (Gartennr. 35, 300 m²).

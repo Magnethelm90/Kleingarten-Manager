@@ -538,6 +538,9 @@ type stateResp struct {
 	TutorialGesehen bool   `json:"tutorialGesehen"`
 	// ZweiteSicherung: ob ein zweiter Sicherungsordner eingerichtet ist und wann er zuletzt erreicht wurde.
 	ZweiteSicherung zweiteSicherungStand `json:"zweiteSicherung"`
+	// Demo: Beispieldaten sind geladen; Leer: noch nichts eingegeben (Beispieldaten können geladen werden).
+	Demo bool `json:"demo"`
+	Leer bool `json:"leer"`
 	// OffeneVorjahre: noch nicht (voll) bezahlte, gültige Rechnungen aus allen anderen Jahren als dem
 	// angezeigten, damit sie nach einem Jahreswechsel nicht aus dem Blick geraten.
 	OffeneVorjahre []archiveEntry `json:"offeneVorjahre"`
@@ -580,6 +583,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	res.SicherungFehler = a.st.pruefeSicherung()
 	res.TutorialGesehen = a.st.d.TutorialGesehen
 	res.ZweiteSicherung = a.st.zweiteSicherungLocked()
+	res.Demo, res.Leer = a.st.d.Demo, a.st.datenbestandLeer()
 	res.OffeneVorjahre = a.st.offeneAndererJahreLocked(year)
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
@@ -1612,6 +1616,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/admin/sicherungen", a.admin(a.handleSicherungen))
 	mux.HandleFunc("POST /api/admin/sicherungen/wiederherstellen", a.admin(a.handleSicherungWiederherstellen))
 	mux.HandleFunc("POST /api/admin/sicherung-jetzt", a.admin(a.handleSicherungJetzt))
+	mux.HandleFunc("POST /api/admin/beispieldaten", a.admin(a.handleDemoLaden))
+	mux.HandleFunc("DELETE /api/admin/beispieldaten", a.admin(a.handleDemoEntfernen))
 	mux.HandleFunc("GET /api/admin/datenschutz", a.admin(a.handleDatenschutz))
 	mux.HandleFunc("POST /api/admin/datenschutz/bereinigen", a.admin(a.handleBereinigen))
 	mux.HandleFunc("DELETE /api/admin/paechter/{id}/endgueltig", a.admin(a.handlePaechterEndgueltig))
