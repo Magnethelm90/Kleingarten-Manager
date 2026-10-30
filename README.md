@@ -15,6 +15,8 @@ Zählerstände eintragen – die Rechnungen kommen fertig als PDF heraus, mit QR
 
 ## So sieht es aus
 
+![Übersicht mit Kassenbestand, offenen Rechnungen und Schnellzugriff](docs/bilder/uebersicht.png)
+
 | | |
 | --- | --- |
 | ![Einführung beim ersten Start](docs/bilder/einfuehrung.png) | ![Zählerstände eintragen](docs/bilder/zaehlerstaende.png) |
