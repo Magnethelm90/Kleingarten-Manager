@@ -1,6 +1,7 @@
 name: Release
 
-# Neue Version veröffentlichen: git tag v1.1 && git push origin v1.1
+# Neue Version veröffentlichen: git tag v1.4 && git push origin v1.4 – oder auf der Webseite einen Release
+# mit neuem Tag anlegen; die Programmdateien werden dann automatisch angehängt.
 on:
   push:
     tags: ["v*"]
@@ -111,4 +112,11 @@ jobs:
       - name: Release anlegen
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" Kleingarten-Manager.exe Kleingarten-Manager-mac.zip --title "Kleingarten-Manager $GITHUB_REF_NAME" --generate-notes
+        # Wurde der Release schon auf der Webseite angelegt (z. B. mit eigenem Text), nur die Programmdateien
+        # anhängen und den Text unverändert lassen; sonst den Release neu anlegen.
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" Kleingarten-Manager.exe Kleingarten-Manager-mac.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" Kleingarten-Manager.exe Kleingarten-Manager-mac.zip --title "Kleingarten-Manager $GITHUB_REF_NAME" --generate-notes
+          fi
