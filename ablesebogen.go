@@ -32,6 +32,9 @@ func (s *Store) ablesezeilenLocked(year int) ([]ablesezeile, Settings, bool) {
 	}
 	rows := make([]ablesezeile, 0, len(v.Paechter))
 	for _, p := range v.Paechter {
+		if p.AusgeschiedenAm != "" {
+			continue // Garten schon übergeben, abgelesen wird beim Nachfolger
+		}
 		a := v.Ablesungen[p.ID]
 		rows = append(rows, ablesezeile{
 			Gartennr: p.Gartennr, Mitgliedsnr: p.Mitgliedsnr, Name: p.Name,

@@ -78,6 +78,18 @@ Cloud-Anbindung.
   Preise und Regeln einstellen (Wasser, Strom, Pacht, Arbeitsstunden, Bankverbindung, Rechnungsdatum), optionales Passwort.
   Gelöschte Pächter landen im Papierkorb (Zählerstände und Rechnungen bleiben erhalten) und lassen sich
   wiederherstellen oder endgültig entfernen
+- **Pächterwechsel** (Admin → Pächter → »Wechsel«): führt in einem Schritt durch die Gartenübergabe – Übergabetag,
+  gemeinsam abgelesene Zählerstände, Arbeitsstunden, neuer Pächter (auf Wunsch direkt von der Warteliste),
+  Ablösesumme, Schlüssel und Zustand. Der bisherige Pächter bekommt eine **Schlussrechnung** über den Verbrauch bis
+  zur Übergabe (ohne Pacht und Beiträge fürs Folgejahr), der neue startet mit den Übergabeständen. Dazu gibt es ein
+  **Übergabeprotokoll** als PDF mit Checkliste und Unterschriftsfeldern. Der bisherige Pächter bleibt bis zum
+  Jahreswechsel für seine Schlussrechnung sichtbar und kommt dann von selbst in den Papierkorb
+- **Warteliste** (Admin → Warteliste): Interessenten mit Anmeldedatum, Kontakt und Wunsch, in der Reihenfolge der
+  Anmeldung; »Garten vergeben« startet den Pächterwechsel mit den Angaben des Interessenten. Wer seit über 2 Jahren
+  nicht nachgefragt wurde, wird markiert; gelöschte Einträge verschwinden auch aus den Sicherungen
+- **Vereinstermine** (Reiter »Termine«): Jahresplaner für Arbeitseinsätze, Versammlungen, Ablesung und Feste, als
+  Aushang zum Drucken und als Kalenderdatei fürs Handy; die Termine eines Jahres lassen sich mit einem Klick ins
+  nächste übernehmen (auf denselben Wochentag), die nächsten Termine stehen auch auf der Übersicht
 - **Schnelleingabe:** Nummer eintippen, Stammdaten und Vorjahresstände erscheinen automatisch, nur neue Zählerstände eingeben
 - **Ablesebogen:** Liste aller Gärten mit Zählernummern, Vorjahresständen und leeren Feldern zum Ausdrucken für den
   Ablese-Rundgang (A4 quer, nach Gartennummer sortiert)

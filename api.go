@@ -546,6 +546,8 @@ type stateResp struct {
 	// OffeneVorjahre: noch nicht (voll) bezahlte, gültige Rechnungen aus allen anderen Jahren als dem
 	// angezeigten, damit sie nach einem Jahreswechsel nicht aus dem Blick geraten.
 	OffeneVorjahre []archiveEntry `json:"offeneVorjahre"`
+	// Termine: Jahresplaner des Vereins (für alle sichtbar, enthält keine Personendaten).
+	Termine []Termin `json:"termine"`
 }
 
 func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
@@ -591,6 +593,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		res.Lageplan = map[string]LagePos{}
 	}
 	res.OffeneVorjahre = a.st.offeneAndererJahreLocked(year)
+	res.Termine = append([]Termin{}, a.st.d.Termine...)
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
 	a.st.mu.Unlock()
@@ -678,6 +681,7 @@ func (a *App) handleAblesung(w http.ResponseWriter, r *http.Request) {
 		pa.StromzaehlerNr = in.StromWechsel.NeueNr
 	}
 	j := a.st.ensureYear(year)
+	in.Schluss = j.Ablesungen[id].Schluss // wird nur über den Pächterwechsel gesetzt
 	j.Ablesungen[id] = in
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
@@ -799,6 +803,7 @@ func (a *App) handlePaechterCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.ID = newID()
+	in.Geloescht, in.GeloeschtAm, in.AusgeschiedenAm = false, "", ""
 	a.st.d.Paechter = append(a.st.d.Paechter, in)
 	a.st.ensureYear(a.st.d.Settings.Jahr).Ablesungen[in.ID] = Ablesung{}
 	a.st.gartenOeffnen(in.ID, in.Gartennr, in.Mitgliedsnr, in.Name)
@@ -832,6 +837,7 @@ func (a *App) handlePaechterUpdate(w http.ResponseWriter, r *http.Request) {
 		if a.st.d.Paechter[i].ID == id && !a.st.d.Paechter[i].Geloescht {
 			alt := a.st.d.Paechter[i]
 			in.ID = id
+			in.AusgeschiedenAm = alt.AusgeschiedenAm // wird nur über den Pächterwechsel gesetzt
 			a.st.d.Paechter[i] = in
 			a.st.gartenWechsel(id, alt.Gartennr, in.Gartennr, in.Mitgliedsnr, in.Name)
 			if alt.Gartengroesse != in.Gartengroesse {
@@ -904,7 +910,17 @@ func (a *App) handlePaechterWiederherstellen(w http.ResponseWriter, r *http.Requ
 			bis := a.st.d.Paechter[i].GeloeschtAm
 			a.st.d.Paechter[i].Geloescht = false
 			a.st.d.Paechter[i].GeloeschtAm = ""
-			a.st.gartenWiederOeffnen(id, bis)
+			aus := a.st.d.Paechter[i].AusgeschiedenAm != ""
+			switch {
+			case aus && a.st.ensureYear(a.st.d.Settings.Jahr).Ablesungen[id].Schluss != "":
+				// noch im Jahr der Übergabe: bleibt ausgeschieden und wartet auf seine Schlussrechnung
+			case aus:
+				// nach einem Pächterwechsel gehört der Garten dem Nachfolger: ohne Garten zurückholen
+				a.st.d.Paechter[i].AusgeschiedenAm = ""
+				a.st.d.Paechter[i].Gartennr = ""
+			default:
+				a.st.gartenWiederOeffnen(id, bis)
+			}
 			a.st.audit("Pächter aus dem Papierkorb wiederhergestellt: %s %s", a.st.d.Paechter[i].Mitgliedsnr, a.st.d.Paechter[i].Name)
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
@@ -1098,7 +1114,20 @@ func (a *App) handleNextYear(w http.ResponseWriter, r *http.Request) {
 	anfangsbestand := a.st.kassenberichtLocked(closingView).Kassenbestand
 
 	nj := &Jahr{Ablesungen: map[string]Ablesung{}, Anfangsbestand: &anfangsbestand}
+	// Wer seinen Garten im abgelaufenen Jahr übergeben hat, ist mit der Schlussrechnung fertig abgerechnet
+	// und kommt jetzt in den Papierkorb (wiederherstellbar, Rechnungen bleiben).
+	ausgeschieden := 0
+	heute := time.Now().Format("2006-01-02")
+	for i := range d.Paechter {
+		if p := &d.Paechter[i]; p.AusgeschiedenAm != "" && !p.Geloescht {
+			p.Geloescht, p.GeloeschtAm = true, heute
+			ausgeschieden++
+		}
+	}
 	for _, p := range d.Paechter {
+		if p.Geloescht {
+			continue
+		}
 		o := old.Ablesungen[p.ID]
 		nj.Ablesungen[p.ID] = Ablesung{
 			WasserVJ: carry(o.WasserAkt, o.WasserVJ),
@@ -1128,6 +1157,9 @@ func (a *App) handleNextYear(w http.ResponseWriter, r *http.Request) {
 		a.st.audit("Jahreswechsel: %d abgeschlossen, %d begonnen (%d wiederkehrende Ausgabe(n) übernommen)", cur, next, wiederkehrend)
 	} else {
 		a.st.audit("Jahreswechsel: %d abgeschlossen, %d begonnen", cur, next)
+	}
+	if ausgeschieden > 0 {
+		a.st.audit("Jahreswechsel: %d ausgeschiedene(r) Pächter in den Papierkorb gelegt", ausgeschieden)
 	}
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
@@ -1252,6 +1284,7 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 				p.UmlageAbweichend = old.UmlageAbweichend
 			}
 			p.Notiz = old.Notiz // gibt es in keiner Importdatei, darf beim Aktualisieren nicht verloren gehen
+			p.AusgeschiedenAm = old.AusgeschiedenAm
 			a.st.d.Paechter[idx] = p
 			a.st.gartenWechsel(p.ID, old.Gartennr, p.Gartennr, p.Mitgliedsnr, p.Name)
 			updated++
@@ -1363,6 +1396,9 @@ func (a *App) handleInvoice(w http.ResponseWriter, r *http.Request) {
 	if !ok || !found {
 		writeErr(w, notFound("Pächter oder Jahr nicht gefunden"))
 		return
+	}
+	if !v.ReadOnly {
+		settings = schlussSettings(settings, ab, time.Now())
 	}
 	res := calculate(settings, p, ab)
 	pdf, err := buildInvoice(settings, p, ab, res)
@@ -1647,6 +1683,21 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/admin/ausgaben/{id}/beleg", a.admin(a.handleBelegDelete))
 	mux.HandleFunc("GET /api/admin/beleg/{id}", a.adminOrPruef(a.handleBelegServe))
 	mux.HandleFunc("POST /api/admin/mahnung", a.admin(a.handleMahnung))
+	mux.HandleFunc("POST /api/admin/paechterwechsel", a.admin(a.handlePaechterwechsel))
+	mux.HandleFunc("GET /api/admin/uebergaben", a.admin(a.handleUebergaben))
+	mux.HandleFunc("GET /api/admin/uebergabe/{id}/protokoll", a.admin(a.handleUebergabeprotokoll))
+	mux.HandleFunc("POST /api/admin/uebergabe/{id}/protokoll/oeffnen", a.admin(a.handleUebergabeprotokollOeffnen))
+	mux.HandleFunc("GET /api/admin/warteliste", a.admin(a.handleWarteliste))
+	mux.HandleFunc("POST /api/admin/warteliste", a.admin(a.handleBewerberCreate))
+	mux.HandleFunc("PUT /api/admin/warteliste/{id}", a.admin(a.handleBewerberUpdate))
+	mux.HandleFunc("DELETE /api/admin/warteliste/{id}", a.admin(a.handleBewerberDelete))
+	mux.HandleFunc("POST /api/admin/termine", a.admin(a.handleTerminCreate))
+	mux.HandleFunc("PUT /api/admin/termine/{id}", a.admin(a.handleTerminUpdate))
+	mux.HandleFunc("DELETE /api/admin/termine/{id}", a.admin(a.handleTerminDelete))
+	mux.HandleFunc("POST /api/admin/termine-uebernehmen", a.admin(a.handleTermineUebernehmen))
+	mux.HandleFunc("GET /api/termine.ics", a.handleTermineICS)
+	mux.HandleFunc("GET /api/termine-druck", a.handleJahresplan)
+	mux.HandleFunc("POST /api/termine-druck/oeffnen", a.handleJahresplanOeffnen)
 	mux.Handle("/", static)
 	return a.guard(mux)
 }

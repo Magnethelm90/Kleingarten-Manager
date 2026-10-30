@@ -78,14 +78,17 @@ func calculate(s Settings, p Paechter, a Ablesung) Result {
 	}
 	r.Zwischensumme1 = round2(r.KostenWasser + r.KostenEnergie + r.NachzahlungStunden)
 
-	// Beiträge für das Folgejahr
-	r.PachtGarten = round2(p.Gartengroesse * s.PachtJeQm)
-	r.PachtVerein = round2(s.VereinsflaecheQm * s.PachtJeQm)
-	r.PachtFrei = round2(s.FreieGaertenQm * s.PachtJeQm)
-	r.Mitgliedsbeitrag = round2(s.Vereinsbeitrag + s.Territorialverband)
-	r.Umlage = s.UmlageStandard
-	if p.UmlageAbweichend != nil {
-		r.Umlage = *p.UmlageAbweichend
+	// Beiträge für das Folgejahr; bei einer Schlussrechnung (Pächterwechsel) entfallen sie, weil der
+	// bisherige Pächter im Folgejahr keinen Garten mehr hat
+	if a.Schluss == "" {
+		r.PachtGarten = round2(p.Gartengroesse * s.PachtJeQm)
+		r.PachtVerein = round2(s.VereinsflaecheQm * s.PachtJeQm)
+		r.PachtFrei = round2(s.FreieGaertenQm * s.PachtJeQm)
+		r.Mitgliedsbeitrag = round2(s.Vereinsbeitrag + s.Territorialverband)
+		r.Umlage = s.UmlageStandard
+		if p.UmlageAbweichend != nil {
+			r.Umlage = *p.UmlageAbweichend
+		}
 	}
 	r.Zwischensumme2 = round2(r.PachtGarten + r.PachtVerein + r.PachtFrei + r.Mitgliedsbeitrag +
 		r.Umlage + a.Versicherung + a.Grundsteuer + a.Auslagen)

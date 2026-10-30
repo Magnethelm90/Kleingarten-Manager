@@ -131,7 +131,7 @@ func (a *App) mitgliederlistePDF() ([]byte, error) {
 	a.st.mu.Lock()
 	var ps []Paechter
 	for _, p := range a.st.d.Paechter {
-		if !p.Geloescht {
+		if !p.Geloescht && p.AusgeschiedenAm == "" {
 			ps = append(ps, p)
 		}
 	}

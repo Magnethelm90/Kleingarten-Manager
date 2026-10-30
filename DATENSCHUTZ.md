@@ -54,6 +54,16 @@ den Sicherungen) und sperrt den Nachdruck. Die Beträge bleiben für die Statist
 Das Programm erinnert nicht von selbst: einmal im Jahr (z. B. beim Jahreswechsel) unter Admin → Datenschutz
 nachsehen.
 
+**Übergabeprotokolle** (Pächterwechsel) zählen zu den Jahresunterlagen ihres Übergabejahres: Beim endgültigen
+Löschen eines Pächters verschwinden sein Name und seine Anschrift sofort daraus, nach Ablauf der Frist werden auch
+Bemerkungen und Schlüsselangaben entfernt.
+
+**Warteliste:** Einträge werden gelöscht, sobald kein Interesse mehr besteht (auch aus allen Sicherungen); wird ein
+Garten vergeben, gehen die Angaben in die Stammdaten des neuen Pächters über. Wer seit über 2 Jahren nicht
+nachgefragt wurde, wird markiert (Admin → Warteliste und Admin → Datenschutz): dann nachfragen oder löschen.
+Rechtsgrundlage ist die Anbahnung eines Pachtvertrags (Art. 6 Abs. 1 lit. b DSGVO); Interessenten sollten bei der
+Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
+
 ## 4. Technische und organisatorische Maßnahmen (Art. 32)
 
 **Im Programm eingebaut**
@@ -82,11 +92,11 @@ nachsehen.
 | Datenschutzbeauftragter | [Name/Kontakt oder „nicht benannt, da weniger als 20 Personen ständig mit der Verarbeitung beschäftigt sind (§ 38 BDSG)“] |
 | Zweck | Verwaltung der Pachtverhältnisse, Abrechnung von Wasser, Strom, Pacht und Beiträgen, Zahlungsüberwachung, Kassenführung des Vereins |
 | Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Pacht-/Mitgliedschaftsvertrag), lit. c (steuerliche Aufbewahrungspflichten), lit. f (Vereinsverwaltung) |
-| Betroffene | Pächterinnen und Pächter, Mitglieder |
+| Betroffene | Pächterinnen und Pächter, Mitglieder, Interessenten auf der Warteliste |
 | Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, interne Notiz |
 | Empfänger | Vorstand/Kassenwart; Kassenprüfer (Lesezugriff auf den Kassenbericht); Steuerberatung, Bank bei Zahlungsvorgängen; keine Auftragsverarbeiter |
 | Drittlandübermittlung | keine |
-| Löschfristen | Stammdaten: nach Ende der Mitgliedschaft bzw. des Pachtverhältnisses; Rechnungen und Jahresunterlagen: [10] Jahre ab Ende des Ausstellungsjahres |
+| Löschfristen | Stammdaten: nach Ende der Mitgliedschaft bzw. des Pachtverhältnisses; Rechnungen, Jahresunterlagen und Übergabeprotokolle: [10] Jahre ab Ende des Ausstellungs- bzw. Übergabejahres; Warteliste: sobald kein Interesse mehr besteht (Nachfrage spätestens alle 2 Jahre) |
 | Technisch-organisatorische Maßnahmen | siehe Abschnitt 4 |
 
 ## 6. Vorlage: Information für Mitglieder (Art. 13)

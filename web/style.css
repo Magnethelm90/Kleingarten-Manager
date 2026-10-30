@@ -501,3 +501,30 @@ header.top .brand .logo.bild { background: #fff; }
 .logovorschau { width: 160px; height: 80px; border: 1px dashed var(--line-strong); border-radius: 10px; display: grid; place-items: center; background: #fff; overflow: hidden; }
 .logovorschau img { max-width: 150px; max-height: 70px; }
 .aussehen { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+
+/* Jahresplaner */
+.termine { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; max-width: 1000px; }
+.termin-monat h3 { margin: 0 0 8px; }
+.termin-liste { list-style: none; margin: 0; padding: 0; }
+.termin { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.termin:first-child { border-top: 0; }
+.termin-tag { flex: 0 0 auto; width: 52px; text-align: center; border-radius: var(--radius-sm); background: var(--green-tint); border: 1px solid var(--green-line); padding: 4px 0; line-height: 1.15; }
+.termin-tag b { display: block; font-size: 19px; color: var(--green-dark); }
+.termin-tag span { font-size: 11.5px; color: var(--muted); }
+.termin-text { flex: 1 1 auto; min-width: 0; }
+.termin-text .hint { margin-top: 2px; }
+.termin-text > b { margin-right: 6px; }
+.termin-art { flex: 0 0 auto; }
+.termin-aktionen { display: flex; gap: 6px; flex: 0 0 auto; }
+.termin.vorbei { opacity: .55; }
+.termin.naechster .termin-tag { background: var(--green); border-color: var(--green); }
+.termin.naechster .termin-tag b, .termin.naechster .termin-tag span { color: #fff; }
+.naechste-termine { margin-bottom: 16px; }
+.naechste-termine .termin-tag { width: 72px; }
+@media (max-width: 700px) {
+  .termin { flex-wrap: wrap; }
+  .termin-aktionen { width: 100%; justify-content: flex-end; }
+}
+html.gutlesbar .termin-tag span { font-size: 13px; }
+
+td.aktionen { white-space: normal; min-width: 365px; line-height: 2.1; }
