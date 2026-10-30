@@ -541,6 +541,8 @@ type stateResp struct {
 	// Demo: Beispieldaten sind geladen; Leer: noch nichts eingegeben (Beispieldaten können geladen werden).
 	Demo bool `json:"demo"`
 	Leer bool `json:"leer"`
+	// Lageplan: Positionen der Gärten auf der Karte (leer = Raster).
+	Lageplan map[string]LagePos `json:"lageplan"`
 	// OffeneVorjahre: noch nicht (voll) bezahlte, gültige Rechnungen aus allen anderen Jahren als dem
 	// angezeigten, damit sie nach einem Jahreswechsel nicht aus dem Blick geraten.
 	OffeneVorjahre []archiveEntry `json:"offeneVorjahre"`
@@ -584,6 +586,10 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	res.TutorialGesehen = a.st.d.TutorialGesehen
 	res.ZweiteSicherung = a.st.zweiteSicherungLocked()
 	res.Demo, res.Leer = a.st.d.Demo, a.st.datenbestandLeer()
+	res.Lageplan = a.st.d.Lageplan
+	if res.Lageplan == nil {
+		res.Lageplan = map[string]LagePos{}
+	}
 	res.OffeneVorjahre = a.st.offeneAndererJahreLocked(year)
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
@@ -1608,6 +1614,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/sicherungen/wiederherstellen", a.admin(a.handleSicherungWiederherstellen))
 	mux.HandleFunc("POST /api/admin/sicherung-jetzt", a.admin(a.handleSicherungJetzt))
 	mux.HandleFunc("POST /api/admin/beispieldaten", a.admin(a.handleDemoLaden))
+	mux.HandleFunc("PUT /api/admin/lageplan", a.admin(a.handleLageplan))
 	mux.HandleFunc("DELETE /api/admin/beispieldaten", a.admin(a.handleDemoEntfernen))
 	mux.HandleFunc("GET /api/admin/datenschutz", a.admin(a.handleDatenschutz))
 	mux.HandleFunc("POST /api/admin/datenschutz/bereinigen", a.admin(a.handleBereinigen))
@@ -1634,4 +1641,43 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/mahnung", a.admin(a.handleMahnung))
 	mux.Handle("/", static)
 	return a.guard(mux)
+}
+
+// handleLageplan speichert die Anordnung der Gärten auf der Lageplan-Karte. Eine leere Liste setzt
+// den Lageplan auf das Raster zurück.
+func (a *App) handleLageplan(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Positionen map[string]LagePos `json:"positionen"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if len(in.Positionen) > 2000 {
+		writeErr(w, bad("Zu viele Gärten im Lageplan"))
+		return
+	}
+	pos := map[string]LagePos{}
+	for nr, p := range in.Positionen {
+		nr = trim(nr, 20)
+		if nr == "" || p.X < 0 || p.Y < 0 || p.X > 20000 || p.Y > 20000 {
+			writeErr(w, bad("Ungültige Position im Lageplan"))
+			return
+		}
+		pos[nr] = p
+	}
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	if len(pos) == 0 {
+		a.st.d.Lageplan = nil
+		a.st.audit("Lageplan auf Raster zurückgesetzt")
+	} else {
+		a.st.d.Lageplan = pos
+		a.st.audit("Lageplan angeordnet (%d Gärten)", len(pos))
+	}
+	if err := a.st.saveLocked(); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]int{"gaerten": len(pos)})
 }

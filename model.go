@@ -171,6 +171,15 @@ type Data struct {
 	TutorialGesehen bool `json:"tutorialGesehen,omitempty"`
 	// Demo: der Datenbestand besteht aus Beispieldaten (erfundener Verein zum Ausprobieren).
 	Demo bool `json:"demo,omitempty"`
+	// Lageplan: Position jedes Gartens (Schlüssel Gartennummer) auf der Karte im Lageplan, in Bildpunkten.
+	// Leer = Gärten erscheinen als Raster, nach Gartennummer sortiert.
+	Lageplan map[string]LagePos `json:"lageplan,omitempty"`
+}
+
+// LagePos ist die Position eines Gartens im Lageplan (linke obere Ecke der Kachel).
+type LagePos struct {
+	X int `json:"x"`
+	Y int `json:"y"`
 }
 
 func defaultSettings() Settings {

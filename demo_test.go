@@ -99,3 +99,27 @@ func TestBeispieldatenNichtInEigeneDaten(t *testing.T) {
 		t.Error("Datenbestand mit Pächter gilt als leer")
 	}
 }
+
+func TestLageplanSpeichern(t *testing.T) {
+	_, h := newTestApp(t)
+	pos := map[string]any{"1": map[string]int{"x": 20, "y": 40}, " 7 ": map[string]int{"x": 300, "y": 0}}
+	if rec := do(h, "PUT", "/api/admin/lageplan", map[string]any{"positionen": pos}); rec.Code != 200 {
+		t.Fatalf("Speichern: %d %s", rec.Code, rec.Body.String())
+	}
+	st := decode[stateResp](t, do(h, "GET", "/api/state", nil))
+	if len(st.Lageplan) != 2 || st.Lageplan["7"].X != 300 || st.Lageplan["1"].Y != 40 {
+		t.Fatalf("Lageplan: %+v", st.Lageplan)
+	}
+	if rec := do(h, "PUT", "/api/admin/lageplan", map[string]any{"positionen": map[string]any{"1": map[string]int{"x": -5, "y": 0}}}); rec.Code != 400 {
+		t.Errorf("negative Position: %d", rec.Code)
+	}
+	do(h, "PUT", "/api/admin/lageplan", map[string]any{"positionen": map[string]any{}})
+	if st := decode[stateResp](t, do(h, "GET", "/api/state", nil)); len(st.Lageplan) != 0 {
+		t.Errorf("Zurücksetzen: %+v", st.Lageplan)
+	}
+	// nur mit Admin-Rechten
+	do(h, "POST", "/api/admin/password", map[string]string{"new": "geheim123"})
+	if rec := do(h, "PUT", "/api/admin/lageplan", map[string]any{"positionen": pos}); rec.Code != 401 {
+		t.Errorf("ohne Anmeldung: %d", rec.Code)
+	}
+}
