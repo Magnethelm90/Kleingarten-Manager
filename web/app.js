@@ -216,8 +216,36 @@ async function reload() {
 
 // ------------------------------------------------------------------ Grundgerüst
 
+// Vereinsfarbe: aus einer Grundfarbe alle Abstufungen berechnen. Zu helle Farben werden abgedunkelt,
+// bis weiße Schrift darauf gut lesbar ist (wie auf der Rechnung, siehe markenfarbe in farbe.go).
+function hexRGB(hex) { const v = parseInt(hex.slice(1), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
+function helligkeit([r, g, b]) {
+  const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+function mische([r, g, b], [r2, g2, b2], t) { return [r + (r2 - r) * t, g + (g2 - g) * t, b + (b2 - b) * t].map(Math.round); }
+const rgbStr = (c) => `rgb(${c.join(',')})`;
+function farbeAnwenden(hex) {
+  const root = document.documentElement.style;
+  const namen = ['--green', '--green-dark', '--green-mid', '--green-soft', '--green-tint', '--green-line', '--green-faint', '--ring'];
+  if (!/^#[0-9a-f]{6}$/i.test(hex || '')) { namen.forEach((n) => root.removeProperty(n)); return; }
+  let c = hexRGB(hex);
+  for (let i = 0; i < 40 && 1.05 / (helligkeit(c) + 0.05) < 4.5; i++) c = c.map((x) => x * 0.92);
+  c = c.map(Math.round);
+  const weiss = [255, 255, 255], schwarz = [0, 0, 0];
+  root.setProperty('--green', rgbStr(c));
+  root.setProperty('--green-dark', rgbStr(mische(c, schwarz, 0.3)));
+  root.setProperty('--green-mid', rgbStr(mische(c, weiss, 0.14)));
+  root.setProperty('--green-soft', rgbStr(mische(c, weiss, 0.88)));
+  root.setProperty('--green-tint', rgbStr(mische(c, weiss, 0.94)));
+  root.setProperty('--green-line', rgbStr(mische(c, weiss, 0.75)));
+  root.setProperty('--green-faint', `rgba(${c.join(',')},.10)`);
+  root.setProperty('--ring', `0 0 0 3px rgba(${c.join(',')},.25)`);
+}
+
 function render() {
   const st = S.state;
+  farbeAnwenden(st.settings.farbe);
   const app = document.getElementById('app');
   app.replaceChildren();
 
@@ -248,7 +276,7 @@ function render() {
 
   app.append(
     h('header', { class: 'top' },
-      h('div', { class: 'brand' }, h('span', { class: 'logo' }, icon('blatt', 20)), h('div', null, h('b', null, 'Kleingarten-Manager'), h('span', { title: st.settings.vereinName }, st.settings.vereinName))),
+      h('div', { class: 'brand' }, st.settings.logo ? h('span', { class: 'logo bild' }, h('img', { src: `/api/logo?v=${encodeURIComponent(st.settings.logo)}`, alt: '' })) : h('span', { class: 'logo' }, icon('blatt', 20)), h('div', null, h('b', null, 'Kleingarten-Manager'), h('span', { title: st.settings.vereinName }, st.settings.vereinName))),
       h('nav', { class: 'tabs' }, tabBtn('uebersicht', 'Übersicht'), tabBtn('eingabe', 'Zählerstände'), tabBtn('lageplan', 'Lageplan'), tabBtn('rechnungen', 'Rechnungen'), tabBtn('zahlungen', 'Zahlungen'), tabBtn('admin', 'Admin')),
       h('div', { class: 'spacer' }),
       globalSearchBox(st),
@@ -1935,7 +1963,8 @@ function adminSettings() {
     }
   }
   const save = async () => {
-    const data = { jahr: st.settings.jahr };
+    // alle übrigen Einstellungen (zweiter Sicherungsordner, Logo, Farbe) unverändert mitschicken, sonst würden sie geleert
+    const data = { ...st.settings, jahr: st.settings.jahr };
     for (const [key, { input, type }] of Object.entries(inputs)) {
       if (type === 'num') {
         const v = parseNum(input.value);
@@ -1948,8 +1977,45 @@ function adminSettings() {
     try { await api('PUT', '/api/admin/settings', data); toast('Einstellungen gespeichert', 'ok'); await reload(); } catch (e) { handleErr(e); }
   };
   return h('div', null,
+    aussehenKarte(st),
     h('p', { class: 'hint' }, `Diese Werte gelten für das laufende Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
     h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'))));
+}
+
+// ---- Aussehen: Vereinsfarbe und Logo (Programm und Rechnung)
+
+const FARBVORSCHLAEGE = [['#2f6f3e', 'Gartengrün'], ['#1e5aa8', 'Blau'], ['#0f6e6e', 'Petrol'], ['#8c2f39', 'Weinrot'], ['#7a4b1f', 'Erdbraun'], ['#3d4752', 'Anthrazit']];
+
+function aussehenKarte(st) {
+  const aktuell = st.settings.farbe || '#2f6f3e';
+  const speichereFarbe = async (hex) => {
+    try { await api('PUT', '/api/admin/settings', { ...st.settings, farbe: hex === '#2f6f3e' ? '' : hex }); toast('Vereinsfarbe gespeichert', 'ok'); await reload(); } catch (e) { handleErr(e); }
+  };
+  const waehler = h('input', { type: 'color', value: aktuell, title: 'Eigene Farbe wählen',
+    oninput: (e) => farbeAnwenden(e.target.value), onchange: (e) => speichereFarbe(e.target.value) });
+  const datei = h('input', { type: 'file', accept: '.png,.jpg,.jpeg', style: 'display:none', onchange: async () => {
+    if (!datei.files.length) return;
+    const fd = new FormData(); fd.append('file', datei.files[0]);
+    try { await api('POST', '/api/admin/logo', fd, true); toast('Logo gespeichert – es erscheint auf allen neuen Rechnungen', 'ok'); await reload(); } catch (e) { handleErr(e); }
+  } });
+  return h('div', { class: 'card', style: 'margin-bottom:16px' },
+    h('h3', null, 'Aussehen: Vereinsfarbe und Logo'),
+    h('p', { class: 'hint' }, 'Farbe und Logo erscheinen im Programm und auf allen neu erzeugten Rechnungen und Mahnungen. Bereits ausgestellte Rechnungen bleiben, wie sie sind. Zu helle Farben werden automatisch so abgedunkelt, dass alles gut lesbar bleibt.'),
+    h('div', { class: 'aussehen' },
+      h('div', null, h('div', { class: 'form' }, h('label', null, 'Vereinsfarbe')),
+        h('div', { class: 'farbwahl', style: 'margin-top:6px' },
+          FARBVORSCHLAEGE.map(([hex, name]) => h('button', { class: 'swatch' + (hex === aktuell ? ' an' : ''), title: name, 'aria-label': name,
+            style: `background:${hex}`, onclick: () => speichereFarbe(hex) })),
+          waehler, h('span', { class: 'hint' }, 'eigene Farbe'))),
+      h('div', null, h('div', { class: 'form' }, h('label', null, 'Vereinslogo')),
+        h('div', { class: 'toolbar', style: 'margin-top:6px' },
+          h('div', { class: 'logovorschau' }, st.settings.logo ? h('img', { src: `/api/logo?v=${encodeURIComponent(st.settings.logo)}`, alt: 'Vereinslogo' }) : h('span', { class: 'hint' }, 'kein Logo')),
+          h('div', null, datei,
+            h('button', { class: 'btn', onclick: () => datei.click() }, st.settings.logo ? 'Anderes Logo wählen' : 'Logo hochladen'), ' ',
+            st.settings.logo ? h('button', { class: 'btn danger', onclick: async () => {
+              try { await api('DELETE', '/api/admin/logo'); toast('Logo entfernt', 'ok'); await reload(); } catch (e) { handleErr(e); }
+            } }, 'Entfernen') : null,
+            h('div', { class: 'hint', style: 'margin-top:6px' }, 'PNG oder JPG, am besten mit hellem oder durchsichtigem Hintergrund.'))))));
 }
 
 // ---- Jahreswechsel

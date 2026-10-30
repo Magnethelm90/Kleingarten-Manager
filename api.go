@@ -979,6 +979,11 @@ func cleanSettings(in, cur Settings) (Settings, error) {
 	in.IBAN = trim(in.IBAN, 42)
 	in.BIC = trim(in.BIC, 15)
 	in.ZweiteSicherung = trim(in.ZweiteSicherung, 250)
+	in.Logo = cur.Logo // nur über /api/admin/logo änderbar
+	in.Farbe = strings.ToLower(strings.TrimSpace(in.Farbe))
+	if in.Farbe != "" && !farbeGueltig(in.Farbe) {
+		return in, bad("Die Vereinsfarbe muss ein Farbwert wie #2f6f3e sein")
+	}
 	if in.VereinName == "" {
 		return in, bad("Bitte einen Vereinsnamen eintragen")
 	}
@@ -1615,6 +1620,9 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/sicherung-jetzt", a.admin(a.handleSicherungJetzt))
 	mux.HandleFunc("POST /api/admin/beispieldaten", a.admin(a.handleDemoLaden))
 	mux.HandleFunc("PUT /api/admin/lageplan", a.admin(a.handleLageplan))
+	mux.HandleFunc("POST /api/admin/logo", a.admin(a.handleLogoHochladen))
+	mux.HandleFunc("DELETE /api/admin/logo", a.admin(a.handleLogoEntfernen))
+	mux.HandleFunc("GET /api/logo", a.handleLogo)
 	mux.HandleFunc("DELETE /api/admin/beispieldaten", a.admin(a.handleDemoEntfernen))
 	mux.HandleFunc("GET /api/admin/datenschutz", a.admin(a.handleDatenschutz))
 	mux.HandleFunc("POST /api/admin/datenschutz/bereinigen", a.admin(a.handleBereinigen))

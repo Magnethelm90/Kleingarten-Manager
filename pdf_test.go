@@ -57,8 +57,9 @@ func TestRechnungStandardlayoutUnveraendert(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if math.Abs(ende-287.0) > 0.05 {
-		t.Errorf("letzte Zeile der Standardrechnung bei %.2f mm, bisher 287,0 mm: Layout wurde verändert", ende)
+	// 288,0 mm seit dem Briefkopf mit Logo und der Betragsbox (vorher 287,0 mm)
+	if math.Abs(ende-288.0) > 0.05 {
+		t.Errorf("letzte Zeile der Standardrechnung bei %.2f mm, bisher 288,0 mm: Layout wurde verändert", ende)
 	}
 }
 

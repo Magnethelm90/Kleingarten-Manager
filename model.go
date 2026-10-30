@@ -42,6 +42,13 @@ type Settings struct {
 	// in den Sicherungen zusätzlich gespiegelt werden. Leer = deaktiviert. Der
 	// Pfad wird frei vom Vorstand gewählt, es gibt keinen fest einprogrammierten Ort.
 	ZweiteSicherung string `json:"zweiteSicherung,omitempty"`
+
+	// Farbe: Vereinsfarbe (#rrggbb) für Programm und Rechnung; leer = Grün.
+	Farbe string `json:"farbe,omitempty"`
+	// Logo: Dateiname des Vereinslogos im Ordner »Logo« (leer = kein Logo). Wird nur über den eigenen
+	// Hochlade-Endpunkt gesetzt; abgeschlossene Jahre und ausgestellte Rechnungen behalten ihr Logo,
+	// weil jede neue Datei einen eigenen Namen bekommt und alte nicht gelöscht werden.
+	Logo string `json:"logo,omitempty"`
 }
 
 // GartenEintrag ist ein Abschnitt in der Belegungshistorie eines Gartens:
