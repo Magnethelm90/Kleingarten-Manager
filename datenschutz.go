@@ -122,6 +122,15 @@ func (d *Data) entfernePerson(id string) bool {
 			r.Notiz, r.Paechter.Notiz, r.Paechter.Email, r.Paechter.Telefon, changed = "", "", "", "", true
 		}
 	}
+	for i := range d.Uebergaben {
+		u := &d.Uebergaben[i]
+		if u.AltID == id && u.AltName != geloeschtText {
+			u.AltName, u.AltMitgliedsnr, u.AltAnschrift, changed = geloeschtText, "", "", true
+		}
+		if u.NeuID == id && u.NeuName != geloeschtText {
+			u.NeuName, u.NeuMitgliedsnr, u.NeuAnschrift, changed = geloeschtText, "", "", true
+		}
+	}
 	if name != "" && d.schwaerzeProtokoll(nr, name) {
 		changed = true
 	}
@@ -162,6 +171,15 @@ func (d *Data) bereinigeAbgelaufene(aktuell int) (rechnungen int, jahre int, dat
 			r.Datei = ""
 		}
 		rechnungen++
+	}
+	// Übergabeprotokolle zählen zu den Jahresunterlagen ihres Übergabejahres
+	for i := range d.Uebergaben {
+		if u := &d.Uebergaben[i]; u.fristAbgelaufen(aktuell) {
+			u.AltName, u.AltMitgliedsnr, u.AltAnschrift = fristAbgelaufenText, "", ""
+			u.NeuName, u.NeuMitgliedsnr, u.NeuAnschrift = fristAbgelaufenText, "", ""
+			u.Bemerkungen, u.Schluessel = "", ""
+			jahre++
+		}
 	}
 	je := d.fristJahrJeAbrechnungsjahr()
 	for key, j := range d.Jahre {
@@ -273,6 +291,7 @@ type auskunft struct {
 	Jahre       []auskunftJahr     `json:"jahre"`
 	Rechnungen  []auskunftRechnung `json:"rechnungen"`
 	Protokoll   []AuditEntry       `json:"aenderungsprotokoll"`
+	Uebergaben  []Uebergabe        `json:"gartenuebergaben"`
 	Aufbewahrng string             `json:"aufbewahrung"`
 }
 
@@ -298,6 +317,7 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 		Jahre:      []auskunftJahr{},
 		Rechnungen: []auskunftRechnung{},
 		Protokoll:  []AuditEntry{},
+		Uebergaben: []Uebergabe{},
 		Aufbewahrng: fmt.Sprintf("Rechnungen und Jahresunterlagen werden %d Jahre ab Ende des Ausstellungsjahres aufbewahrt "+
 			"(steuerrechtliche Pflicht), danach wird der Personenbezug entfernt.", aufbewahrungJahre),
 	}
@@ -323,6 +343,11 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 				Nummer: r.Nummer, Jahr: r.Jahr, Version: r.Version, Status: r.Status, Ausgestellt: r.Ausgestellt,
 				Gesamtbetrag: r.Result.Gesamt, BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz, Bereinigt: r.Bereinigt,
 			})
+		}
+	}
+	for _, u := range s.d.Uebergaben {
+		if u.AltID == id || u.NeuID == id {
+			a.Uebergaben = append(a.Uebergaben, u)
 		}
 	}
 	for _, e := range s.d.AuditLog {
@@ -364,6 +389,8 @@ type datenschutzInfo struct {
 	BereinigtBisJahr int `json:"bereinigtBisJahr"`
 	// Papierkorb: Pächter, die noch auf die endgültige Löschung warten
 	Papierkorb int `json:"papierkorb"`
+	// WartelisteNachfragen: Einträge auf der Warteliste, deren Interesse lange nicht bestätigt wurde
+	WartelisteNachfragen int `json:"wartelisteNachfragen"`
 	// NaechsteFrist: Jahr, in dem die nächste noch aufbewahrte Rechnung freigegeben wird (0 = keine)
 	NaechsteFrist int `json:"naechsteFrist"`
 }
@@ -396,9 +423,20 @@ func (s *Store) datenschutzInfoLocked(aktuell int) datenschutzInfo {
 			}
 		}
 	}
+	for _, u := range s.d.Uebergaben {
+		if u.fristAbgelaufen(aktuell) {
+			info.FaelligJahre++
+		}
+	}
 	for _, p := range s.d.Paechter {
 		if p.Geloescht {
 			info.Papierkorb++
+		}
+	}
+	heute := time.Now()
+	for _, b := range s.d.Warteliste {
+		if b.nachfragen(heute) {
+			info.WartelisteNachfragen++
 		}
 	}
 	return info

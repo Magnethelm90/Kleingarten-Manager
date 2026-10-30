@@ -91,6 +91,10 @@ type Paechter struct {
 	// wiederherstellen.
 	Geloescht   bool   `json:"geloescht,omitempty"`
 	GeloeschtAm string `json:"geloeschtAm,omitempty"` // JJJJ-MM-TT
+
+	// AusgeschiedenAm: Garten beim Pächterwechsel an diesem Tag (JJJJ-MM-TT) übergeben. Der Pächter bleibt
+	// bis zum Jahreswechsel für seine Schlussrechnung im laufenden Jahr und kommt dann in den Papierkorb.
+	AusgeschiedenAm string `json:"ausgeschiedenAm,omitempty"`
 }
 
 // Ablesung sind die jährlichen Eingaben pro Pächter.
@@ -112,6 +116,10 @@ type Ablesung struct {
 	// Stand des NEUEN Zählers.
 	WasserWechsel *ZaehlerWechsel `json:"wasserWechsel,omitempty"`
 	StromWechsel  *ZaehlerWechsel `json:"stromWechsel,omitempty"`
+
+	// Schluss: Schlussrechnung wegen Pächterwechsel am angegebenen Tag (JJJJ-MM-TT). Abgerechnet wird nur der
+	// Verbrauch bis zur Übergabe, die Beiträge für das Folgejahr entfallen (die zahlt der neue Pächter).
+	Schluss string `json:"schluss,omitempty"`
 }
 
 // ZaehlerWechsel dokumentiert einen unterjährigen Zählertausch.
@@ -181,6 +189,12 @@ type Data struct {
 	// Lageplan: Position jedes Gartens (Schlüssel Gartennummer) auf der Karte im Lageplan, in Bildpunkten.
 	// Leer = Gärten erscheinen als Raster, nach Gartennummer sortiert.
 	Lageplan map[string]LagePos `json:"lageplan,omitempty"`
+	// Warteliste: Interessenten für einen Garten, in der Reihenfolge ihrer Anmeldung.
+	Warteliste []Bewerber `json:"warteliste,omitempty"`
+	// Termine: Jahresplaner des Vereins (Arbeitseinsätze, Versammlungen, Ablesung, ...).
+	Termine []Termin `json:"termine,omitempty"`
+	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
+	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
 }
 
 // LagePos ist die Position eines Gartens im Lageplan (linke obere Ecke der Kachel).

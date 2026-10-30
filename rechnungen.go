@@ -149,7 +149,12 @@ func (s *Store) archiveViewLocked(v yearView) (map[string]issuedInfo, []archiveE
 		}
 		info := issuedInfo{ID: r.ID, Nummer: r.Nummer, Version: r.Version, Ausgestellt: r.Ausgestellt, Gesamt: r.Result.Gesamt, EmailAm: r.EmailAm}
 		if p, ok := pByID[r.PaechterID]; ok {
-			info.Geaendert = !reflect.DeepEqual(r.Settings, v.Settings) ||
+			vs := v.Settings
+			if r.Ablesung.Schluss != "" {
+				// Schlussrechnungen tragen ihr eigenes Rechnungsdatum und Zahlungsziel (siehe schlussSettings)
+				vs.Rechnungsdatum, vs.Zahlungsziel = r.Settings.Rechnungsdatum, r.Settings.Zahlungsziel
+			}
+			info.Geaendert = !reflect.DeepEqual(r.Settings, vs) ||
 				!reflect.DeepEqual(aufRechnung(r.Paechter), aufRechnung(p)) ||
 				!reflect.DeepEqual(r.Ablesung, v.Ablesungen[r.PaechterID])
 		} else {
@@ -170,7 +175,7 @@ func (s *Store) archiveViewLocked(v yearView) (map[string]issuedInfo, []archiveE
 // Papierkorb-Vermerk). Wer nachträglich eine E-Mail-Adresse oder Notiz einträgt, ändert die
 // Rechnung nicht und soll nicht zum Neu-Ausstellen aufgefordert werden.
 func aufRechnung(p Paechter) Paechter {
-	p.Notiz, p.Email, p.Telefon, p.Geloescht, p.GeloeschtAm = "", "", "", false, ""
+	p.Notiz, p.Email, p.Telefon, p.Geloescht, p.GeloeschtAm, p.AusgeschiedenAm = "", "", "", false, "", ""
 	return p
 }
 
@@ -267,7 +272,7 @@ func (a *App) handleIssue(w http.ResponseWriter, r *http.Request) {
 			}
 			continue
 		}
-		jobs = append(jobs, job{p: p, ab: ab, set: v.Settings, res: res})
+		jobs = append(jobs, job{p: p, ab: ab, set: schlussSettings(v.Settings, ab, time.Now()), res: res})
 	}
 	a.st.mu.Unlock()
 

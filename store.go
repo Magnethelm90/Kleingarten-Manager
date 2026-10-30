@@ -280,12 +280,17 @@ func (s *Store) zweiteSicherungGeaendert() {
 
 // gartenOeffnen trägt einen neuen, noch offenen Abschnitt ein (Bis bleibt leer).
 func (s *Store) gartenOeffnen(id, gartennr, mitgliedsnr, name string) {
+	s.gartenOeffnenAb(id, gartennr, mitgliedsnr, name, time.Now().Format("2006-01-02"))
+}
+
+// gartenOeffnenAb eröffnet einen Abschnitt ab einem bestimmten Tag (z. B. Übergabe beim Pächterwechsel).
+func (s *Store) gartenOeffnenAb(id, gartennr, mitgliedsnr, name, seit string) {
 	gartennr = strings.TrimSpace(gartennr)
 	if gartennr == "" {
 		return
 	}
 	s.d.GartenHistorie = append(s.d.GartenHistorie, GartenEintrag{
-		Gartennr: gartennr, PaechterID: id, Mitgliedsnr: mitgliedsnr, Name: name, Seit: time.Now().Format("2006-01-02"),
+		Gartennr: gartennr, PaechterID: id, Mitgliedsnr: mitgliedsnr, Name: name, Seit: seit,
 	})
 }
 

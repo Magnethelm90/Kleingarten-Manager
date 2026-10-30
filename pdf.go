@@ -286,10 +286,18 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 	font("B", 13)
 	pdf.SetTextColor(mr, mg, mb)
 	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, 6, tr(fmt.Sprintf("Rechnung Jahresendabrechnung %d", s.Jahr)), "", 0, "L", false, 0, "")
+	titel := fmt.Sprintf("Rechnung Jahresendabrechnung %d", s.Jahr)
+	if a.Schluss != "" {
+		titel = fmt.Sprintf("Schlussrechnung %d – Gartenübergabe am %s", s.Jahr, germanDate(a.Schluss))
+	}
+	pdf.CellFormat(rightX-leftX, 6, tr(titel), "", 0, "L", false, 0, "")
 	pdf.SetTextColor(0, 0, 0)
 	next(7)
-	ueberschrift("1. Jahresverbrauch Wasser/Energie, geleistete Arbeitsstunden")
+	if a.Schluss != "" {
+		ueberschrift("1. Verbrauch Wasser/Energie bis zur Übergabe, geleistete Arbeitsstunden")
+	} else {
+		ueberschrift("1. Jahresverbrauch Wasser/Energie, geleistete Arbeitsstunden")
+	}
 	next(rowH + 1)
 
 	// Verbrauchsblock (Wasser bzw. Energie)
@@ -335,9 +343,13 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 	// Arbeitsstunden
 	font("", 10)
 	pdf.SetXY(leftX, y)
+	bisWann := "Bis zum Ende der Saison"
+	if a.Schluss != "" {
+		bisWann = "Bis zur Übergabe"
+	}
 	pdf.MultiCell(rightX-leftX, 4.8, tr(fmt.Sprintf(
 		"1.3. Arbeitsstunden: laut der Beitrags- und Gebührenordnung sind %s Pflichtstunden zu erbringen. "+
-			"Bis zum Ende der Saison erbrachte Arbeitsstunden: %s h.", fmtFlex(s.Pflichtstunden), fmtFlex(*a.Stunden))), "", "L", false)
+			"%s erbrachte Arbeitsstunden: %s h.", fmtFlex(s.Pflichtstunden), bisWann, fmtFlex(*a.Stunden))), "", "L", false)
 	y = pdf.GetY() + 1
 	text(colX[0], 80, "Beitrag für nicht erbrachte Pflichtstunden: "+fmtEUR(r.NachzahlungStunden), "L")
 	span(4, 5, "Zwischensumme:", "R")
@@ -348,34 +360,46 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 	next(2)
 
 	// Beiträge
-	ueberschrift("2. Beitragszahlung für das Folgejahr")
-	next(rowH + 0.6)
-	pacht := func(label string, qm, betrag float64) {
-		font("", 10)
-		span(0, 0, label, "L")
-		span(1, 2, fmtFlex(qm)+" m²", "R")
-		span(3, 3, "Pachtbetrag:", "R")
-		span(4, 4, fmtEUR(betrag), "R")
-		next(rowH)
-	}
-	pacht("Gartengröße:", p.Gartengroesse, r.PachtGarten)
-	pacht("Anteil Vereinsfläche:", s.VereinsflaecheQm, r.PachtVerein)
-	pacht("Pachtanteil freie Gärten:", s.FreieGaertenQm, r.PachtFrei)
-	next(0.6)
-	hline(y, 0.2)
-	next(1.4)
+	if a.Schluss != "" {
+		ueberschrift("2. Sonstige Posten")
+		next(rowH + 0.6)
+		font("", 9.5)
+		pdf.SetXY(leftX, y)
+		pdf.MultiCell(rightX-leftX, 4.6, tr("Pacht, Mitgliedsbeitrag und Umlage für das Folgejahr entfallen wegen der Gartenübergabe; "+
+			"sie werden vom neuen Pächter getragen."), "", "L", false)
+		y = pdf.GetY() + 1
+		hline(y, 0.2)
+		next(1.4)
+	} else {
+		ueberschrift("2. Beitragszahlung für das Folgejahr")
+		next(rowH + 0.6)
+		pacht := func(label string, qm, betrag float64) {
+			font("", 10)
+			span(0, 0, label, "L")
+			span(1, 2, fmtFlex(qm)+" m²", "R")
+			span(3, 3, "Pachtbetrag:", "R")
+			span(4, 4, fmtEUR(betrag), "R")
+			next(rowH)
+		}
+		pacht("Gartengröße:", p.Gartengroesse, r.PachtGarten)
+		pacht("Anteil Vereinsfläche:", s.VereinsflaecheQm, r.PachtVerein)
+		pacht("Pachtanteil freie Gärten:", s.FreieGaertenQm, r.PachtFrei)
+		next(0.6)
+		hline(y, 0.2)
+		next(1.4)
 
-	font("", 10)
-	span(0, 0, "Vereinsbeitrag:", "L")
-	span(1, 1, fmtEUR(s.Vereinsbeitrag), "R")
-	next(rowH)
-	span(0, 0, "Territorialverband:", "L")
-	span(1, 1, fmtEUR(s.Territorialverband), "R")
-	span(3, 5, "Gesamt Mitgliedsbeitrag:", "R")
-	span(6, 6, fmtEUR(r.Mitgliedsbeitrag), "R")
-	next(rowH + 0.6)
-	hline(y, 0.2)
-	next(1.4)
+		font("", 10)
+		span(0, 0, "Vereinsbeitrag:", "L")
+		span(1, 1, fmtEUR(s.Vereinsbeitrag), "R")
+		next(rowH)
+		span(0, 0, "Territorialverband:", "L")
+		span(1, 1, fmtEUR(s.Territorialverband), "R")
+		span(3, 5, "Gesamt Mitgliedsbeitrag:", "R")
+		span(6, 6, fmtEUR(r.Mitgliedsbeitrag), "R")
+		next(rowH + 0.6)
+		hline(y, 0.2)
+		next(1.4)
+	}
 
 	posten := func(label string, v float64) {
 		font("", 10)
@@ -386,7 +410,9 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 		next(rowH)
 	}
 	posten("Versicherung:", a.Versicherung)
-	posten("Umlage:", r.Umlage)
+	if a.Schluss == "" {
+		posten("Umlage:", r.Umlage)
+	}
 	posten("Grundsteuer:", a.Grundsteuer)
 	posten("Sonstige Auslagen:", a.Auslagen)
 	font("U", 8.5)

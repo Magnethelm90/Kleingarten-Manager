@@ -15,7 +15,7 @@ import (
 // datenbestandLeer meldet, ob noch nichts eingegeben wurde (keine Pächter, Rechnungen, Ausgaben,
 // kein abgeschlossenes Jahr). Der Aufrufer hält s.mu.
 func (s *Store) datenbestandLeer() bool {
-	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 {
+	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 {
 		return false
 	}
 	for _, j := range s.d.Jahre {
@@ -113,8 +113,41 @@ func (s *Store) ladeBeispieldaten() {
 		}
 		s.d.Lageplan[fmt.Sprint(i+1)] = LagePos{X: x, Y: y}
 	}
+	// Warteliste: drei Interessenten, einer schon lange nicht mehr nachgefragt
+	s.d.Warteliste = []Bewerber{
+		{ID: newID(), Seit: heute.AddDate(-2, -3, 0).Format("2006-01-02"), Anrede: "Herr", Name: "Lukas Morgenroth", Strasse: "Feldweg 8", PLZOrt: set.Ort,
+			Telefon: "0123 456789", Wunsch: "gern mit Laube"},
+		{ID: newID(), Seit: heute.AddDate(-1, -1, 0).Format("2006-01-02"), Anrede: "Familie", Name: "Kaya", Strasse: "Wiesenstraße 15", PLZOrt: set.Ort,
+			Email: "familie.kaya@example.org", Wunsch: "großer Garten für Kinder"},
+		{ID: newID(), Seit: heute.AddDate(0, -2, 0).Format("2006-01-02"), Anrede: "Frau", Name: "Emma Regen", Strasse: "Lindenweg 20", PLZOrt: set.Ort,
+			Email: "emma.regen@example.org"},
+	}
+	// Jahresplaner: typische Vereinstermine im laufenden Jahr
+	j2 := heute.Year()
+	tag := func(monat time.Month, wt time.Weekday, n int) string {
+		return nterWochentag(j2, monat, wt, n).Format("2006-01-02")
+	}
+	s.d.Termine = []Termin{
+		{ID: newID(), Datum: tag(time.March, time.Saturday, 2), Von: "15:00", Bis: "17:00", Titel: "Jahreshauptversammlung", Art: "Versammlung", Ort: "Vereinsheim"},
+		{ID: newID(), Datum: tag(time.April, time.Saturday, 1), Von: "09:00", Bis: "13:00", Titel: "Frühjahrsarbeitseinsatz", Art: "Arbeitseinsatz", Ort: "Treffpunkt am Tor", Notiz: "Bitte Arbeitshandschuhe mitbringen"},
+		{ID: newID(), Datum: tag(time.April, time.Saturday, 3), Von: "10:00", Titel: "Wasser anstellen", Art: "Sonstiges"},
+		{ID: newID(), Datum: tag(time.June, time.Saturday, 4), Von: "14:00", Titel: "Sommerfest", Art: "Fest", Ort: "Festwiese"},
+		{ID: newID(), Datum: tag(time.September, time.Saturday, 2), Von: "09:00", Bis: "13:00", Titel: "Herbstarbeitseinsatz", Art: "Arbeitseinsatz", Ort: "Treffpunkt am Tor"},
+		{ID: newID(), Datum: tag(time.October, time.Saturday, 4), Von: "10:00", Titel: "Zählerablesung und Wasser abstellen", Art: "Ablesung", Notiz: "Zähler bitte frei zugänglich machen"},
+		{ID: newID(), Datum: tag(time.November, time.Tuesday, 2), Von: "19:00", Bis: "21:00", Titel: "Vorstandssitzung", Art: "Vorstand", Ort: "Vereinsheim"},
+		{ID: newID(), Datum: tag(time.December, time.Saturday, 2), Von: "16:00", Titel: "Adventsfeier", Art: "Fest", Ort: "Vereinsheim"},
+	}
 	s.d.Demo = true
 	s.audit("Beispieldaten geladen")
+}
+
+// nterWochentag liefert z. B. den zweiten Samstag im März.
+func nterWochentag(jahr int, monat time.Month, wt time.Weekday, n int) time.Time {
+	d := time.Date(jahr, monat, 1, 0, 0, 0, 0, time.UTC)
+	for d.Weekday() != wt {
+		d = d.AddDate(0, 0, 1)
+	}
+	return d.AddDate(0, 0, 7*(n-1))
 }
 
 func fp(x float64) *float64 { return &x }
