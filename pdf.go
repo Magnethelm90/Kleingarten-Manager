@@ -62,10 +62,15 @@ func adressZeile(pdf *fpdf.Fpdf, x, y float64, txt, style string) float64 {
 // passendKlein setzt die Schrift für txt so klein wie nötig (von size bis minSize in halben Punkten),
 // damit der Text in maxW passt, und kürzt ihn notfalls mit »…«. Die Schriftgröße bleibt eingestellt.
 func passendKlein(pdf *fpdf.Fpdf, txt string, maxW, size, minSize float64) string {
-	pdf.SetFont("lib", "", size)
+	return passendKleinStil(pdf, "", txt, maxW, size, minSize)
+}
+
+// passendKleinStil wie passendKlein, aber mit Schriftschnitt (z. B. "B" für fett).
+func passendKleinStil(pdf *fpdf.Fpdf, stil, txt string, maxW, size, minSize float64) string {
+	pdf.SetFont("lib", stil, size)
 	for size > minSize && pdf.GetStringWidth(txt) > maxW {
 		size -= 0.5
-		pdf.SetFont("lib", "", size)
+		pdf.SetFont("lib", stil, size)
 	}
 	if pdf.GetStringWidth(txt) <= maxW {
 		return txt
@@ -227,20 +232,13 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 	}
 	hline := func(at float64, width float64) {
 		pdf.SetLineWidth(width)
-		pdf.SetDrawColor(90, 90, 90)
+		pdf.SetDrawColor(185, 190, 182)
 		pdf.Line(leftX, at, rightX, at)
 	}
 	next := func(h float64) { y += h }
 
 	// Kopf
-	pdf.SetLineWidth(0.7)
-	pdf.SetDrawColor(0, 0, 0)
-	pdf.Line(leftX, 14, rightX, 14)
-	y = 17
-	font("B", 14)
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, 8, tr(s.VereinName+" "+s.Ort), "", 0, "C", false, 0, "")
-	hline(27, 0.25)
+	zeichneKopf(pdf, s)
 
 	y = 31
 	font("", 7.5)
@@ -278,12 +276,20 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 
 	// Überschriften
 	next(gap(5))
-	font("B", 12)
+	mr, mg, mb := markenfarbe(s.Farbe)
+	ueberschrift := func(txt string) {
+		font("B", 10.5)
+		pdf.SetTextColor(mr, mg, mb)
+		text(leftX, rightX-leftX, txt, "L")
+		pdf.SetTextColor(0, 0, 0)
+	}
+	font("B", 13)
+	pdf.SetTextColor(mr, mg, mb)
 	pdf.SetXY(leftX, y)
 	pdf.CellFormat(rightX-leftX, 6, tr(fmt.Sprintf("Rechnung Jahresendabrechnung %d", s.Jahr)), "", 0, "L", false, 0, "")
+	pdf.SetTextColor(0, 0, 0)
 	next(7)
-	font("BU", 10)
-	text(leftX, rightX-leftX, "1. Jahresverbrauch Wasser/Energie, geleistete Arbeitsstunden", "L")
+	ueberschrift("1. Jahresverbrauch Wasser/Energie, geleistete Arbeitsstunden")
 	next(rowH + 1)
 
 	// Verbrauchsblock (Wasser bzw. Energie)
@@ -342,8 +348,7 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 	next(2)
 
 	// Beiträge
-	font("BU", 10)
-	text(leftX, rightX-leftX, "2. Beitragszahlung für das Folgejahr", "L")
+	ueberschrift("2. Beitragszahlung für das Folgejahr")
 	next(rowH + 0.6)
 	pacht := func(label string, qm, betrag float64) {
 		font("", 10)
@@ -421,12 +426,8 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 	if guthaben {
 		label = "Guthaben (zu Ihren Gunsten):"
 	}
-	font("B", 11)
-	pdf.SetXY(colX[3], y)
-	pdf.CellFormat(colX[5]+colW[5]-colX[3], 6, tr(label), "", 0, "R", false, 0, "")
-	pdf.SetXY(colX[6]-6, y)
-	pdf.CellFormat(colW[6]+6, 6, tr(fmtEUR(absf(r.Gesamt))), "TB", 0, "R", false, 0, "")
-	next(6 + 5)
+	betragsBox(pdf, s, colX[3]-4, y, label, fmtEUR(absf(r.Gesamt)))
+	next(9 + 3)
 
 	// Zahlungshinweis
 	einspruch := fmt.Sprintf("Bei Unstimmigkeiten der Rechnung sind diese bis %d Tage nach Eingang beim Vorstand anzuzeigen. "+
@@ -470,9 +471,11 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 	}
 	y += 2
 	if !guthaben && r.Gesamt != 0 {
+		font("", 9)
 		text(leftX, rightX-leftX, "(*) Bei Zahlungsvorgängen bitte angeben!", "L")
 		next(rowH + 3)
 	}
+	font("", 10)
 	text(leftX, rightX-leftX, "Der Vorstand", "L")
 	next(rowH + 3)
 	font("", 8)
@@ -508,19 +511,12 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	}
 	hline := func(at float64, width float64) {
 		pdf.SetLineWidth(width)
-		pdf.SetDrawColor(90, 90, 90)
+		pdf.SetDrawColor(185, 190, 182)
 		pdf.Line(leftX, at, rightX, at)
 	}
 	next := func(h float64) { y += h }
 
-	pdf.SetLineWidth(0.7)
-	pdf.SetDrawColor(0, 0, 0)
-	pdf.Line(leftX, 14, rightX, 14)
-	y = 17
-	font("B", 14)
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, 8, tr(s.VereinName+" "+s.Ort), "", 0, "C", false, 0, "")
-	hline(27, 0.25)
+	zeichneKopf(pdf, s)
 
 	y = 31
 	font("", 7.5)
@@ -556,8 +552,10 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 
 	next(6)
 	font("B", 13)
+	pdf.SetTextColor(markenfarbe(s.Farbe))
 	pdf.SetXY(leftX, y)
 	pdf.CellFormat(rightX-leftX, 7, tr("Zahlungserinnerung"), "", 0, "L", false, 0, "")
+	pdf.SetTextColor(0, 0, 0)
 	next(9)
 	font("", 10)
 	bezahlt := paidAmount(rec)
@@ -575,11 +573,8 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	hline(y, 0.2)
 	next(3)
 
-	font("B", 11)
-	text(leftX, 90, "Noch offener Betrag:", "L")
-	pdf.SetXY(colX[6]-6, y)
-	pdf.CellFormat(colW[6]+6, 6, tr(fmtEUR(offen)), "TB", 0, "R", false, 0, "")
-	next(6 + 5)
+	betragsBox(pdf, s, colX[3]-4, y, "Noch offener Betrag:", fmtEUR(offen))
+	next(9 + 4)
 
 	const qrSize = 24.0
 	textW := rightX - leftX
@@ -609,8 +604,10 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 		}
 	}
 	y += 2
+	font("", 9)
 	text(leftX, rightX-leftX, "(*) Bei Zahlungsvorgängen bitte angeben!", "L")
 	next(rowH + 3)
+	font("", 10)
 	text(leftX, rightX-leftX, "Der Vorstand", "L")
 	next(rowH + 3)
 	font("", 8)
@@ -624,6 +621,58 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// zeichneKopf setzt den Briefkopf von Rechnung und Mahnung (oberhalb der Absenderzeile bei 31 mm):
+// optional das Vereinslogo links, daneben Vereinsname in Vereinsfarbe und Ort, darunter eine farbige Linie.
+func zeichneKopf(pdf *fpdf.Fpdf, s Settings) {
+	mr, mg, mb := markenfarbe(s.Farbe)
+	x := leftX
+	if raw, ok := logoDaten(s.Logo); ok {
+		name := "vereinslogo-" + s.Logo
+		info := pdf.RegisterImageOptionsReader(name, fpdf.ImageOptions{ImageType: "PNG"}, bytes.NewReader(raw))
+		if info != nil && pdf.Err() == false && info.Width() > 0 && info.Height() > 0 {
+			const maxH, maxW = 15.0, 42.0
+			h := maxH
+			w := info.Width() / info.Height() * h
+			if w > maxW {
+				w, h = maxW, info.Height()/info.Width()*maxW
+			}
+			pdf.ImageOptions(name, leftX, 10+(maxH-h)/2, w, h, false, fpdf.ImageOptions{ImageType: "PNG"}, 0, "")
+			x = leftX + w + 5
+		}
+		pdf.ClearError() // ein unlesbares Logo darf die Rechnung nicht verhindern
+	}
+	pdf.SetTextColor(mr, mg, mb)
+	pdf.SetXY(x, 11)
+	pdf.CellFormat(rightX-x, 7, passendKleinStil(pdf, "B", s.VereinName, rightX-x, 15, 10), "", 0, "L", false, 0, "")
+	pdf.SetFont("lib", "", 9.5)
+	pdf.SetTextColor(90, 96, 90)
+	pdf.SetXY(x, 18.5)
+	pdf.CellFormat(rightX-x, 5, s.Ort, "", 0, "L", false, 0, "")
+	pdf.SetTextColor(0, 0, 0)
+	pdf.SetFillColor(mr, mg, mb)
+	pdf.Rect(leftX, 27, rightX-leftX, 0.9, "F")
+}
+
+// betragsBox hebt den Endbetrag hervor: hinterlegte Fläche in aufgehellter Vereinsfarbe, links die
+// Beschriftung, rechts der Betrag.
+func betragsBox(pdf *fpdf.Fpdf, s Settings, x, y float64, label, betrag string) {
+	mr, mg, mb := markenfarbe(s.Farbe)
+	fr, fg, fb := aufgehellt(mr, mg, mb, 0.86)
+	pdf.SetFillColor(fr, fg, fb)
+	pdf.SetDrawColor(mr, mg, mb)
+	pdf.SetLineWidth(0.3)
+	pdf.RoundedRect(x, y, rightX-x, 9, 1.6, "1234", "FD")
+	pdf.SetTextColor(mr, mg, mb)
+	pdf.SetFont("lib", "B", 11)
+	pdf.SetXY(x+3, y+1.5)
+	pdf.CellFormat(rightX-x-45, 6, label, "", 0, "L", false, 0, "")
+	pdf.SetFont("lib", "B", 13)
+	pdf.SetXY(rightX-45, y+1.5)
+	pdf.CellFormat(42, 6, betrag, "", 0, "R", false, 0, "")
+	pdf.SetTextColor(0, 0, 0)
+	pdf.SetDrawColor(0, 0, 0)
 }
 
 func absf(x float64) float64 {

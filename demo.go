@@ -104,6 +104,15 @@ func (s *Store) ladeBeispieldaten() {
 		{ID: newID(), Datum: fmt.Sprintf("%d-05-14", jahr), Beschreibung: "Reparatur Vereinsrasenmäher", Kategorie: "Instandhaltung", Betrag: 145.5},
 		{ID: newID(), Datum: fmt.Sprintf("%d-09-02", jahr), Beschreibung: "Druckerpapier und Briefumschläge", Kategorie: "Verwaltung", Betrag: 18.99},
 	}
+	// Lageplan: zwei Reihen Gärten links und rechts eines Weges, wie auf einem kleinen Vereinsgelände
+	s.d.Lageplan = map[string]LagePos{}
+	for i := range demoListe {
+		x, y := 20+(i/2)*140, 20
+		if i%2 == 1 {
+			y = 160
+		}
+		s.d.Lageplan[fmt.Sprint(i+1)] = LagePos{X: x, Y: y}
+	}
 	s.d.Demo = true
 	s.audit("Beispieldaten geladen")
 }
@@ -120,7 +129,7 @@ func (s *Store) entferneBeispieldaten() {
 	for _, j := range s.d.Jahre {
 		for _, a := range j.Ausgaben {
 			for _, b := range a.Belege {
-				s.entferneDatei("Belege", b)
+				s.entferneBeleg(b)
 			}
 		}
 	}

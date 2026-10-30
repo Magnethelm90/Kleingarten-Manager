@@ -21,6 +21,9 @@ jobs:
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - run: go vet ./...
       - run: go test -race ./...
+      - name: Bekannte Sicherheitslücken prüfen (govulncheck)
+        # offizielles Prüfprogramm des Go-Teams; feste Version, damit sich das Werkzeug nicht unbemerkt ändert
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
   build-windows:
     needs: test

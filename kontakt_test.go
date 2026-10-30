@@ -118,3 +118,30 @@ func TestImportLeereZellenLoeschenNichts(t *testing.T) {
 		t.Errorf("leere Zellen haben Angaben gelöscht: %+v", p)
 	}
 }
+
+// Endgültiges Löschen entfernt E-Mail und Telefon sofort auch aus Jahreskopien und Rechnungen (sie stehen
+// nicht auf der Rechnung und unterliegen keiner Aufbewahrungspflicht); Name und Anschrift bleiben dort.
+func TestEndgueltigLoeschenEntferntKontakt(t *testing.T) {
+	app, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Anna", "gartengroesse": 300,
+		"email": "anna@example.org", "telefon": "0123"}))
+	do(h, "PUT", "/api/ablesung/"+p.ID, Ablesung{WasserVJ: fp(1), WasserAkt: fp(2), StromVJ: fp(1), StromAkt: fp(2), Stunden: fp(12)})
+	do(h, "POST", "/api/invoices/issue", issueReq{})
+	do(h, "POST", "/api/admin/jahreswechsel", nil)
+	do(h, "DELETE", "/api/admin/paechter/"+p.ID, nil)
+	if rec := do(h, "DELETE", "/api/admin/paechter/"+p.ID+"/endgueltig", nil); rec.Code != 200 {
+		t.Fatalf("endgültig löschen: %d %s", rec.Code, rec.Body.String())
+	}
+	app.st.mu.Lock()
+	defer app.st.mu.Unlock()
+	for _, q := range app.st.d.Jahre["2025"].Paechter {
+		if q.ID == p.ID && (q.Email != "" || q.Telefon != "" || q.Name != "Anna") {
+			t.Errorf("Jahreskopie: %+v", q)
+		}
+	}
+	for _, r := range app.st.d.Rechnungen {
+		if r.PaechterID == p.ID && (r.Paechter.Email != "" || r.Paechter.Telefon != "" || r.Paechter.Name != "Anna") {
+			t.Errorf("Rechnung: %+v", r.Paechter)
+		}
+	}
+}

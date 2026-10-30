@@ -49,7 +49,15 @@ const ICONS = {
   sicherung: ['M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z', 'M9 12l2 2 4-4'],
   personen: ['M9 11a3.5 3.5 0 1 0 0-7a3.5 3.5 0 0 0 0 7z', 'M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6', 'M16 4.5a3 3 0 0 1 0 6', 'M21 20c0-3-1.8-5.2-4.5-5.8'],
   warnung: ['M12 4l9 16H3z', 'M12 10v4', 'M12 17.5v.5'],
+  fertig: ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M8 12.5l2.7 2.7L16 9.8'],
+  karte: ['M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z', 'M9 4v14', 'M15 6v14'],
 };
+
+// Leerer Zustand: Symbol, kurze Überschrift, Erklärung und – wo sinnvoll – der Knopf zum nächsten Schritt.
+function leer(ic, titel, text, knopf, onclick) {
+  return h('div', { class: 'leer' }, h('span', { class: 'leer-ico' }, icon(ic, 30)), h('b', null, titel), h('p', null, text),
+    knopf ? h('button', { class: 'btn primary', onclick }, knopf) : null);
+}
 function icon(name, size) {
   return svgEl('svg', { viewBox: '0 0 24 24', width: size || 20, height: size || 20, fill: 'none', stroke: 'currentColor',
     'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', class: 'ico' },
@@ -208,8 +216,36 @@ async function reload() {
 
 // ------------------------------------------------------------------ Grundgerüst
 
+// Vereinsfarbe: aus einer Grundfarbe alle Abstufungen berechnen. Zu helle Farben werden abgedunkelt,
+// bis weiße Schrift darauf gut lesbar ist (wie auf der Rechnung, siehe markenfarbe in farbe.go).
+function hexRGB(hex) { const v = parseInt(hex.slice(1), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
+function helligkeit([r, g, b]) {
+  const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+function mische([r, g, b], [r2, g2, b2], t) { return [r + (r2 - r) * t, g + (g2 - g) * t, b + (b2 - b) * t].map(Math.round); }
+const rgbStr = (c) => `rgb(${c.join(',')})`;
+function farbeAnwenden(hex) {
+  const root = document.documentElement.style;
+  const namen = ['--green', '--green-dark', '--green-mid', '--green-soft', '--green-tint', '--green-line', '--green-faint', '--ring'];
+  if (!/^#[0-9a-f]{6}$/i.test(hex || '')) { namen.forEach((n) => root.removeProperty(n)); return; }
+  let c = hexRGB(hex);
+  for (let i = 0; i < 40 && 1.05 / (helligkeit(c) + 0.05) < 4.5; i++) c = c.map((x) => x * 0.92);
+  c = c.map(Math.round);
+  const weiss = [255, 255, 255], schwarz = [0, 0, 0];
+  root.setProperty('--green', rgbStr(c));
+  root.setProperty('--green-dark', rgbStr(mische(c, schwarz, 0.3)));
+  root.setProperty('--green-mid', rgbStr(mische(c, weiss, 0.14)));
+  root.setProperty('--green-soft', rgbStr(mische(c, weiss, 0.88)));
+  root.setProperty('--green-tint', rgbStr(mische(c, weiss, 0.94)));
+  root.setProperty('--green-line', rgbStr(mische(c, weiss, 0.75)));
+  root.setProperty('--green-faint', `rgba(${c.join(',')},.10)`);
+  root.setProperty('--ring', `0 0 0 3px rgba(${c.join(',')},.25)`);
+}
+
 function render() {
   const st = S.state;
+  farbeAnwenden(st.settings.farbe);
   const app = document.getElementById('app');
   app.replaceChildren();
 
@@ -240,7 +276,7 @@ function render() {
 
   app.append(
     h('header', { class: 'top' },
-      h('div', { class: 'brand' }, h('span', { class: 'logo' }, icon('blatt', 20)), h('div', null, h('b', null, 'Kleingarten-Manager'), h('span', { title: st.settings.vereinName }, st.settings.vereinName))),
+      h('div', { class: 'brand' }, st.settings.logo ? h('span', { class: 'logo bild' }, h('img', { src: `/api/logo?v=${encodeURIComponent(st.settings.logo)}`, alt: '' })) : h('span', { class: 'logo' }, icon('blatt', 20)), h('div', null, h('b', null, 'Kleingarten-Manager'), h('span', { title: st.settings.vereinName }, st.settings.vereinName))),
       h('nav', { class: 'tabs' }, tabBtn('uebersicht', 'Übersicht'), tabBtn('eingabe', 'Zählerstände'), tabBtn('lageplan', 'Lageplan'), tabBtn('rechnungen', 'Rechnungen'), tabBtn('zahlungen', 'Zahlungen'), tabBtn('admin', 'Admin')),
       h('div', { class: 'spacer' }),
       globalSearchBox(st),
@@ -393,9 +429,22 @@ function zoomKnoepfe() {
   return h('span', { class: 'zoom' }, 'Anzeige: ',
     knopf('A−', 'Schrift kleiner', ZOOM_STUFEN[Math.max(0, i - 1)], i <= 0), ' ',
     knopf('A', 'Normale Größe', 1, i === 1), ' ',
-    knopf('A+', 'Schrift größer', ZOOM_STUFEN[Math.min(ZOOM_STUFEN.length - 1, i + 1)], i >= ZOOM_STUFEN.length - 1));
+    knopf('A+', 'Schrift größer', ZOOM_STUFEN[Math.min(ZOOM_STUFEN.length - 1, i + 1)], i >= ZOOM_STUFEN.length - 1), ' ',
+    h('button', { class: 'zoombtn' + (lesbarLaden() ? ' an' : ''), 'aria-pressed': String(lesbarLaden()),
+      title: 'Kräftigere Schrift, stärkere Kontraste und größere Knöpfe', onclick: () => { lesbarSetzen(!lesbarLaden()); render(); } },
+    lesbarLaden() ? '✓ Gut lesbar' : 'Gut lesbar'));
 }
 zoomSetzen(zoomLaden());
+
+// »Gut lesbar«: kräftigere Schrift, mehr Kontrast, größere Bedienelemente (je Rechner gemerkt).
+function lesbarLaden() {
+  try { return localStorage.getItem('kgm-lesbar') === '1'; } catch (e) { return document.documentElement.classList.contains('gutlesbar'); }
+}
+function lesbarSetzen(an) {
+  document.documentElement.classList.toggle('gutlesbar', an);
+  try { localStorage.setItem('kgm-lesbar', an ? '1' : '0'); } catch (e) { /* nur für diese Sitzung */ }
+}
+lesbarSetzen(lesbarLaden());
 
 // Erinnerung an offene Rechnungen des laufenden Jahres, direkt nach dem Öffnen sichtbar.
 // Bleibt bis zum nächsten Programmstart ausgeblendet, sobald sie einmal weggeklickt wurde.
@@ -597,6 +646,7 @@ function viewUebersicht() {
     beispieldatenKarte(st, istAdmin),
     jubilaeumBanner(st, istAdmin),
     st.demo ? null : zweiteSicherungBanner(st, istAdmin),
+    st.paechter.length ? jahresFortschritt(st, istAdmin) : null,
     h('div', { class: 'cards' }, cards),
     h('h3', { class: 'sect' }, 'Schnellzugriff'),
     h('div', { class: 'quicklinks' },
@@ -604,6 +654,42 @@ function viewUebersicht() {
       quicklink('rechnung', 'Zu den Rechnungen', 'prüfen, ausstellen, drucken oder per E-Mail', () => { S.tab = 'rechnungen'; render(); }),
       quicklink('euro', 'Zu den Zahlungen', 'bezahlt abhaken, Mahnungen', () => { S.tab = 'zahlungen'; render(); }),
       istAdmin ? quicklink('kasse', 'Zum Kassenbericht', 'Kassenbestand, Ausgaben, Belege', () => { S.tab = 'admin'; S.adminTab = 'kassenbericht'; render(); }) : null));
+}
+
+// Wo steht das Abrechnungsjahr? Vier Stationen mit Balken und dem nächsten sinnvollen Schritt.
+function jahresFortschritt(st, istAdmin) {
+  const n = st.paechter.length;
+  const vollst = st.paechter.filter((p) => st.results[p.id] && st.results[p.id].vollstaendig).length;
+  const ausgestellt = st.paechter.filter((p) => (st.issued || {})[p.id]).length;
+  const forderungen = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt > 0);
+  const bezahlt = forderungen.filter((e) => !payIsOpen(e)).length;
+  const go = (tab, extra) => () => { S.tab = tab; Object.assign(S, extra || {}); render(); };
+  const stationen = [
+    { titel: 'Zählerstände', wert: vollst, von: n, text: `${vollst} von ${n} vollständig`, los: 'Zählerstände eintragen', go: go('eingabe') },
+    { titel: 'Rechnungen', wert: ausgestellt, von: vollst || n, text: `${ausgestellt} von ${vollst} ausgestellt`, los: 'Rechnungen ausstellen', go: go('rechnungen', { invTab: 'pruefen' }) },
+    // nur Guthaben ausgestellt: es gibt nichts einzusammeln, die Station gilt als erledigt
+    forderungen.length || !ausgestellt
+      ? { titel: 'Zahlungen', wert: bezahlt, von: forderungen.length, text: forderungen.length ? `${bezahlt} von ${forderungen.length} bezahlt` : 'noch keine Rechnung', los: 'Zahlungen abhaken', go: go('zahlungen') }
+      : { titel: 'Zahlungen', wert: 1, von: 1, text: 'nichts offen', los: 'Zahlungen ansehen', go: go('zahlungen') },
+    { titel: 'Jahresabschluss', wert: 0, von: 1, text: `${st.currentYear} abschließen`, los: 'Zum Jahreswechsel', go: go('admin', { adminTab: 'jahreswechsel' }), nurAdmin: true },
+  ];
+  // die erste Station, die noch nicht fertig ist, ist der nächste Schritt
+  let naechste = stationen.findIndex((x) => x.von === 0 || x.wert < x.von);
+  if (naechste < 0) naechste = stationen.length - 1;
+  if (stationen[naechste].nurAdmin && !istAdmin) naechste = -1;
+  const fertig = (x) => x.von > 0 && x.wert >= x.von && !x.nurAdmin;
+  return h('div', { class: 'card fortschritt' },
+    h('div', { class: 'fs-kopf' },
+      h('div', null, h('b', null, `Abrechnungsjahr ${st.currentYear}`), h('span', { class: 'hint' }, ' – wo stehen wir?')),
+      naechste >= 0 ? h('button', { class: 'btn primary small', onclick: stationen[naechste].go }, `Weiter: ${stationen[naechste].los} →`) : null),
+    h('ol', { class: 'fs-stationen' }, stationen.map((x, i) => {
+      const anteil = x.von > 0 ? Math.min(1, x.wert / x.von) : 0;
+      const cls = fertig(x) ? 'fertig' : i === naechste ? 'aktiv' : '';
+      return h('li', { class: cls, onclick: x.nurAdmin && !istAdmin ? null : x.go, title: x.los },
+        h('span', { class: 'fs-punkt' }, fertig(x) ? '✓' : String(i + 1)),
+        h('span', { class: 'fs-text' }, h('b', null, x.titel), h('span', null, x.text)),
+        h('span', { class: 'fs-balken' }, h('i', { style: `width:${Math.round(anteil * 100)}%` })));
+    })));
 }
 
 function quicklink(ic, titel, text, onclick, primary) {
@@ -891,7 +977,8 @@ function viewSchnell() {
     box.replaceChildren();
     const p = list.find((x) => x.id === S.quickId);
     if (!p) {
-      box.append(h('div', { class: 'card empty' }, list.length ? 'Tippe oben eine Nummer ein und drücke Enter. Alle Angaben des Pächters erscheinen dann automatisch.' : 'Noch keine Pächter angelegt. Das geht im Bereich »Admin« → Pächter.'));
+      box.append(list.length ? h('div', { class: 'card empty' }, 'Tippe oben eine Nummer ein und drücke Enter. Alle Angaben des Pächters erscheinen dann automatisch.')
+        : leer('personen', 'Noch keine Pächter angelegt', 'Lege zuerst die Pächter an oder übernimm sie aus einer Excel-Liste. Danach trägst du hier die Zählerstände ein.', 'Pächter anlegen', () => { S.tab = 'admin'; S.adminTab = 'paechter'; render(); }));
       return;
     }
     const a = st.ablesungen[p.id] || {};
@@ -968,7 +1055,7 @@ function viewTabelle() {
       (!S.nurUnvollstaendig || !(st.results[p.id] && st.results[p.id].vollstaendig)));
     for (const p of shown) tbody.append(eingabeRow(p, ro));
     if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 15, class: 'empty' },
-      list.length ? 'Keine Treffer.' : 'Noch keine Pächter angelegt. Das geht im Bereich »Admin« → Pächter.')));
+      list.length ? 'Keine Treffer.' : leer('personen', 'Noch keine Pächter angelegt', 'Lege zuerst die Pächter an oder übernimm sie aus einer Excel-Liste.', 'Pächter anlegen', () => { S.tab = 'admin'; S.adminTab = 'paechter'; render(); }))));
   };
   fill();
 
@@ -1041,8 +1128,13 @@ async function gartenHistorieDialog(gartennr) {
   await modal(`Verlauf Garten ${gartennr}`, body, [{ label: 'Schließen', value: true }]);
 }
 
+// Lageplan: ohne gespeicherte Anordnung ein Raster nach Gartennummer, sonst eine Karte, auf der jeder
+// Garten an seinem Platz auf dem Gelände liegt. Im Admin-Bereich lassen sich die Kacheln per Maus anordnen.
+const LP_W = 120, LP_H = 64, LP_RASTER = 10;
+
 function viewLageplan() {
   const st = S.state;
+  const istAdmin = !st.hasPassword || st.loggedIn;
   const issuedOf = (p) => (st.issued || {})[p.id];
   const list = [...st.paechter].sort((a, b) =>
     (a.gartennr || a.mitgliedsnr).localeCompare(b.gartennr || b.mitgliedsnr, 'de', { numeric: true }));
@@ -1058,23 +1150,124 @@ function viewLageplan() {
   };
   const labels = { unvollstaendig: 'Angaben fehlen', berechnet: 'berechnet, noch nicht ausgestellt', offen: 'Rechnung offen', bezahlt: 'bezahlt / kein offener Betrag' };
   const counts = { unvollstaendig: 0, berechnet: 0, offen: 0, bezahlt: 0 };
-  const tiles = list.map((p) => {
-    const s = statusOf(p);
-    counts[s]++;
-    return h('div', { class: 'kachel kachel-' + s, title: `${p.name}${p.notiz ? ' · 📝 ' + p.notiz : ''} – ${labels[s]}`,
-      onclick: () => { S.tab = 'eingabe'; S.eingabeMode = 'schnell'; S.quickId = p.id; render(); } },
-      p.gartennr ? h('button', { class: 'kachel-hist', title: `Verlauf von Garten ${p.gartennr}`,
-        onclick: (e) => { e.stopPropagation(); gartenHistorieDialog(p.gartennr); } }, '🕘') : null,
-      h('div', { class: 'kachel-nr' }, p.gartennr || p.mitgliedsnr), h('div', { class: 'kachel-name' }, p.name));
-  });
+  const status = new Map(list.map((p) => { const x = statusOf(p); counts[x]++; return [p.id, x]; }));
+  const edit = !!S.lageEntwurf && istAdmin && !st.readOnly;
+  const kachel = (p, extra) => h('div', { class: 'kachel kachel-' + status.get(p.id) + (edit ? ' ziehbar' : ''), title: `${p.name}${p.notiz ? ' · 📝 ' + p.notiz : ''} – ${labels[status.get(p.id)]}`,
+    onclick: edit ? null : () => { S.tab = 'eingabe'; S.eingabeMode = 'schnell'; S.quickId = p.id; render(); }, ...(extra || {}) },
+    p.gartennr && !edit ? h('button', { class: 'kachel-hist', title: `Verlauf von Garten ${p.gartennr}`,
+      onclick: (e) => { e.stopPropagation(); gartenHistorieDialog(p.gartennr); } }, '🕘') : null,
+    h('div', { class: 'kachel-nr' }, p.gartennr || p.mitgliedsnr), h('div', { class: 'kachel-name' }, p.name));
   const legend = (cls, label) => h('span', { class: 'hint', style: 'margin-right:14px' },
     h('span', { class: 'kachel-dot kachel-' + cls }), ` ${label} (${counts[cls]})`);
 
+  const gespeichert = st.lageplan || {};
+  const pos = edit ? S.lageEntwurf : gespeichert;
+  const hatKarte = Object.keys(gespeichert).length > 0;
+  const mitNr = list.filter((p) => (p.gartennr || '').trim());
+  const ohneNr = list.filter((p) => !(p.gartennr || '').trim());
+
+  let kartenAnsicht;
+  if (!hatKarte && !edit) {
+    kartenAnsicht = h('div', { class: 'kachelgrid' }, list.map((p) => kachel(p)));
+  } else {
+    const platziert = mitNr.filter((p) => pos[p.gartennr.trim()]);
+    const offen = mitNr.filter((p) => !pos[p.gartennr.trim()]);
+    let maxX = 0, maxY = 0;
+    for (const p of platziert) { const q = pos[p.gartennr.trim()]; maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y); }
+    const flaeche = h('div', { class: 'lagekarte' + (edit ? ' bearbeiten' : ''), style: `width:${maxX + LP_W + 40}px;height:${maxY + LP_H + (edit ? 160 : 30)}px` });
+    for (const p of platziert) {
+      const nr = p.gartennr.trim();
+      const el = kachel(p, { style: `left:${pos[nr].x}px;top:${pos[nr].y}px` });
+      if (edit) ziehbarMachen(el, nr, flaeche);
+      flaeche.append(el);
+    }
+    kartenAnsicht = h('div', null, h('div', { class: 'lagekarte-wrap' }, flaeche),
+      offen.length || ohneNr.length ? h('div', { style: 'margin-top:14px' },
+        h('h3', { class: 'sect' }, edit ? 'Noch nicht auf der Karte – auf die Fläche ziehen' : 'Noch nicht auf der Karte'),
+        h('div', { class: 'kachelgrid' }, offen.map((p) => {
+          const el = kachel(p);
+          if (edit) ziehbarMachen(el, p.gartennr.trim(), flaeche, true);
+          return el;
+        }), ohneNr.map((p) => kachel(p, { title: `${p.name}: ohne Gartennummer, kann nicht platziert werden` }))))
+        : null);
+  }
+
+  let leiste = null;
+  if (istAdmin && !st.readOnly && list.length) {
+    leiste = edit
+      ? h('div', { class: 'banner info lage-leiste' },
+        h('span', null, '✋ Ziehe die Gärten mit der Maus an ihren Platz auf dem Gelände. Gespeichert wird erst mit »Anordnung speichern«.'),
+        h('div', { class: 'spacer' }),
+        h('button', { class: 'btn small', onclick: () => { S.lageEntwurf = null; render(); } }, 'Abbrechen'), ' ',
+        hatKarte ? h('button', { class: 'btn small danger', onclick: async () => {
+          if (!(await confirmBox('Die Anordnung löschen und die Gärten wieder als Raster nach Nummer zeigen?', 'Zurück zum Raster', true))) return;
+          try { await api('PUT', '/api/admin/lageplan', { positionen: {} }); S.lageEntwurf = null; toast('Lageplan zurückgesetzt', 'ok'); await reload(); } catch (e) { handleErr(e); }
+        } }, 'Zurück zum Raster') : null, ' ',
+        h('button', { class: 'btn small primary', onclick: async () => {
+          try { await api('PUT', '/api/admin/lageplan', { positionen: S.lageEntwurf }); S.lageEntwurf = null; toast('Anordnung gespeichert', 'ok'); await reload(); } catch (e) { handleErr(e); }
+        } }, 'Anordnung speichern'))
+      : h('button', { class: 'btn', onclick: () => { S.lageEntwurf = startEntwurf(mitNr, gespeichert); render(); } },
+        h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, icon('karte', 18), hatKarte ? 'Karte bearbeiten' : 'Gärten wie auf dem Gelände anordnen'));
+  }
+
   return h('div', null,
-    h('h2', null, `Lageplan ${st.year}`),
-    h('p', { class: 'hint' }, 'Kachel pro Garten, sortiert nach Gartennummer. Farbe zeigt den Abrechnungsstatus, Klick auf eine Kachel springt zur Schnelleingabe dieses Pächters.'),
+    h('div', { class: 'toolbar' }, h('h2', { style: 'margin:0' }, `Lageplan ${st.year}`), h('div', { class: 'spacer' }), edit ? null : leiste),
+    h('p', { class: 'hint' }, hatKarte || edit ? 'Jeder Garten liegt an seinem Platz auf dem Gelände. Die Farbe zeigt den Abrechnungsstand, ein Klick öffnet die Schnelleingabe dieses Pächters.'
+      : 'Kachel pro Garten, sortiert nach Gartennummer. Farbe zeigt den Abrechnungsstatus, Klick auf eine Kachel springt zur Schnelleingabe dieses Pächters.'),
+    edit ? leiste : null,
     h('div', { style: 'margin-bottom:12px' }, legend('unvollstaendig', 'Angaben fehlen'), legend('berechnet', 'berechnet'), legend('offen', 'Rechnung offen'), legend('bezahlt', 'bezahlt')),
-    list.length ? h('div', { class: 'kachelgrid' }, tiles) : h('div', { class: 'card empty' }, 'Noch keine Pächter angelegt.'));
+    list.length ? kartenAnsicht : leer('personen', 'Noch keine Gärten', 'Sobald Pächter mit Gartennummer angelegt sind, erscheint hier jeder Garten als Kachel mit seinem Abrechnungsstand.', 'Pächter anlegen', () => { S.tab = 'admin'; S.adminTab = 'paechter'; render(); }));
+}
+
+// Entwurf zum Anordnen: gespeicherte Positionen übernehmen; gibt es noch keine, alle Gärten als Raster vorlegen.
+function startEntwurf(mitNr, gespeichert) {
+  const e = {};
+  for (const [k, v] of Object.entries(gespeichert)) e[k] = { x: v.x, y: v.y };
+  if (!Object.keys(e).length) {
+    mitNr.forEach((p, i) => { e[p.gartennr.trim()] = { x: 20 + (i % 8) * (LP_W + 20), y: 20 + Math.floor(i / 8) * (LP_H + 30) }; });
+  }
+  return e;
+}
+
+// Kachel per Maus (oder Finger) verschieben; Position rastet auf 10 px ein. Aus der Liste »noch nicht auf der
+// Karte« gezogene Kacheln landen dort auf der Fläche, wo sie losgelassen werden.
+function ziehbarMachen(el, nr, flaeche, ausListe) {
+  el.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    const start = el.getBoundingClientRect();
+    const dx = ev.clientX - start.left, dy = ev.clientY - start.top;
+    const geist = ausListe ? el.cloneNode(true) : el;
+    if (ausListe) { geist.classList.add('schwebt'); geist.style.position = 'fixed'; geist.style.width = LP_W + 'px'; document.body.append(geist); }
+    el.setPointerCapture(ev.pointerId);
+    el.classList.add('zieht');
+    const bewegen = (e) => {
+      if (ausListe) { geist.style.left = (e.clientX - dx) + 'px'; geist.style.top = (e.clientY - dy) + 'px'; return; }
+      const f = flaeche.getBoundingClientRect();
+      const x = Math.max(0, Math.round((e.clientX - f.left - dx) / LP_RASTER) * LP_RASTER);
+      const y = Math.max(0, Math.round((e.clientY - f.top - dy) / LP_RASTER) * LP_RASTER);
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      S.lageEntwurf[nr] = { x, y };
+    };
+    const ende = (e) => {
+      el.removeEventListener('pointermove', bewegen);
+      el.removeEventListener('pointerup', ende);
+      el.removeEventListener('pointercancel', ende);
+      el.classList.remove('zieht');
+      if (ausListe) {
+        geist.remove();
+        const f = flaeche.getBoundingClientRect();
+        if (e.type === 'pointerup' && e.clientX >= f.left && e.clientX <= f.right && e.clientY >= f.top && e.clientY <= f.bottom) {
+          S.lageEntwurf[nr] = { x: Math.max(0, Math.round((e.clientX - f.left - dx) / LP_RASTER) * LP_RASTER),
+            y: Math.max(0, Math.round((e.clientY - f.top - dy) / LP_RASTER) * LP_RASTER) };
+        }
+      }
+      render();
+    };
+    el.addEventListener('pointermove', bewegen);
+    el.addEventListener('pointerup', ende);
+    el.addEventListener('pointercancel', ende);
+  });
 }
 
 function viewRechnungen() {
@@ -1182,7 +1375,7 @@ function viewArchiv() {
       ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
           h('thead', null, h('tr', null, ['Nr.', 'Name', 'Rechnungs-Nr.', 'Version', 'Betrag', 'Ausgestellt am', 'Status', ''].map((t) => h('th', null, t)))),
           h('tbody', null, rows.map((a) => archivRow(a, false)))))
-      : h('div', { class: 'card empty' }, 'In diesem Jahr wurde noch keine Rechnung ausgestellt.');
+      : leer('rechnung', 'Noch keine Rechnung ausgestellt', `Sobald du im Bereich »Rechnungen prüfen & ausstellen« Rechnungen ausstellst, liegen sie hier für ${st.year} – mit den Werten von damals, unveränderlich.`, 'Zum Ausstellen', () => { S.invTab = 'pruefen'; render(); });
   }
 
   return h('div', null,
@@ -1202,7 +1395,7 @@ function viewAusstellen() {
   const drawPreview = () => {
     right.replaceChildren();
     const p = list.find((x) => x.id === S.selInvoice);
-    if (!p) { right.append(h('div', { class: 'card empty' }, 'Noch keine Pächter vorhanden.')); return; }
+    if (!p) { right.append(leer('rechnung', 'Noch keine Pächter', 'Rechnungen gibt es, sobald Pächter angelegt und ihre Zählerstände eingetragen sind.', 'Pächter anlegen', () => { S.tab = 'admin'; S.adminTab = 'paechter'; render(); })); return; }
     const res = st.results[p.id];
     const inf = issuedOf(p);
     const showLive = !inf || S.invView === 'live';
@@ -1430,7 +1623,8 @@ function viewZahlungen() {
         h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await paymentDialog(e); if (r !== false && r !== undefined) draw(); } }, 'Details'))));
     }
     if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 10, class: 'empty' },
-      !all.length ? `Für ${st.year} wurde noch keine Rechnung ausgestellt. Das machst du im Tab »Rechnungen«.` : S.payFilter === 'offen' && !q ? 'Alles bezahlt – nichts mehr offen.' : 'Keine Treffer.')));
+      !all.length ? leer('euro', 'Noch nichts zu kassieren', `Für ${st.year} wurde noch keine Rechnung ausgestellt. Sobald das passiert ist, hakst du hier die Zahlungen ab.`, 'Zu den Rechnungen', () => { S.tab = 'rechnungen'; render(); })
+        : S.payFilter === 'offen' && !q ? leer('fertig', 'Alles bezahlt', 'Für dieses Jahr ist nichts mehr offen. 🎉') : 'Keine Treffer.')));
   };
   draw();
 
@@ -1597,7 +1791,8 @@ function adminPaechter() {
             try { await api('DELETE', `/api/admin/paechter/${p.id}`); toast('In den Papierkorb gelegt', 'ok'); S.papierkorb = null; await reload(); } catch (e) { handleErr(e); }
           } }, 'Löschen'))));
     }
-    if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 10, class: 'empty' }, list.length ? 'Keine Treffer.' : 'Noch keine Pächter. Lege den ersten mit »Pächter anlegen« an oder importiere eine Liste.')));
+    if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 10, class: 'empty' }, list.length ? 'Keine Treffer.'
+      : leer('personen', 'Noch keine Pächter', 'Lege den ersten mit »+ Pächter anlegen« an oder übernimm alle auf einmal aus einer Excel- oder CSV-Liste.', 'Liste importieren', () => { S.adminTab = 'daten'; render(); }))));
   };
   fill();
   return h('div', null,
@@ -1768,7 +1963,8 @@ function adminSettings() {
     }
   }
   const save = async () => {
-    const data = { jahr: st.settings.jahr };
+    // alle übrigen Einstellungen (zweiter Sicherungsordner, Logo, Farbe) unverändert mitschicken, sonst würden sie geleert
+    const data = { ...st.settings, jahr: st.settings.jahr };
     for (const [key, { input, type }] of Object.entries(inputs)) {
       if (type === 'num') {
         const v = parseNum(input.value);
@@ -1781,8 +1977,45 @@ function adminSettings() {
     try { await api('PUT', '/api/admin/settings', data); toast('Einstellungen gespeichert', 'ok'); await reload(); } catch (e) { handleErr(e); }
   };
   return h('div', null,
+    aussehenKarte(st),
     h('p', { class: 'hint' }, `Diese Werte gelten für das laufende Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
     h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'))));
+}
+
+// ---- Aussehen: Vereinsfarbe und Logo (Programm und Rechnung)
+
+const FARBVORSCHLAEGE = [['#2f6f3e', 'Gartengrün'], ['#1e5aa8', 'Blau'], ['#0f6e6e', 'Petrol'], ['#8c2f39', 'Weinrot'], ['#7a4b1f', 'Erdbraun'], ['#3d4752', 'Anthrazit']];
+
+function aussehenKarte(st) {
+  const aktuell = st.settings.farbe || '#2f6f3e';
+  const speichereFarbe = async (hex) => {
+    try { await api('PUT', '/api/admin/settings', { ...st.settings, farbe: hex === '#2f6f3e' ? '' : hex }); toast('Vereinsfarbe gespeichert', 'ok'); await reload(); } catch (e) { handleErr(e); }
+  };
+  const waehler = h('input', { type: 'color', value: aktuell, title: 'Eigene Farbe wählen',
+    oninput: (e) => farbeAnwenden(e.target.value), onchange: (e) => speichereFarbe(e.target.value) });
+  const datei = h('input', { type: 'file', accept: '.png,.jpg,.jpeg', style: 'display:none', onchange: async () => {
+    if (!datei.files.length) return;
+    const fd = new FormData(); fd.append('file', datei.files[0]);
+    try { await api('POST', '/api/admin/logo', fd, true); toast('Logo gespeichert – es erscheint auf allen neuen Rechnungen', 'ok'); await reload(); } catch (e) { handleErr(e); }
+  } });
+  return h('div', { class: 'card', style: 'margin-bottom:16px' },
+    h('h3', null, 'Aussehen: Vereinsfarbe und Logo'),
+    h('p', { class: 'hint' }, 'Farbe und Logo erscheinen im Programm und auf allen neu erzeugten Rechnungen und Mahnungen. Bereits ausgestellte Rechnungen bleiben, wie sie sind. Zu helle Farben werden automatisch so abgedunkelt, dass alles gut lesbar bleibt.'),
+    h('div', { class: 'aussehen' },
+      h('div', null, h('div', { class: 'form' }, h('label', null, 'Vereinsfarbe')),
+        h('div', { class: 'farbwahl', style: 'margin-top:6px' },
+          FARBVORSCHLAEGE.map(([hex, name]) => h('button', { class: 'swatch' + (hex === aktuell ? ' an' : ''), title: name, 'aria-label': name,
+            style: `background:${hex}`, onclick: () => speichereFarbe(hex) })),
+          waehler, h('span', { class: 'hint' }, 'eigene Farbe'))),
+      h('div', null, h('div', { class: 'form' }, h('label', null, 'Vereinslogo')),
+        h('div', { class: 'toolbar', style: 'margin-top:6px' },
+          h('div', { class: 'logovorschau' }, st.settings.logo ? h('img', { src: `/api/logo?v=${encodeURIComponent(st.settings.logo)}`, alt: 'Vereinslogo' }) : h('span', { class: 'hint' }, 'kein Logo')),
+          h('div', null, datei,
+            h('button', { class: 'btn', onclick: () => datei.click() }, st.settings.logo ? 'Anderes Logo wählen' : 'Logo hochladen'), ' ',
+            st.settings.logo ? h('button', { class: 'btn danger', onclick: async () => {
+              try { await api('DELETE', '/api/admin/logo'); toast('Logo entfernt', 'ok'); await reload(); } catch (e) { handleErr(e); }
+            } }, 'Entfernen') : null,
+            h('div', { class: 'hint', style: 'margin-top:6px' }, 'PNG oder JPG, am besten mit hellem oder durchsichtigem Hintergrund.'))))));
 }
 
 // ---- Jahreswechsel
@@ -2020,7 +2253,7 @@ function adminKassenbericht(pruefMode) {
       h('td', null, pruefMode ? null : h('button', { class: 'btn small', onclick: async () => { const r = await ausgabeDialog(x); if (r !== false && r !== undefined) await refreshKasse(); } }, 'Bearbeiten'))));
   }
   if (!gezeigt.length) tbody.append(h('tr', null, h('td', { colspan: 7, class: 'empty' },
-    k.ausgaben.length ? 'Alle Ausgaben haben einen Beleg.' : 'Noch keine sonstigen Ausgaben erfasst.')));
+    k.ausgaben.length ? 'Alle Ausgaben haben einen Beleg.' : leer('kasse', 'Noch keine Ausgaben', 'Hier stehen Vereinskosten neben der Pächterabrechnung, z. B. Kontoführung oder Reparaturen – jede mit Beleg-Foto, wenn du möchtest.'))));
 
   const katTable = (k.ausgabenKategorie || []).length > 1
     ? h('div', { class: 'tablewrap', style: 'max-width:360px;margin-top:10px' }, h('table', { class: 'data' },

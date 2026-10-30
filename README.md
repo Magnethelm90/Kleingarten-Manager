@@ -57,6 +57,11 @@ Cloud-Anbindung.
 - **Übersicht:** Startseite mit Kennzahlen auf einen Blick – Kassenbestand, offene Rechnungen, unvollständige
   Pächter, Datum der letzten Sicherung; erinnert, wenn noch kein zweiter Sicherungsordner (USB-Stick) eingerichtet
   ist oder die letzte Kopie dort älter als 30 Tage ist
+- **Jahresfortschritt:** auf der Übersicht in vier Stationen (Zählerstände, Rechnungen, Zahlungen, Jahresabschluss),
+  mit Balken und einem Knopf zum nächsten Schritt
+- **Vereinsfarbe und Logo** (Admin → Preise & Einstellungen): eigene Farbe und Vereinslogo für Programm, Rechnung und
+  Mahnung; zu helle Farben werden automatisch so abgedunkelt, dass alles lesbar bleibt
+- **»Gut lesbar«** (unten neben der Schriftgröße): kräftigere Schrift, stärkere Kontraste, größere Knöpfe
 - **Beispieldaten:** solange noch nichts eingegeben ist, lässt sich ein erfundener Verein mit 12 Pächtern,
   Zählerständen und Kassenbuchungen laden, um alles gefahrlos auszuprobieren; »Beispieldaten entfernen« setzt das
   Programm danach wieder auf den Anfang zurück
@@ -109,8 +114,9 @@ Cloud-Anbindung.
   den Verein insgesamt; als Excel-Datei für die Kassenprüfung exportierbar
 - Beim Öffnen ein Hinweis, wenn noch Rechnungen offen oder überfällig sind
 - **Jahreswechsel**, Import der Mitglieder aus Excel/CSV, Excel-Export, automatische Sicherungen
-- **Lageplan:** Kachelübersicht aller Gärten mit Status-Farbcode (unvollständig/berechnet/offen/bezahlt), Klick
-  auf eine Kachel springt direkt zur Schnelleingabe dieses Pächters
+- **Lageplan:** alle Gärten mit Status-Farbcode (unvollständig/berechnet/offen/bezahlt), Klick auf einen Garten
+  springt direkt zur Schnelleingabe dieses Pächters; im Admin-Bereich lassen sich die Gärten per Maus so anordnen,
+  wie sie auf dem Gelände liegen
 - **Zahlungserinnerung (Mahnung):** bei den Zahlungen gezielt offene Rechnungen anhaken und eine Mahnung als PDF
   erzeugen (mit GiroCode); es wird nie automatisch nach einer festen Frist gemahnt, immer nur die ausgewählten
 - **Zweiter Sicherungsordner** (optional, frei wählbarer Pfad, z. B. USB-Stick oder Netzlaufwerk): Sicherungen
