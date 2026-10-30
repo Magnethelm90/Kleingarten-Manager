@@ -38,6 +38,24 @@ function svgEl(tag, attrs, ...kids) {
   return el;
 }
 
+// Kleine Strich-Symbole (24er-Raster, Farbe über currentColor), damit Übersicht und Kopf ohne Bilddateien
+// auskommen. Jedes Symbol ist eine Liste von Pfaden.
+const ICONS = {
+  blatt: ['M5 19c0-9 5-14 15-14 0 10-5 15-14 15z', 'M5 20l9-9'],
+  zaehler: ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M12 12l4-4', 'M7.5 15.5h9'],
+  rechnung: ['M7 3h7l4 4v14H7z', 'M14 3v4h4', 'M9.5 12h6', 'M9.5 16h6'],
+  euro: ['M17 6.5A6.5 6.5 0 1 0 17 17.5', 'M5 10.5h8', 'M5 13.5h8'],
+  kasse: ['M4 7h16v12H4z', 'M4 11h16', 'M8 15h3'],
+  sicherung: ['M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z', 'M9 12l2 2 4-4'],
+  personen: ['M9 11a3.5 3.5 0 1 0 0-7a3.5 3.5 0 0 0 0 7z', 'M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6', 'M16 4.5a3 3 0 0 1 0 6', 'M21 20c0-3-1.8-5.2-4.5-5.8'],
+  warnung: ['M12 4l9 16H3z', 'M12 10v4', 'M12 17.5v.5'],
+};
+function icon(name, size) {
+  return svgEl('svg', { viewBox: '0 0 24 24', width: size || 20, height: size || 20, fill: 'none', stroke: 'currentColor',
+    'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', class: 'ico' },
+  (ICONS[name] || []).map((d) => svgEl('path', { d })));
+}
+
 // Einfaches Balkendiagramm ohne externe Bibliothek (reines inline-SVG, keine
 // Fremdskripte nötig). data: [{label, value}]. valueFmt formatiert die Zahl
 // über den Balken, negative Werte werden rot dargestellt.
@@ -222,7 +240,7 @@ function render() {
 
   app.append(
     h('header', { class: 'top' },
-      h('div', { class: 'brand' }, h('b', null, 'Kleingarten-Manager'), h('span', null, st.settings.vereinName)),
+      h('div', { class: 'brand' }, h('span', { class: 'logo' }, icon('blatt', 20)), h('div', null, h('b', null, 'Kleingarten-Manager'), h('span', { title: st.settings.vereinName }, st.settings.vereinName))),
       h('nav', { class: 'tabs' }, tabBtn('uebersicht', 'Übersicht'), tabBtn('eingabe', 'Zählerstände'), tabBtn('lageplan', 'Lageplan'), tabBtn('rechnungen', 'Rechnungen'), tabBtn('zahlungen', 'Zahlungen'), tabBtn('admin', 'Admin')),
       h('div', { class: 'spacer' }),
       globalSearchBox(st),
@@ -557,18 +575,19 @@ function viewUebersicht() {
   const overdue = open.filter((e) => e.faellig && e.faellig < today);
   const unvollstaendig = st.paechter.filter((p) => !(st.results[p.id] && st.results[p.id].vollstaendig));
 
-  const card = (t, big, small, cls) => h('div', { class: 'card stat ' + (cls || '') }, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small));
+  const card = (t, big, small, cls, ic) => h('div', { class: 'card stat ' + (cls || '') }, ic ? h('div', { class: 'statico' }, icon(ic, 22)) : null,
+    h('div', null, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small)));
   const cards = [
-    card('Offene Rechnungen', String(open.length), open.length ? `${eur(open.reduce((a, e) => a + payOpen(e), 0))} · ${overdue.length} überfällig${op.vor.length ? ` · ${op.vor.length} aus Vorjahren` : ''}` : 'alles bezahlt', open.length ? 'warn' : 'ok'),
-    card('Unvollständige Pächter', String(unvollstaendig.length), `von ${st.paechter.length} in ${st.currentYear}`, unvollstaendig.length ? 'warn' : 'ok'),
+    card('Offene Rechnungen', String(open.length), open.length ? `${eur(open.reduce((a, e) => a + payOpen(e), 0))} · ${overdue.length} überfällig${op.vor.length ? ` · ${op.vor.length} aus Vorjahren` : ''}` : 'alles bezahlt', open.length ? 'warn' : 'ok', 'rechnung'),
+    card('Unvollständige Pächter', String(unvollstaendig.length), `von ${st.paechter.length} in ${st.currentYear}`, unvollstaendig.length ? 'warn' : 'ok', 'personen'),
     card('Letzte Sicherung', st.letzteSicherung ? deDate(st.letzteSicherung) : 'noch keine',
       st.sicherungFehler ? 'beschädigt!' : 'automatisch bei jeder Änderung',
-      st.sicherungFehler ? 'err' : st.letzteSicherung ? 'ok' : 'warn'),
+      st.sicherungFehler ? 'err' : st.letzteSicherung ? 'ok' : 'warn', 'sicherung'),
   ];
   if (istAdmin) {
     if (S.dashKasse === null) { if (!S.dashKasseLoading) loadDashKasse(st.currentYear); }
     else if (S.dashKasse !== false) {
-      cards.unshift(card('Kassenbestand', eur(S.dashKasse.kassenbestand), `Stand ${st.currentYear}`, S.dashKasse.kassenbestand >= 0 ? 'ok' : 'err'));
+      cards.unshift(card('Kassenbestand', eur(S.dashKasse.kassenbestand), `Stand ${st.currentYear}`, S.dashKasse.kassenbestand >= 0 ? 'ok' : 'err', 'kasse'));
     }
   }
 
@@ -579,10 +598,17 @@ function viewUebersicht() {
     jubilaeumBanner(st, istAdmin),
     st.demo ? null : zweiteSicherungBanner(st, istAdmin),
     h('div', { class: 'cards' }, cards),
-    h('div', { class: 'actions', style: 'margin-top:6px' },
-      h('button', { class: 'btn primary', onclick: () => { S.tab = 'eingabe'; render(); } }, 'Zu den Zählerständen'),
-      h('button', { class: 'btn', onclick: () => { S.tab = 'zahlungen'; render(); } }, 'Zu den Zahlungen'),
-      istAdmin ? h('button', { class: 'btn', onclick: () => { S.tab = 'admin'; S.adminTab = 'kassenbericht'; render(); } }, 'Zum Kassenbericht') : null));
+    h('h3', { class: 'sect' }, 'Schnellzugriff'),
+    h('div', { class: 'quicklinks' },
+      quicklink('zaehler', 'Zu den Zählerständen', 'Nummer eintippen, neue Stände eingeben', () => { S.tab = 'eingabe'; render(); }, true),
+      quicklink('rechnung', 'Zu den Rechnungen', 'prüfen, ausstellen, drucken oder per E-Mail', () => { S.tab = 'rechnungen'; render(); }),
+      quicklink('euro', 'Zu den Zahlungen', 'bezahlt abhaken, Mahnungen', () => { S.tab = 'zahlungen'; render(); }),
+      istAdmin ? quicklink('kasse', 'Zum Kassenbericht', 'Kassenbestand, Ausgaben, Belege', () => { S.tab = 'admin'; S.adminTab = 'kassenbericht'; render(); }) : null));
+}
+
+function quicklink(ic, titel, text, onclick, primary) {
+  return h('button', { class: 'quicklink' + (primary ? ' primary' : ''), onclick, title: text },
+    h('span', { class: 'qlico' }, icon(ic, 24)), h('span', { class: 'qltext' }, h('b', null, titel), h('span', null, text)));
 }
 
 // ------------------------------------------------------------------ Tab: Zählerstände
@@ -1348,7 +1374,8 @@ function viewZahlungen() {
     const sum = (arr, f) => arr.reduce((a, e) => a + f(e), 0);
     const claims = all.filter((e) => e.gesamt >= 0), credits = all.filter((e) => e.gesamt < 0);
     const openClaims = claims.filter(payIsOpen), overdue = openClaims.filter((e) => e.faellig && e.faellig < today);
-    const card = (t, big, small, cls) => h('div', { class: 'card stat ' + (cls || '') }, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small));
+    const card = (t, big, small, cls, ic) => h('div', { class: 'card stat ' + (cls || '') }, ic ? h('div', { class: 'statico' }, icon(ic, 22)) : null,
+    h('div', null, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small)));
     summary.replaceChildren(...[
       card('Forderungen gesamt', eur(sum(claims, payTotal)), `${claims.length} Rechnungen`),
       card('Bereits bezahlt', eur(sum(claims, payPaid)), `${claims.filter((e) => !payIsOpen(e)).length} vollständig bezahlt`, 'ok'),
@@ -1556,7 +1583,7 @@ function adminPaechter() {
       tbody.append(h('tr', null,
         h('td', null, p.mitgliedsnr), h('td', null, p.gartennr),
         h('td', { class: 'name', title: p.name }, p.name, p.notiz ? h('span', { title: p.notiz, style: 'margin-left:4px;cursor:help' }, '📝') : null),
-        h('td', null, [p.strasse, p.plzOrt].filter(Boolean).join(', ')),
+        h('td', { class: 'wrap' }, [p.strasse, p.plzOrt].filter(Boolean).join(', ')),
         h('td', null, [p.telefon, p.email].filter(Boolean).map((x, i) => [i ? h('br') : null, x])),
         h('td', { class: 'num' }, nfFlex.format(p.gartengroesse) + ' m²'),
         h('td', { class: 'num' }, p.umlageAbweichend == null ? 'Standard' : eur(p.umlageAbweichend)),
@@ -1958,7 +1985,8 @@ function adminKassenbericht(pruefMode) {
     const pctTxt = pct == null ? '' : ` (${pct > 0 ? '+' : ''}${nfFlex.format(pct)} %)`;
     return ` · ${diff > 0 ? '▲' : '▼'} ${eur(Math.abs(diff))}${pctTxt} ggü. ${S.kasseYear - 1}`;
   };
-  const card = (t, big, small, cls) => h('div', { class: 'card stat ' + (cls || '') }, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small));
+  const card = (t, big, small, cls, ic) => h('div', { class: 'card stat ' + (cls || '') }, ic ? h('div', { class: 'statico' }, icon(ic, 22)) : null,
+    h('div', null, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small)));
   const cards = h('div', { class: 'cards' },
     card('Kassenbestand', eur(k.kassenbestand), `Anfangsbestand ${eur(k.anfangsbestand)} + Zahlungen − Ausgaben${vorjahr ? vjDelta(k.kassenbestand, vorjahr.kassenbestand) : ''}`, k.kassenbestand >= 0 ? 'ok' : 'err'),
     card('Von Pächtern eingegangen', `${eur(k.einnahmenBezahlt)}`, `tatsächlich gezahlt, nach heutigem Stand${vorjahr ? vjDelta(k.einnahmenBezahlt, vorjahr.einnahmenBezahlt) : ''}`, 'ok'),
@@ -2139,7 +2167,7 @@ function adminData() {
   wrap.append(
     h('div', { class: 'card', style: 'margin-bottom:16px' },
       h('h3', { style: 'margin-top:0' }, 'Pächter aus Excel oder CSV importieren'),
-      h('p', { class: 'hint' }, 'Die Datei braucht eine Kopfzeile mit mindestens »Mitgliedsnr.« und »Name«. Weitere Spalten werden automatisch erkannt: Gartennr., Anrede, Straße, PLZ Ort, Versandart, E-Mail, Telefon, Gartengröße, Umlage abweichend, Wasserzähler-Nr., Stromzähler-Nr., Wasser/Energie Stand Vorjahr und aktuell, Arbeitsstunden, Versicherung, Grundsteuer, Auslagen, Hinweis, Abschlag. Eine passend aufgebaute Excel-Vorlage (Blatt »Mitglieder«) funktioniert direkt.'),
+      h('p', { class: 'hint' }, 'Die Datei braucht eine Kopfzeile mit mindestens »Mitgliedsnr.« und »Name«. Weitere Spalten werden automatisch erkannt: Gartennr., Anrede, Straße, PLZ Ort, Versandart, E-Mail, Telefon, Gartengröße, Umlage abweichend, Wasserzähler-Nr., Stromzähler-Nr., Wasser/Energie Stand Vorjahr und aktuell, Arbeitsstunden, Versicherung, Grundsteuer, Auslagen, Hinweis, Abschlag. Eine passend aufgebaute Excel-Vorlage (Blatt »Mitglieder«) funktioniert direkt. Bei bekannten Mitgliedsnummern werden die Angaben aktualisiert; leere Zellen lassen die gespeicherten Werte unverändert.'),
       file, previewBox),
     h('div', { class: 'card', style: 'margin-bottom:16px' },
       h('h3', { style: 'margin-top:0' }, 'Export'),

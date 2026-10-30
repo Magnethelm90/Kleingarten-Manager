@@ -1214,43 +1214,31 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 		if idx >= 0 {
 			old := a.st.d.Paechter[idx]
 			p.ID = old.ID
-			// Felder, die in der Datei fehlten, bleiben unverändert
+			// Felder, die in der Datei fehlten oder deren Zelle leer war, bleiben unverändert: eine Liste
+			// mit Lücken (z. B. E-Mail nur bei einigen Pächtern) darf vorhandene Angaben nicht löschen
 			has := map[string]bool{}
 			for _, f := range row.Felder {
 				has[f] = true
 			}
-			if !has["Gartennr."] {
-				p.Gartennr = old.Gartennr
+			behalte := func(feld string, neu *string, alt string) {
+				if !has[feld] || *neu == "" {
+					*neu = alt
+				}
 			}
-			if !has["Anrede"] {
-				p.Anrede = old.Anrede
-			}
-			if !has["Straße"] {
-				p.Strasse = old.Strasse
-			}
-			if !has["PLZ Ort"] {
-				p.PLZOrt = old.PLZOrt
-			}
-			if !has["Versandart"] {
-				p.Versand = old.Versand
-			}
-			if !has["Gartengröße"] {
+			behalte("Gartennr.", &p.Gartennr, old.Gartennr)
+			behalte("Anrede", &p.Anrede, old.Anrede)
+			behalte("Straße", &p.Strasse, old.Strasse)
+			behalte("PLZ Ort", &p.PLZOrt, old.PLZOrt)
+			behalte("Versandart", &p.Versand, old.Versand)
+			behalte("Wasserzähler-Nr.", &p.WasserzaehlerNr, old.WasserzaehlerNr)
+			behalte("Stromzähler-Nr.", &p.StromzaehlerNr, old.StromzaehlerNr)
+			behalte("E-Mail", &p.Email, old.Email)
+			behalte("Telefon", &p.Telefon, old.Telefon)
+			if !has["Gartengröße"] || p.Gartengroesse <= 0 {
 				p.Gartengroesse = old.Gartengroesse
 			}
 			if !has["Umlage abweichend"] && !has["Umlage"] {
 				p.UmlageAbweichend = old.UmlageAbweichend
-			}
-			if !has["Wasserzähler-Nr."] {
-				p.WasserzaehlerNr = old.WasserzaehlerNr
-			}
-			if !has["Stromzähler-Nr."] {
-				p.StromzaehlerNr = old.StromzaehlerNr
-			}
-			if !has["E-Mail"] {
-				p.Email = old.Email
-			}
-			if !has["Telefon"] {
-				p.Telefon = old.Telefon
 			}
 			p.Notiz = old.Notiz // gibt es in keiner Importdatei, darf beim Aktualisieren nicht verloren gehen
 			a.st.d.Paechter[idx] = p
@@ -1258,6 +1246,9 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 			updated++
 		} else {
 			p.ID = newID()
+			if p.Versand == "" {
+				p.Versand = "Emailsendung" // wie beim Anlegen im Formular
+			}
 			a.st.d.Paechter = append(a.st.d.Paechter, p)
 			a.st.gartenOeffnen(p.ID, p.Gartennr, p.Mitgliedsnr, p.Name)
 			added++

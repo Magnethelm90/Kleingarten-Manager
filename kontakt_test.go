@@ -88,4 +88,33 @@ func TestImportBehaeltNotizUndFuehrtGartenhistorie(t *testing.T) {
 	if len(bernd) != 1 || bernd[0].Name != "Bernd" {
 		t.Errorf("neu importierter Pächter fehlt in der Gartenhistorie: %+v", bernd)
 	}
+	// ohne Spalte Versandart gilt für neue Pächter dieselbe Vorgabe wie im Formular
+	for _, q := range st.Paechter {
+		if q.Name == "Bernd" && q.Versand != "Emailsendung" {
+			t.Errorf("Versandart neu importierter Pächter: %q", q.Versand)
+		}
+	}
+}
+
+// Leere Zellen in der Importdatei dürfen vorhandene Angaben nicht löschen (z. B. eine Liste, in der nur
+// bei manchen Pächtern eine E-Mail-Adresse oder Gartengröße steht).
+func TestImportLeereZellenLoeschenNichts(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Anna", "gartennr": "5", "gartengroesse": 300,
+		"email": "anna@example.org", "telefon": "0123", "strasse": "Weg 1", "wasserzaehlerNr": "W1"})
+	table := [][]string{
+		{"Mitgliedsnr.", "Name", "Gartennr.", "Gartengröße", "E-Mail", "Telefon", "Straße", "Wasserzähler-Nr."},
+		{"1", "Anna", "", "", "", "", "", ""},
+	}
+	rows, _, err := parseImport(table, false, defaultSettings(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := do(h, "POST", "/api/admin/import/apply", map[string]any{"rows": rows}); rec.Code != 200 {
+		t.Fatalf("Import: %d %s", rec.Code, rec.Body.String())
+	}
+	p := decode[stateResp](t, do(h, "GET", "/api/state", nil)).Paechter[0]
+	if p.Email != "anna@example.org" || p.Telefon != "0123" || p.Gartennr != "5" || p.Gartengroesse != 300 || p.Strasse != "Weg 1" || p.WasserzaehlerNr != "W1" {
+		t.Errorf("leere Zellen haben Angaben gelöscht: %+v", p)
+	}
 }
