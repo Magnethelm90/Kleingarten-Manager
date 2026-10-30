@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -119,5 +120,47 @@ func TestVereinslogo(t *testing.T) {
 	again := do(h, "GET", "/api/archive/"+inv.ID+".pdf", nil).Body.Bytes()
 	if strings.Count(string(again), "/Subtype /Image") < 1 {
 		t.Error("ausgestellte Rechnung hat ihr Logo verloren")
+	}
+}
+
+// Belegpfade stammen aus der Datendatei und dürfen nie aus dem Ordner »Belege« hinausführen; ein
+// manipulierter Eintrag darf weder fremde Dateien ausliefern noch löschen.
+func TestBelegPfadeAusDerDatendateiWerdenGeprueft(t *testing.T) {
+	app, h := newTestApp(t)
+	geheim := filepath.Join(t.TempDir(), "geheim.pdf")
+	if err := os.WriteFile(geheim, []byte("%PDF-geheim"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rel, err := filepath.Rel(app.st.dir, geheim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "X", Betrag: 5}))
+	app.st.mu.Lock()
+	j := app.st.d.Jahre["2025"]
+	j.Ausgaben[0].Belege = []string{filepath.ToSlash(rel), "Belege/../" + filepath.ToSlash(rel), "Belege/2025/x.html"}
+	app.st.mu.Unlock()
+	for i := 0; i < 3; i++ {
+		rec := do(h, "GET", fmt.Sprintf("/api/admin/beleg/%s?year=2025&idx=%d", a1.ID, i), nil)
+		if rec.Code == 200 || strings.Contains(rec.Body.String(), "geheim") {
+			t.Errorf("Pfad %d: fremde Datei ausgeliefert (%d)", i, rec.Code)
+		}
+	}
+	do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"?year=2025", nil)
+	if _, err := os.Stat(geheim); err != nil {
+		t.Errorf("fremde Datei wurde gelöscht: %v", err)
+	}
+	// umbenannte Datei mit falschem Inhalt wird abgelehnt
+	a2 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Y", Betrag: 5}))
+	if rec := doMultipart(h, "/api/admin/ausgaben/"+a2.ID+"/beleg?year=2025", "quittung.pdf", []byte("<html><script>alert(1)</script>")); rec.Code != 400 {
+		t.Errorf("HTML als PDF getarnt: %d", rec.Code)
+	}
+}
+
+func TestICSEscapeKeineEingeschleustenFelder(t *testing.T) {
+	for _, s := range []string{"Max\rATTACH:http://x", "Max\r\nEND:VEVENT", "Max\nX", "a\x00b\x1bc"} {
+		if e := icsEscape(s); strings.ContainsAny(e, "\r\n\x00\x1b") {
+			t.Errorf("%q → %q enthält Steuerzeichen", s, e)
+		}
 	}
 }

@@ -977,7 +977,7 @@ func TestBelegAnhang(t *testing.T) {
 	}
 
 	// zweiten Beleg zur selben Ausgabe hochladen (z. B. Vorder- und Rückseite)
-	rec = doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung-rueckseite.jpg", []byte("bildrueckseite"), cookie)
+	rec = doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung-rueckseite.jpg", jpegKopf("bildrueckseite"), cookie)
 	if rec.Code != 200 {
 		t.Fatalf("zweiten Beleg hochladen: %d %s", rec.Code, rec.Body.String())
 	}
@@ -990,7 +990,7 @@ func TestBelegAnhang(t *testing.T) {
 	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025&idx=0", nil, cookie); rec.Code != 200 || rec.Body.String() != "%PDF-1.4 Inhalt" {
 		t.Fatalf("ersten Beleg abrufen: %d %q", rec.Code, rec.Body.String())
 	}
-	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025&idx=1", nil, cookie); rec.Code != 200 || rec.Body.String() != "bildrueckseite" {
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025&idx=1", nil, cookie); rec.Code != 200 || rec.Body.String() != string(jpegKopf("bildrueckseite")) {
 		t.Fatalf("zweiten Beleg abrufen: %d %q", rec.Code, rec.Body.String())
 	}
 	// Index ohne Angabe = 0 (Rückwärtskompatibilität fürs Verlinken)
@@ -1016,7 +1016,7 @@ func TestBelegAnhang(t *testing.T) {
 	if len(k.Ausgaben[0].Belege) != 1 || k.Ausgaben[0].Belege[0] != zweiterPfad {
 		t.Fatalf("nach Löschen von Index 0 sollte nur der zweite Beleg übrig sein: %+v", k.Ausgaben[0])
 	}
-	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025&idx=0", nil, cookie); rec.Code != 200 || rec.Body.String() != "bildrueckseite" {
+	if rec := do(h, "GET", "/api/admin/beleg/"+a1.ID+"?year=2025&idx=0", nil, cookie); rec.Code != 200 || rec.Body.String() != string(jpegKopf("bildrueckseite")) {
 		t.Fatalf("verbleibender Beleg sollte jetzt auf Index 0 stehen: %d %q", rec.Code, rec.Body.String())
 	}
 	// ungültiger Index
@@ -1035,7 +1035,7 @@ func TestBelegAnhang(t *testing.T) {
 	}
 
 	// Ausgabe löschen: verbleibende Belege werden mit entfernt
-	rec2 := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung2.jpg", []byte("bild"), cookie)
+	rec2 := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "quittung2.jpg", jpegKopf("bild"), cookie)
 	updated2 := decode[Ausgabe](t, rec2)
 	do(h, "DELETE", "/api/admin/ausgaben/"+a1.ID+"?year=2025", nil, cookie)
 	if _, err := os.Stat(filepath.Join(app.st.dir, updated2.Belege[0])); err == nil {
@@ -1049,12 +1049,12 @@ func TestBelegeMaxAnzahl(t *testing.T) {
 	cookie := do(h, "POST", "/api/admin/login", map[string]any{"password": "geheim123"}).Result().Cookies()[0]
 	a1 := decode[Ausgabe](t, do(h, "POST", "/api/admin/ausgaben?year=2025", Ausgabe{Datum: "2025-03-01", Beschreibung: "Viele Belege", Betrag: 50}, cookie))
 	for i := 0; i < 10; i++ {
-		rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "beleg.jpg", []byte("x"), cookie)
+		rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "beleg.jpg", jpegKopf("x"), cookie)
 		if rec.Code != 200 {
 			t.Fatalf("Beleg %d: %d %s", i, rec.Code, rec.Body)
 		}
 	}
-	if rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "beleg.jpg", []byte("x"), cookie); rec.Code != http.StatusBadRequest {
+	if rec := doMultipart(h, "/api/admin/ausgaben/"+a1.ID+"/beleg?year=2025", "beleg.jpg", jpegKopf("x"), cookie); rec.Code != http.StatusBadRequest {
 		t.Fatalf("11. Beleg sollte abgelehnt werden: %d", rec.Code)
 	}
 }
@@ -1813,3 +1813,6 @@ func TestIBANPruefung(t *testing.T) {
 		t.Errorf("gültige IBAN abgelehnt: %v", err)
 	}
 }
+
+// jpegKopf liefert Testdaten, die wie eine JPEG-Datei beginnen (Belege werden am Dateianfang geprüft).
+func jpegKopf(rest string) []byte { return append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, rest...) }

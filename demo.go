@@ -129,7 +129,7 @@ func (s *Store) entferneBeispieldaten() {
 	for _, j := range s.d.Jahre {
 		for _, a := range j.Ausgaben {
 			for _, b := range a.Belege {
-				s.entferneDatei("Belege", b)
+				s.entferneBeleg(b)
 			}
 		}
 	}

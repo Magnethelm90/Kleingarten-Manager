@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -280,7 +283,7 @@ func (a *App) handleAusgabeDelete(w http.ResponseWriter, r *http.Request) {
 	for i := range j.Ausgaben {
 		if j.Ausgaben[i].ID == id {
 			for _, p := range j.Ausgaben[i].Belege {
-				_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(p)))
+				a.st.entferneBeleg(p)
 			}
 			j.Ausgaben = append(j.Ausgaben[:i], j.Ausgaben[i+1:]...)
 			if err := a.st.saveLocked(); err != nil {
@@ -343,6 +346,50 @@ const maxBelegSize = 12 << 20 // 12 MB
 // Plausibilitätsgrenze gegen versehentliches Massen-Hochladen.
 const maxBelegeJeAusgabe = 10
 
+// belegDatei wandelt den gespeicherten relativen Pfad eines Belegs in einen absoluten um und stellt sicher,
+// dass er im Ordner »Belege« liegt und einen erlaubten Dateityp hat. Der Pfad stammt aus der Datendatei
+// (oder einer eingespielten Sicherung) und gilt deshalb nicht als vertrauenswürdig: ohne diese Prüfung
+// ließen sich über einen manipulierten Eintrag wie »../../…« beliebige Dateien lesen oder löschen.
+func (s *Store) belegDatei(rel string) (string, error) {
+	rel = filepath.ToSlash(rel)
+	if !strings.HasPrefix(rel, "Belege/") || strings.Contains(rel, "..") || !belegExtensions[strings.ToLower(path.Ext(rel))] {
+		return "", errors.New("ungültiger Belegpfad")
+	}
+	base := filepath.Join(s.dir, "Belege") + string(filepath.Separator)
+	full := filepath.Join(s.dir, filepath.FromSlash(rel))
+	if !strings.HasPrefix(full, base) {
+		return "", errors.New("ungültiger Belegpfad")
+	}
+	return full, nil
+}
+
+// entferneBeleg löscht eine Belegdatei, aber nur eine gewöhnliche Datei an einem gültigen Ort.
+func (s *Store) entferneBeleg(rel string) {
+	full, err := s.belegDatei(rel)
+	if err != nil {
+		return
+	}
+	if fi, err := os.Lstat(full); err == nil && fi.Mode().IsRegular() {
+		_ = os.Remove(full)
+	}
+}
+
+// belegInhaltPasst prüft anhand der ersten Bytes, ob der Inhalt zur Dateiendung passt (z. B. kein
+// umbenanntes Programm oder HTML als ».pdf«).
+func belegInhaltPasst(ext string, data []byte) bool {
+	switch ext {
+	case ".pdf":
+		return bytes.HasPrefix(data, []byte("%PDF-"))
+	case ".jpg", ".jpeg":
+		return bytes.HasPrefix(data, []byte{0xFF, 0xD8, 0xFF})
+	case ".png":
+		return bytes.HasPrefix(data, []byte("\x89PNG\r\n\x1a\n"))
+	case ".webp":
+		return len(data) >= 12 && bytes.Equal(data[:4], []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP"))
+	}
+	return false
+}
+
 // handleBelegUpload speichert einen Beleg (Foto oder PDF) zu einer Ausgabe.
 func (a *App) handleBelegUpload(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -366,6 +413,10 @@ func (a *App) handleBelegUpload(w http.ResponseWriter, r *http.Request) {
 	data, err := io.ReadAll(file)
 	if err != nil {
 		writeErr(w, bad("Datei konnte nicht gelesen werden"))
+		return
+	}
+	if !belegInhaltPasst(ext, data) {
+		writeErr(w, bad("Der Inhalt der Datei passt nicht zur Dateiendung. Bitte ein echtes Foto oder eine PDF-Datei wählen"))
 		return
 	}
 
@@ -431,7 +482,7 @@ func (a *App) handleBelegDelete(w http.ResponseWriter, r *http.Request) {
 				writeErr(w, notFound("Dieser Beleg existiert nicht"))
 				return
 			}
-			_ = os.Remove(filepath.Join(a.st.dir, filepath.FromSlash(j.Ausgaben[i].Belege[idxParam])))
+			a.st.entferneBeleg(j.Ausgaben[i].Belege[idxParam])
 			j.Ausgaben[i].Belege = append(j.Ausgaben[i].Belege[:idxParam], j.Ausgaben[i].Belege[idxParam+1:]...)
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
@@ -454,24 +505,39 @@ func (a *App) handleBelegServe(w http.ResponseWriter, r *http.Request) {
 		idxParam = 0
 	}
 	a.st.mu.Lock()
-	var path string
+	var rel string
 	j := a.st.d.Jahre[yearKey(year)]
 	if j != nil {
 		for _, x := range j.Ausgaben {
 			if x.ID == id && idxParam >= 0 && idxParam < len(x.Belege) {
-				path = x.Belege[idxParam]
+				rel = x.Belege[idxParam]
 			}
 		}
 	}
-	dir := a.st.dir
 	a.st.mu.Unlock()
-	if path == "" {
+	if rel == "" {
 		writeErr(w, notFound("Für diese Ausgabe ist kein Beleg hinterlegt"))
 		return
 	}
-	full := filepath.Join(dir, filepath.FromSlash(path))
+	full, err := a.st.belegDatei(rel)
+	if err != nil {
+		writeErr(w, bad("Der gespeicherte Belegpfad ist ungültig"))
+		return
+	}
+	// nur gewöhnliche Dateien, keine Verweise (Symlinks) oder Ordner
+	fi, err := os.Lstat(full)
+	if err != nil || !fi.Mode().IsRegular() {
+		writeErr(w, notFound("Die Belegdatei fehlt"))
+		return
+	}
+	f, err := os.Open(full)
+	if err != nil {
+		writeErr(w, notFound("Die Belegdatei fehlt"))
+		return
+	}
+	defer f.Close()
 	w.Header().Set("Cache-Control", "no-store")
-	http.ServeFile(w, r, full)
+	http.ServeContent(w, r, path.Base(full), fi.ModTime(), f)
 }
 
 // ---------------------------------------------------------------- Kassenbericht

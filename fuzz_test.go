@@ -3,7 +3,10 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"image"
+	"image/png"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -82,4 +85,34 @@ func TestReadXLSXGrosseDateiOhneAbsturz(t *testing.T) {
 	}
 	zw.Close()
 	_, _ = readXLSX(buf.Bytes(), "")
+}
+
+// Eine als gültig akzeptierte E-Mail-Adresse darf im mailto-Link nichts einschleusen können
+// (keine Leerzeichen, Anführungszeichen, ? & # % oder Steuerzeichen), und Betreff/Text werden immer kodiert.
+func FuzzEmailUndMailto(f *testing.F) {
+	f.Add("anna@example.org", "Betreff & Text?\nZeile")
+	f.Add("a@b.c\"&cc=x@y.de", "%0A")
+	f.Fuzz(func(t *testing.T, email, text string) {
+		if emailGueltig(email) && strings.ContainsAny(email, " \t\r\n\"'<>?&#%\\") {
+			t.Fatalf("gefährliche Adresse akzeptiert: %q", email)
+		}
+		if enc := mailtoEscape(text); strings.ContainsAny(enc, " \r\n&?#\"") {
+			t.Fatalf("unkodierte Zeichen im mailto-Text: %q", enc)
+		}
+	})
+}
+
+// Hochgeladene Logos kommen von außen: kein Absturz, und was angenommen wird, ist ein echtes PNG.
+func FuzzPruefeLogo(f *testing.F) {
+	var b bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 20, 20))
+	_ = png.Encode(&b, img)
+	f.Add(b.Bytes())
+	f.Add([]byte("\xff\xd8\xff\xe0kaputt"))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		out, err := pruefeLogo(data)
+		if err == nil && !bytes.HasPrefix(out, []byte("\x89PNG")) {
+			t.Fatal("angenommenes Logo ist kein PNG")
+		}
+	})
 }

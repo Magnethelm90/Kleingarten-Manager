@@ -1,6 +1,8 @@
 module kleingarten-manager
 
-go 1.24
+go 1.26
+
+toolchain go1.26.10
 
 require github.com/go-pdf/fpdf v0.9.0
 

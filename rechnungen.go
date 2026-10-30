@@ -556,6 +556,15 @@ func (a *App) handleMahnung(w http.ResponseWriter, r *http.Request) {
 // icsEscape maskiert Sonderzeichen nach RFC 5545 (Komma, Semikolon, Backslash,
 // Zeilenumbruch) für Text-Felder in einer .ics-Datei.
 func icsEscape(s string) string {
+	// Zeilenumbrüche in jeder Form (auch ein einzelnes CR) maskieren und übrige Steuerzeichen entfernen,
+	// damit ein Name aus den Daten keine eigenen Kalender-Einträge oder Felder einschleusen kann
+	s = strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(s)
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 && r != '\n' || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
 	r := strings.NewReplacer("\\", "\\\\", ";", "\\;", ",", "\\,", "\n", "\\n")
 	return r.Replace(s)
 }

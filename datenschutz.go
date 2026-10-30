@@ -78,7 +78,7 @@ func anonymisiere(p *Paechter, text string) {
 }
 
 // entfernePerson löscht einen Pächter aus dem Datenbestand und entfernt seine Spuren, soweit
-// keine Aufbewahrungspflicht besteht: Stammdatensatz, offene Zählerstände, Notizen, Namen in
+// keine Aufbewahrungspflicht besteht: Stammdatensatz, offene Zählerstände, Notizen, E-Mail und Telefon, Namen in
 // Garten-Historie und Änderungsprotokoll. Rechnungen samt Jahreskopien bleiben bis zum Ende
 // der Aufbewahrungsfrist erhalten (siehe bereinigeAbgelaufene). Wirkt auf d, auch für Sicherungen.
 func (d *Data) entfernePerson(id string) bool {
@@ -111,14 +111,15 @@ func (d *Data) entfernePerson(id string) bool {
 			}
 		}
 		for i := range j.Paechter {
-			if j.Paechter[i].ID == id && j.Paechter[i].Notiz != "" {
-				j.Paechter[i].Notiz, changed = "", true
+			// Notiz und Kontaktdaten stehen nicht auf der Rechnung und unterliegen keiner Aufbewahrungspflicht
+			if q := &j.Paechter[i]; q.ID == id && (q.Notiz != "" || q.Email != "" || q.Telefon != "") {
+				q.Notiz, q.Email, q.Telefon, changed = "", "", "", true
 			}
 		}
 	}
 	for _, r := range d.Rechnungen {
-		if r.PaechterID == id && (r.Notiz != "" || r.Paechter.Notiz != "") {
-			r.Notiz, r.Paechter.Notiz, changed = "", "", true
+		if r.PaechterID == id && (r.Notiz != "" || r.Paechter.Notiz != "" || r.Paechter.Email != "" || r.Paechter.Telefon != "") {
+			r.Notiz, r.Paechter.Notiz, r.Paechter.Email, r.Paechter.Telefon, changed = "", "", "", "", true
 		}
 	}
 	if name != "" && d.schwaerzeProtokoll(nr, name) {
