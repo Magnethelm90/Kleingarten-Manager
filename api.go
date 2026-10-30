@@ -548,6 +548,8 @@ type stateResp struct {
 	OffeneVorjahre []archiveEntry `json:"offeneVorjahre"`
 	// Termine: Jahresplaner des Vereins (für alle sichtbar, enthält keine Personendaten).
 	Termine []Termin `json:"termine"`
+	// WartelisteAnzahl: wie viele Interessenten warten (nur die Zahl, ohne Namen).
+	WartelisteAnzahl int `json:"wartelisteAnzahl"`
 }
 
 func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
@@ -594,6 +596,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	}
 	res.OffeneVorjahre = a.st.offeneAndererJahreLocked(year)
 	res.Termine = append([]Termin{}, a.st.d.Termine...)
+	res.WartelisteAnzahl = len(a.st.d.Warteliste)
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
 	a.st.mu.Unlock()
@@ -1695,6 +1698,11 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("PUT /api/admin/termine/{id}", a.admin(a.handleTerminUpdate))
 	mux.HandleFunc("DELETE /api/admin/termine/{id}", a.admin(a.handleTerminDelete))
 	mux.HandleFunc("POST /api/admin/termine-uebernehmen", a.admin(a.handleTermineUebernehmen))
+	mux.HandleFunc("GET /api/admin/jahresbericht", a.adminOrPruef(a.handleJahresbericht))
+	mux.HandleFunc("POST /api/admin/jahresbericht/oeffnen", a.adminOrPruef(a.handleJahresberichtOeffnen))
+	mux.HandleFunc("POST /api/admin/warteliste/{id}/vergeben", a.admin(a.handleGartenVergeben))
+	mux.HandleFunc("GET /api/lageplan-druck", a.handleLageplanDruck)
+	mux.HandleFunc("POST /api/lageplan-druck/oeffnen", a.handleLageplanDruckOeffnen)
 	mux.HandleFunc("GET /api/termine.ics", a.handleTermineICS)
 	mux.HandleFunc("GET /api/termine-druck", a.handleJahresplan)
 	mux.HandleFunc("POST /api/termine-druck/oeffnen", a.handleJahresplanOeffnen)

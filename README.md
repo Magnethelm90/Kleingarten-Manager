@@ -128,7 +128,13 @@ Cloud-Anbindung.
 - **Jahreswechsel**, Import der Mitglieder aus Excel/CSV, Excel-Export, automatische Sicherungen
 - **Lageplan:** alle Gärten mit Status-Farbcode (unvollständig/berechnet/offen/bezahlt), Klick auf einen Garten
   springt direkt zur Schnelleingabe dieses Pächters; im Admin-Bereich lassen sich die Gärten per Maus so anordnen,
-  wie sie auf dem Gelände liegen
+  wie sie auf dem Gelände liegen. Gärten ohne Pächter erscheinen gestrichelt als **frei**, mit Hinweis auf die
+  Warteliste; ein Klick vergibt den Garten direkt an jemanden von der Warteliste. **Drucken** liefert den Lageplan als
+  Aushang (ohne Namen und ohne Abrechnungsstand) oder für den Vorstand mit Namen
+- **Jahresbericht** (Admin → Kassenbericht oder Jahreswechsel): ein PDF für die Mitgliederversammlung mit Kennzahlen
+  und Vorjahresvergleich (Gärten, Wasser, Strom, Gemeinschaftsarbeit, Rechnungssumme, Zahlungseingang), Kasse,
+  Ausgaben nach Art, Kassenbestand im Verlauf als Diagramm, Vereinsleben (Gartenübergaben, Warteliste, Pflichtstunden)
+  und den nächsten Terminen – ohne Namen, kann also ausgelegt oder an die Wand geworfen werden
 - **Zahlungserinnerung (Mahnung):** bei den Zahlungen gezielt offene Rechnungen anhaken und eine Mahnung als PDF
   erzeugen (mit GiroCode); es wird nie automatisch nach einer festen Frist gemahnt, immer nur die ausgewählten
 - **Zweiter Sicherungsordner** (optional, frei wählbarer Pfad, z. B. USB-Stick oder Netzlaufwerk): Sicherungen

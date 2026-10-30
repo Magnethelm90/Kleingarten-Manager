@@ -52,6 +52,7 @@ const ICONS = {
   fertig: ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M8 12.5l2.7 2.7L16 9.8'],
   karte: ['M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z', 'M9 4v14', 'M15 6v14'],
   kalender: ['M4 6h16v14H4z', 'M4 10h16', 'M8 3v5', 'M16 3v5', 'M8 14h3'],
+  drucker: ['M7 9V3h10v6', 'M5 9h14a2 2 0 0 1 2 2v6h-4', 'M7 17H3v-6a2 2 0 0 1 2-2', 'M7 14h10v7H7z'],
 };
 
 // Leerer Zustand: Symbol, kurze Überschrift, Erklärung und – wo sinnvoll – der Knopf zum nächsten Schritt.
@@ -1152,7 +1153,7 @@ function viewLageplan() {
     return 'bezahlt';
   };
   const labels = { unvollstaendig: 'Angaben fehlen', berechnet: 'berechnet, noch nicht ausgestellt', offen: 'Rechnung offen', bezahlt: 'bezahlt / kein offener Betrag' };
-  const counts = { unvollstaendig: 0, berechnet: 0, offen: 0, bezahlt: 0 };
+  const counts = { unvollstaendig: 0, berechnet: 0, offen: 0, bezahlt: 0, frei: 0 };
   const status = new Map(list.map((p) => { const x = statusOf(p); counts[x]++; return [p.id, x]; }));
   const edit = !!S.lageEntwurf && istAdmin && !st.readOnly;
   const kachel = (p, extra) => h('div', { class: 'kachel kachel-' + status.get(p.id) + (edit ? ' ziehbar' : ''), title: `${p.name}${p.notiz ? ' · 📝 ' + p.notiz : ''} – ${labels[status.get(p.id)]}`,
@@ -1160,6 +1161,14 @@ function viewLageplan() {
     p.gartennr && !edit ? h('button', { class: 'kachel-hist', title: `Verlauf von Garten ${p.gartennr}`,
       onclick: (e) => { e.stopPropagation(); gartenHistorieDialog(p.gartennr); } }, '🕘') : null,
     h('div', { class: 'kachel-nr' }, p.gartennr || p.mitgliedsnr), h('div', { class: 'kachel-name' }, p.name));
+  const vergeben = istAdmin && !st.readOnly && !edit;
+  // freier Garten: steht auf der Karte, hat aber keinen aktiven Pächter (z. B. nach einer Kündigung)
+  const kachelFrei = (nr) => h('div', { class: 'kachel kachel-frei' + (edit ? ' ziehbar' : ''),
+    title: vergeben ? `Garten ${nr} ist frei – klicken, um ihn an jemanden von der Warteliste zu vergeben` : `Garten ${nr} ist frei`,
+    onclick: vergeben ? () => freienGartenVergeben(nr) : null },
+  edit ? h('button', { class: 'kachel-hist', title: 'Garten von der Karte nehmen', onpointerdown: (e) => e.stopPropagation(),
+    onclick: (e) => { e.stopPropagation(); delete S.lageEntwurf[nr]; render(); } }, '✕') : null,
+  h('div', { class: 'kachel-nr' }, nr), h('div', { class: 'kachel-name' }, 'frei'));
   const legend = (cls, label) => h('span', { class: 'hint', style: 'margin-right:14px' },
     h('span', { class: 'kachel-dot kachel-' + cls }), ` ${label} (${counts[cls]})`);
 
@@ -1168,6 +1177,9 @@ function viewLageplan() {
   const hatKarte = Object.keys(gespeichert).length > 0;
   const mitNr = list.filter((p) => (p.gartennr || '').trim());
   const ohneNr = list.filter((p) => !(p.gartennr || '').trim());
+  const belegt = new Set(mitNr.map((p) => p.gartennr.trim()));
+  const freie = Object.keys(pos).filter((nr) => !belegt.has(nr)).sort((a, b) => a.localeCompare(b, 'de', { numeric: true }));
+  counts.frei = freie.length;
 
   let kartenAnsicht;
   if (!hatKarte && !edit) {
@@ -1176,11 +1188,17 @@ function viewLageplan() {
     const platziert = mitNr.filter((p) => pos[p.gartennr.trim()]);
     const offen = mitNr.filter((p) => !pos[p.gartennr.trim()]);
     let maxX = 0, maxY = 0;
-    for (const p of platziert) { const q = pos[p.gartennr.trim()]; maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y); }
+    for (const q of Object.values(pos)) { maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y); }
     const flaeche = h('div', { class: 'lagekarte' + (edit ? ' bearbeiten' : ''), style: `width:${maxX + LP_W + 40}px;height:${maxY + LP_H + (edit ? 160 : 30)}px` });
     for (const p of platziert) {
       const nr = p.gartennr.trim();
       const el = kachel(p, { style: `left:${pos[nr].x}px;top:${pos[nr].y}px` });
+      if (edit) ziehbarMachen(el, nr, flaeche);
+      flaeche.append(el);
+    }
+    for (const nr of freie) {
+      const el = kachelFrei(nr);
+      el.style.left = pos[nr].x + 'px'; el.style.top = pos[nr].y + 'px';
       if (edit) ziehbarMachen(el, nr, flaeche);
       flaeche.append(el);
     }
@@ -1201,6 +1219,7 @@ function viewLageplan() {
       ? h('div', { class: 'banner info lage-leiste' },
         h('span', null, '✋ Ziehe die Gärten mit der Maus an ihren Platz auf dem Gelände. Gespeichert wird erst mit »Anordnung speichern«.'),
         h('div', { class: 'spacer' }),
+        h('button', { class: 'btn small', title: 'Einen Garten ohne Pächter auf die Karte setzen, z. B. nach einer Kündigung', onclick: freienGartenHinzufuegen }, '+ Freier Garten'), ' ',
         h('button', { class: 'btn small', onclick: () => { S.lageEntwurf = null; render(); } }, 'Abbrechen'), ' ',
         hatKarte ? h('button', { class: 'btn small danger', onclick: async () => {
           if (!(await confirmBox('Die Anordnung löschen und die Gärten wieder als Raster nach Nummer zeigen?', 'Zurück zum Raster', true))) return;
@@ -1213,13 +1232,90 @@ function viewLageplan() {
         h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, icon('karte', 18), hatKarte ? 'Karte bearbeiten' : 'Gärten wie auf dem Gelände anordnen'));
   }
 
+  const druck = list.length && !edit ? h('button', { class: 'btn', title: 'Lageplan als Aushang zum Ausdrucken (ohne Abrechnungsstand)', onclick: () => lageplanDrucken(istAdmin) },
+    h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, icon('drucker', 18), 'Drucken')) : null;
+  const wartende = st.wartelisteAnzahl || 0;
   return h('div', null,
-    h('div', { class: 'toolbar' }, h('h2', { style: 'margin:0' }, `Lageplan ${st.year}`), h('div', { class: 'spacer' }), edit ? null : leiste),
+    h('div', { class: 'toolbar' }, h('h2', { style: 'margin:0' }, `Lageplan ${st.year}`), h('div', { class: 'spacer' }), druck, edit ? null : leiste),
+    freie.length && !edit ? h('div', { class: 'banner info' },
+      h('span', null, `${freie.length === 1 ? `Garten ${freie[0]} ist` : `${freie.length} Gärten sind`} frei. `,
+        wartende ? `${wartende} Interessent${wartende === 1 ? '' : 'en'} auf der Warteliste.` : 'Die Warteliste ist leer.'),
+      istAdmin ? [' ', h('button', { class: 'btn small', onclick: () => { S.tab = 'admin'; S.adminTab = 'warteliste'; S.warteliste = null; render(); } }, 'Zur Warteliste')] : null) : null,
     h('p', { class: 'hint' }, hatKarte || edit ? 'Jeder Garten liegt an seinem Platz auf dem Gelände. Die Farbe zeigt den Abrechnungsstand, ein Klick öffnet die Schnelleingabe dieses Pächters.'
       : 'Kachel pro Garten, sortiert nach Gartennummer. Farbe zeigt den Abrechnungsstatus, Klick auf eine Kachel springt zur Schnelleingabe dieses Pächters.'),
     edit ? leiste : null,
-    h('div', { style: 'margin-bottom:12px' }, legend('unvollstaendig', 'Angaben fehlen'), legend('berechnet', 'berechnet'), legend('offen', 'Rechnung offen'), legend('bezahlt', 'bezahlt')),
+    h('div', { style: 'margin-bottom:12px' }, legend('unvollstaendig', 'Angaben fehlen'), legend('berechnet', 'berechnet'), legend('offen', 'Rechnung offen'), legend('bezahlt', 'bezahlt'),
+      freie.length ? legend('frei', 'frei') : null),
     list.length ? kartenAnsicht : leer('personen', 'Noch keine Gärten', 'Sobald Pächter mit Gartennummer angelegt sind, erscheint hier jeder Garten als Kachel mit seinem Abrechnungsstand.', 'Pächter anlegen', () => { S.tab = 'admin'; S.adminTab = 'paechter'; render(); }));
+}
+
+// Einen freien Garten (ohne Pächter) auf die Karte setzen, unter die vorhandenen Gärten.
+async function freienGartenHinzufuegen() {
+  const nrIn = h('input', { type: 'text', maxlength: 20, placeholder: 'z. B. 14' });
+  const nr = await modal('Freien Garten auf die Karte setzen', h('div', { class: 'form' },
+    h('div', { class: 'field wide' }, h('label', null, 'Gartennummer'), nrIn,
+      h('span', { class: 'fhint' }, 'Für einen Garten, der gerade keinen Pächter hat. Danach an seinen Platz ziehen und »Anordnung speichern«.'))),
+  [{ label: 'Abbrechen', value: '' }, { label: 'Hinzufügen', cls: 'primary', value: true, action: () => {
+    const v = nrIn.value.trim();
+    if (!v) { toast('Bitte eine Gartennummer eintragen.', 'err'); return false; }
+    if (S.lageEntwurf[v]) { toast(`Garten ${v} ist schon auf der Karte.`, 'err'); return false; }
+    return true;
+  } }]);
+  if (!nr) return;
+  const v = nrIn.value.trim();
+  const maxY = Math.max(0, ...Object.values(S.lageEntwurf).map((q) => q.y));
+  S.lageEntwurf[v] = { x: 20, y: Object.keys(S.lageEntwurf).length ? maxY + LP_H + 30 : 20 };
+  render();
+}
+
+// Freien Garten an jemanden von der Warteliste vergeben (ohne Warteliste: Pächter von Hand anlegen).
+async function freienGartenVergeben(nr) {
+  let liste = [];
+  try { liste = await api('GET', '/api/admin/warteliste'); } catch (e) { handleErr(e); return; }
+  if (!liste.length) {
+    const ok = await modal(`Garten ${nr} ist frei`, h('p', null, 'Auf der Warteliste steht niemand. Du kannst den neuen Pächter direkt anlegen.'),
+      [{ label: 'Abbrechen', value: false }, { label: 'Pächter anlegen', cls: 'primary', value: true }]);
+    if (ok && await paechterDialog(null, { gartennr: nr, mitgliedsnr: naechsteMitgliedsnr() })) await reload();
+    return;
+  }
+  const zahl = (ph) => { const el = h('input', { type: 'text', placeholder: ph || '', autocomplete: 'off' }); el.setAttribute('inputmode', 'decimal'); return el; };
+  const f = {
+    wer: h('select', null, liste.map((b) => h('option', { value: b.id }, `${b.platz}. ${b.name}${b.wunsch ? ' – ' + b.wunsch : ''}`))),
+    seit: h('input', { type: 'date', value: todayIso() }),
+    mitgliedsnr: h('input', { type: 'text', value: naechsteMitgliedsnr(), maxlength: 20 }),
+    groesse: zahl('m²'),
+    wz: h('input', { type: 'text', maxlength: 40 }), sz: h('input', { type: 'text', maxlength: 40 }),
+  };
+  const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  const ok = await modal(`Garten ${nr} vergeben`, h('div', { class: 'form' },
+    fld('An', f.wer, 'Name, Anschrift und Kontakt kommen von der Warteliste; der Eintrag wird danach entfernt.', true),
+    fld('Übergeben am', f.seit), fld('Mitgliedsnummer *', f.mitgliedsnr), fld('Gartengröße in m² *', f.groesse),
+    fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Garten vergeben', cls: 'primary', value: true, action: async () => {
+    const g = parseNum(f.groesse.value);
+    if (!g || Number.isNaN(g) || g <= 0) { toast('Bitte die Gartengröße eintragen.', 'err'); return false; }
+    try {
+      await api('POST', `/api/admin/warteliste/${f.wer.value}/vergeben`, { gartennr: nr, seit: f.seit.value, mitgliedsnr: f.mitgliedsnr.value, gartengroesse: g, wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value });
+    } catch (e) { handleErr(e); return false; }
+  } }]);
+  if (!ok) return;
+  toast(`Garten ${nr} vergeben`, 'ok');
+  S.warteliste = null;
+  await reload();
+}
+
+async function lageplanDrucken(istAdmin) {
+  let namen = false;
+  if (istAdmin) {
+    const w = await modal('Lageplan drucken', h('div', null,
+      h('p', null, 'Für den Aushang ohne Namen, für den Vorstand auf Wunsch mit den Namen der Pächter. Der Abrechnungsstand (bezahlt, offen) wird nie gedruckt.')),
+    [{ label: 'Abbrechen', value: '' }, { label: 'Mit Namen (Vorstand)', value: 'namen' }, { label: 'Ohne Namen (Aushang)', cls: 'primary', value: 'aushang' }]);
+    if (!w) return;
+    namen = w === 'namen';
+  }
+  const q = namen ? '?namen=1' : '';
+  await pdfDrucken({ url: `/api/lageplan-druck${q}`, oeffnenUrl: `/api/lageplan-druck/oeffnen${q}`, titel: 'Lageplan',
+    meldung: () => 'Der Lageplan wurde im PDF-Programm geöffnet – dort drucken.' });
 }
 
 // Entwurf zum Anordnen: gespeicherte Positionen übernehmen; gibt es noch keine, alle Gärten als Raster vorlegen.
@@ -1719,10 +1815,10 @@ function viewPruefShell() {
 
 // ---- Pächter verwalten
 
-function paechterDialog(p) {
+function paechterDialog(p, vorlage) {
   const isNew = !p;
   const cur = p || { mitgliedsnr: '', gartennr: '', anrede: 'Herr', name: '', strasse: '', plzOrt: S.state.settings.ort, versand: 'Emailsendung',
-    email: '', telefon: '', gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '', notiz: '' };
+    email: '', telefon: '', gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '', notiz: '', ...(vorlage || {}) };
   const t = (val, ph) => h('input', { type: 'text', value: val || '', placeholder: ph || '', maxlength: 100, autocomplete: 'off' });
   const f = {
     mitgliedsnr: t(cur.mitgliedsnr, 'z. B. 35-95'), gartennr: t(cur.gartennr, 'z. B. 35'),
@@ -2082,6 +2178,9 @@ function adminYear() {
         h('li', null, 'Rechnungsdatum und Zahlungsziel rücken um ein Jahr weiter. Prüfe sie danach unter »Preise & Einstellungen«.'),
         h('li', null, 'Vorher wird automatisch eine Sicherung angelegt.')),
       done < total ? h('div', { class: 'banner warn', style: 'margin-top:12px' }, `Achtung: Bei ${total - done} von ${total} Pächtern fehlen noch Angaben.`) : null,
+      h('p', { class: 'hint', style: 'margin-top:12px' }, 'Tipp: Vor dem Abschluss den ',
+        h('button', { class: 'btn small', onclick: () => jahresberichtDrucken(st.currentYear) }, `Jahresbericht ${st.currentYear}`),
+        ' für die Mitgliederversammlung drucken (später geht das auch noch im Kassenbericht).'),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: async () => {
         const offen = [];
         if (done < total) offen.push(`bei ${total - done} Pächter(n) fehlen Angaben`);
@@ -2328,6 +2427,7 @@ function adminKassenbericht(pruefMode) {
       h('div', { class: 'tablewrap' }, versorgerTable), verlustHinweis,
       pruefMode ? null : h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: saveVersorger }, 'Werte speichern'))),
     h('div', { class: 'actions', style: 'margin-top:16px;margin-bottom:22px' },
+      h('button', { class: 'btn primary', title: 'Zusammenfassung des Jahres für die Mitgliederversammlung, ohne Namen', onclick: () => jahresberichtDrucken(S.kasseYear) }, `Jahresbericht ${S.kasseYear} (PDF)`),
       h('a', { class: 'btn', href: `/api/admin/export-kassenbericht?year=${S.kasseYear}` }, `Kassenbericht ${S.kasseYear} als Excel`)),
     h('h3', null, 'Verlauf über die Jahre'),
     kassenberichtVerlaufCard());
@@ -2911,6 +3011,12 @@ function terminDialog(t) {
     } },
   ]);
 }
+
+// Jahresbericht für die Mitgliederversammlung: Kennzahlen, Kasse, Ausgaben, Verlauf, Termine – ohne Namen.
+const jahresberichtDrucken = (jahr) => pdfDrucken({
+  url: `/api/admin/jahresbericht?year=${jahr}`, oeffnenUrl: `/api/admin/jahresbericht/oeffnen?year=${jahr}`,
+  titel: `Jahresbericht ${jahr}`, meldung: () => 'Der Jahresbericht wurde im PDF-Programm geöffnet – dort drucken.',
+});
 
 const jahresplanDrucken = (jahr) => pdfDrucken({
   url: `/api/termine-druck?jahr=${jahr}`, oeffnenUrl: `/api/termine-druck/oeffnen?jahr=${jahr}`,
