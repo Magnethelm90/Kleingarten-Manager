@@ -104,7 +104,7 @@ func (a *App) handleGartenVergeben(w http.ResponseWriter, r *http.Request) {
 	p.ID = newID()
 	a.st.d.Paechter = append(a.st.d.Paechter, p)
 	a.st.ensureYear(a.st.d.Settings.Jahr).Ablesungen[p.ID] = Ablesung{}
-	a.st.gartenOeffnenAb(p.ID, p.Gartennr, p.Mitgliedsnr, p.Name, in.Seit)
+	a.st.gartenVergeben(p.ID, p.Gartennr, p.Mitgliedsnr, p.Name, in.Seit)
 	a.st.d.Warteliste = append(a.st.d.Warteliste[:wi], a.st.d.Warteliste[wi+1:]...)
 	a.st.audit("Garten %s von der Warteliste vergeben: %s %s", p.Gartennr, p.Mitgliedsnr, p.Name)
 	if err := a.st.saveLocked(); err != nil {

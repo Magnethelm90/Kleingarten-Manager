@@ -20,11 +20,11 @@
 
 | Recht | Wo im Programm |
 | --- | --- |
-| Auskunft (Art. 15) und Datenkopie (Art. 20) | Admin → Pächter → **Auskunft** (auch im Papierkorb und unter Admin → Datenschutz): alle Daten einer Person als maschinenlesbare JSON-Datei |
-| Berichtigung (Art. 16) | Admin → Pächter → Bearbeiten |
-| Löschung (Art. 17) | Admin → Pächter → Löschen (Papierkorb) → Papierkorb → **Endgültig löschen** |
+| Auskunft (Art. 15) und Datenkopie (Art. 20) | Pächter → Mehr → **Auskunft** (auch im Papierkorb und unter »Datenschutz«): alle Daten einer Person als maschinenlesbare JSON-Datei |
+| Berichtigung (Art. 16) | Pächter → Bearbeiten |
+| Löschung (Art. 17) | Pächter → Mehr → In den Papierkorb → Papierkorb → **Endgültig löschen** |
 | Einschränkung (Art. 18) | Pächter im Papierkorb lassen: er verschwindet aus allen Ansichten und Berechnungen, bleibt aber erhalten |
-| Speicherbegrenzung (Art. 5) | Admin → Datenschutz → **Abgelaufene Unterlagen bereinigen** nach Ablauf der Aufbewahrungsfrist |
+| Speicherbegrenzung (Art. 5) | Datenschutz → **Abgelaufene Unterlagen bereinigen** nach Ablauf der Aufbewahrungsfrist |
 
 Eine Anfrage ist innerhalb **eines Monats** zu beantworten (Art. 12). Die Identität der anfragenden Person
 vorher prüfen.
@@ -47,20 +47,25 @@ abgeschlossener Jahre. Sie sind Buchungsunterlagen und unterliegen der steuerlic
 
 **Frist im Programm:** 10 Jahre, gerechnet ab Ende des Kalenderjahres der Ausstellung (konservativ: Bücher und
 Jahresabschlüsse 10 Jahre; für reine Buchungsbelege gilt seit 2025 meist 8 Jahre). Welche Frist für euch gilt, klärt
-ihr mit Steuerberatung oder Kassenprüfern. Nach Ablauf entfernt **Admin → Datenschutz → Abgelaufene Unterlagen
+ihr mit Steuerberatung oder Kassenprüfern. Nach Ablauf entfernt **Datenschutz → Abgelaufene Unterlagen
 bereinigen** Name, Anschrift, Kontaktdaten und Zählernummern aus Rechnungen und Jahresunterlagen, löscht die PDF-Dateien (auch aus
 den Sicherungen) und sperrt den Nachdruck. Die Beträge bleiben für die Statistik.
 
-Das Programm erinnert nicht von selbst: einmal im Jahr (z. B. beim Jahreswechsel) unter Admin → Datenschutz
+Das Programm erinnert nicht von selbst: einmal im Jahr (z. B. beim Jahreswechsel) unter »Datenschutz«
 nachsehen.
 
 **Übergabeprotokolle** (Pächterwechsel) zählen zu den Jahresunterlagen ihres Übergabejahres: Beim endgültigen
 Löschen eines Pächters verschwinden sein Name und seine Anschrift sofort daraus, nach Ablauf der Frist werden auch
 Bemerkungen und Schlüsselangaben entfernt.
 
+**Gartenakte:** Dokumente, die zur Person gehören (beim Hochladen als »gehört zum jetzigen Pächter« markiert, z. B.
+Pachtvertrag oder Schriftverkehr), werden beim endgültigen Löschen des Pächters samt Datei entfernt und stehen in der
+Auskunft. Fotos, Genehmigungen und Wertermittlungen gehören zum Garten und enthalten keine Namen; bitte beim Hochladen
+darauf achten, dass Fotos keine Personen zeigen.
+
 **Warteliste:** Einträge werden gelöscht, sobald kein Interesse mehr besteht (auch aus allen Sicherungen); wird ein
 Garten vergeben, gehen die Angaben in die Stammdaten des neuen Pächters über. Wer seit über 2 Jahren nicht
-nachgefragt wurde, wird markiert (Admin → Warteliste und Admin → Datenschutz): dann nachfragen oder löschen.
+nachgefragt wurde, wird markiert (unter »Warteliste« und »Datenschutz«): dann nachfragen oder löschen.
 Rechtsgrundlage ist die Anbahnung eines Pachtvertrags (Art. 6 Abs. 1 lit. b DSGVO); Interessenten sollten bei der
 Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 

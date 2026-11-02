@@ -82,6 +82,9 @@ func TestNeueZugaengeRechte(t *testing.T) {
 		{"PUT", "/api/admin/warteliste/x"}, {"DELETE", "/api/admin/warteliste/x"}, {"POST", "/api/admin/warteliste/x/vergeben"},
 		{"POST", "/api/admin/termine"}, {"PUT", "/api/admin/termine/x"}, {"DELETE", "/api/admin/termine/x"},
 		{"POST", "/api/admin/termine-uebernehmen"}, {"GET", "/api/admin/jahresbericht"}, {"POST", "/api/admin/jahresbericht/oeffnen"},
+		{"GET", "/api/admin/gartenakte?gartennr=1"}, {"POST", "/api/admin/dokumente"}, {"GET", "/api/admin/dokumente/x"}, {"DELETE", "/api/admin/dokumente/x"},
+		{"POST", "/api/admin/wertermittlungen"}, {"PUT", "/api/admin/wertermittlungen/x"}, {"DELETE", "/api/admin/wertermittlungen/x"},
+		{"GET", "/api/admin/wertermittlungen/x/pdf"}, {"GET", "/api/admin/jahresmeldung"}, {"POST", "/api/admin/warteliste/x/vergeben"},
 	}
 	for _, c := range admin {
 		if rec := do(h, c.m, c.u, map[string]any{}); rec.Code != 401 {
