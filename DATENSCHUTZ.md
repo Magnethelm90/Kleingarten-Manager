@@ -58,6 +58,11 @@ nachsehen.
 Löschen eines Pächters verschwinden sein Name und seine Anschrift sofort daraus, nach Ablauf der Frist werden auch
 Bemerkungen und Schlüsselangaben entfernt.
 
+**Gartenakte:** Dokumente, die zur Person gehören (beim Hochladen als »gehört zum jetzigen Pächter« markiert, z. B.
+Pachtvertrag oder Schriftverkehr), werden beim endgültigen Löschen des Pächters samt Datei entfernt und stehen in der
+Auskunft. Fotos, Genehmigungen und Wertermittlungen gehören zum Garten und enthalten keine Namen; bitte beim Hochladen
+darauf achten, dass Fotos keine Personen zeigen.
+
 **Warteliste:** Einträge werden gelöscht, sobald kein Interesse mehr besteht (auch aus allen Sicherungen); wird ein
 Garten vergeben, gehen die Angaben in die Stammdaten des neuen Pächters über. Wer seit über 2 Jahren nicht
 nachgefragt wurde, wird markiert (Admin → Warteliste und Admin → Datenschutz): dann nachfragen oder löschen.

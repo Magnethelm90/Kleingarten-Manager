@@ -283,7 +283,16 @@ func (s *Store) gartenOeffnen(id, gartennr, mitgliedsnr, name string) {
 	s.gartenOeffnenAb(id, gartennr, mitgliedsnr, name, time.Now().Format("2006-01-02"))
 }
 
-// gartenOeffnenAb eröffnet einen Abschnitt ab einem bestimmten Tag (z. B. Übergabe beim Pächterwechsel).
+// gartenVergeben eröffnet einen Abschnitt ab einem bestimmten Tag für eine echte Vergabe (Pächterwechsel
+// oder freier Garten von der Warteliste).
+func (s *Store) gartenVergeben(id, gartennr, mitgliedsnr, name, seit string) {
+	s.gartenOeffnenAb(id, gartennr, mitgliedsnr, name, seit)
+	if n := len(s.d.GartenHistorie); n > 0 && s.d.GartenHistorie[n-1].PaechterID == id {
+		s.d.GartenHistorie[n-1].Vergeben = true
+	}
+}
+
+// gartenOeffnenAb eröffnet einen Abschnitt ab einem bestimmten Tag.
 func (s *Store) gartenOeffnenAb(id, gartennr, mitgliedsnr, name, seit string) {
 	gartennr = strings.TrimSpace(gartennr)
 	if gartennr == "" {

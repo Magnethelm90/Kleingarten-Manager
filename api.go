@@ -954,6 +954,11 @@ func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, bad("Nur Pächter im Papierkorb können endgültig gelöscht werden"))
 			return
 		}
+		for _, d := range a.st.d.Dokumente {
+			if d.PaechterID == id {
+				a.st.entferneDokumentDatei(d.Datei) // Pachtvertrag, Schriftverkehr: gehören zur Person
+			}
+		}
 		a.st.d.entfernePerson(id)
 		// ohne Namen protokollieren, sonst entstünde die Spur sofort neu
 		a.st.audit("Pächter endgültig gelöscht, Personenbezug entfernt")
@@ -1703,6 +1708,16 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/warteliste/{id}/vergeben", a.admin(a.handleGartenVergeben))
 	mux.HandleFunc("GET /api/lageplan-druck", a.handleLageplanDruck)
 	mux.HandleFunc("POST /api/lageplan-druck/oeffnen", a.handleLageplanDruckOeffnen)
+	mux.HandleFunc("GET /api/admin/gartenakte", a.admin(a.handleGartenakte))
+	mux.HandleFunc("POST /api/admin/dokumente", a.admin(a.handleDokumentUpload))
+	mux.HandleFunc("GET /api/admin/dokumente/{id}", a.admin(a.handleDokumentServe))
+	mux.HandleFunc("DELETE /api/admin/dokumente/{id}", a.admin(a.handleDokumentDelete))
+	mux.HandleFunc("POST /api/admin/wertermittlungen", a.admin(a.handleWertermittlungSpeichern))
+	mux.HandleFunc("PUT /api/admin/wertermittlungen/{id}", a.admin(a.handleWertermittlungSpeichern))
+	mux.HandleFunc("DELETE /api/admin/wertermittlungen/{id}", a.admin(a.handleWertermittlungDelete))
+	mux.HandleFunc("GET /api/admin/wertermittlungen/{id}/pdf", a.admin(a.handleWertermittlungPDF))
+	mux.HandleFunc("POST /api/admin/wertermittlungen/{id}/pdf/oeffnen", a.admin(a.handleWertermittlungPDFOeffnen))
+	mux.HandleFunc("GET /api/admin/jahresmeldung", a.adminOrPruef(a.handleJahresmeldung))
 	mux.HandleFunc("GET /api/termine.ics", a.handleTermineICS)
 	mux.HandleFunc("GET /api/termine-druck", a.handleJahresplan)
 	mux.HandleFunc("POST /api/termine-druck/oeffnen", a.handleJahresplanOeffnen)

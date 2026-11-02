@@ -62,6 +62,9 @@ type GartenEintrag struct {
 	Name        string `json:"name"`
 	Seit        string `json:"seit"`          // JJJJ-MM-TT
 	Bis         string `json:"bis,omitempty"` // leer = aktuell
+	// Vergeben: Abschnitt entstand durch eine echte Vergabe (Pächterwechsel oder von der Warteliste), nicht
+	// durch das erstmalige Eintragen eines langjährigen Pächters ins Programm (für die Jahresmeldung).
+	Vergeben bool `json:"vergeben,omitempty"`
 }
 
 // Paechter sind die Stammdaten eines Pächters (ändern sich selten).
@@ -195,6 +198,9 @@ type Data struct {
 	Termine []Termin `json:"termine,omitempty"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
+	// Dokumente und Wertermittlungen der Gartenakte (je Garten).
+	Dokumente        []GartenDokument `json:"dokumente,omitempty"`
+	Wertermittlungen []Wertermittlung `json:"wertermittlungen,omitempty"`
 }
 
 // LagePos ist die Position eines Gartens im Lageplan (linke obere Ecke der Kachel).

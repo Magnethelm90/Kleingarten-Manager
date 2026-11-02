@@ -26,7 +26,14 @@ type Bewerber struct {
 	Notiz  string `json:"notiz,omitempty"`
 	// BestaetigtAm: wann das Interesse zuletzt bestätigt wurde (leer = seit der Anmeldung nicht nachgefragt)
 	BestaetigtAm string `json:"bestaetigtAm,omitempty"`
+	// Besichtigung eines freien Gartens: Tag, Uhrzeit, Garten und Ergebnis (leer = noch offen).
+	BesichtigungAm       string `json:"besichtigungAm,omitempty"`
+	BesichtigungUm       string `json:"besichtigungUm,omitempty"`
+	BesichtigungGarten   string `json:"besichtigungGarten,omitempty"`
+	BesichtigungErgebnis string `json:"besichtigungErgebnis,omitempty"`
 }
+
+var besichtigungErgebnisse = []string{"", "besichtigt", "möchte den Garten", "kein Interesse", "nicht erschienen"}
 
 // wartelisteNachfragenJahre: nach so vielen Jahren ohne Bestätigung soll der Vorstand nachfragen, ob noch
 // Interesse besteht (Datenschutz: nicht mehr benötigte Angaben nicht unbegrenzt aufheben).
@@ -67,6 +74,25 @@ func cleanBewerber(b Bewerber) (Bewerber, error) {
 		if _, err := parseDate(b.BestaetigtAm); err != nil {
 			return b, bad("Das Datum der Bestätigung ist ungültig")
 		}
+	}
+	b.BesichtigungGarten = trim(b.BesichtigungGarten, 20)
+	b.BesichtigungUm = strings.TrimSpace(b.BesichtigungUm)
+	if b.BesichtigungAm != "" {
+		if _, err := parseDate(b.BesichtigungAm); err != nil {
+			return b, bad("Das Datum der Besichtigung ist ungültig")
+		}
+	} else {
+		b.BesichtigungUm, b.BesichtigungGarten = "", ""
+	}
+	if b.BesichtigungUm != "" && !uhrzeitGueltig(b.BesichtigungUm) {
+		return b, bad("Die Uhrzeit der Besichtigung bitte als SS:MM eintragen, z. B. 17:30")
+	}
+	ok := false
+	for _, e := range besichtigungErgebnisse {
+		ok = ok || e == b.BesichtigungErgebnis
+	}
+	if !ok {
+		b.BesichtigungErgebnis = ""
 	}
 	return b, nil
 }

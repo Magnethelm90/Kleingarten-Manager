@@ -15,7 +15,7 @@ import (
 // datenbestandLeer meldet, ob noch nichts eingegeben wurde (keine Pächter, Rechnungen, Ausgaben,
 // kein abgeschlossenes Jahr). Der Aufrufer hält s.mu.
 func (s *Store) datenbestandLeer() bool {
-	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 {
+	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 {
 		return false
 	}
 	for _, j := range s.d.Jahre {
@@ -118,7 +118,8 @@ func (s *Store) ladeBeispieldaten() {
 		{ID: newID(), Seit: heute.AddDate(-2, -3, 0).Format("2006-01-02"), Anrede: "Herr", Name: "Lukas Morgenroth", Strasse: "Feldweg 8", PLZOrt: set.Ort,
 			Telefon: "0123 456789", Wunsch: "gern mit Laube"},
 		{ID: newID(), Seit: heute.AddDate(-1, -1, 0).Format("2006-01-02"), Anrede: "Familie", Name: "Kaya", Strasse: "Wiesenstraße 15", PLZOrt: set.Ort,
-			Email: "familie.kaya@example.org", Wunsch: "großer Garten für Kinder"},
+			Email: "familie.kaya@example.org", Wunsch: "großer Garten für Kinder",
+			BesichtigungAm: heute.AddDate(0, 0, 4).Format("2006-01-02"), BesichtigungUm: "17:30", BesichtigungGarten: "11"},
 		{ID: newID(), Seit: heute.AddDate(0, -2, 0).Format("2006-01-02"), Anrede: "Frau", Name: "Emma Regen", Strasse: "Lindenweg 20", PLZOrt: set.Ort,
 			Email: "emma.regen@example.org"},
 	}
@@ -136,6 +137,22 @@ func (s *Store) ladeBeispieldaten() {
 		{ID: newID(), Datum: tag(time.October, time.Saturday, 4), Von: "10:00", Titel: "Zählerablesung und Wasser abstellen", Art: "Ablesung", Notiz: "Zähler bitte frei zugänglich machen"},
 		{ID: newID(), Datum: tag(time.November, time.Tuesday, 2), Von: "19:00", Bis: "21:00", Titel: "Vorstandssitzung", Art: "Vorstand", Ort: "Vereinsheim"},
 		{ID: newID(), Datum: tag(time.December, time.Saturday, 2), Von: "16:00", Titel: "Adventsfeier", Art: "Fest", Ort: "Vereinsheim"},
+	}
+	// Wertermittlung für Garten 11: die Pächterin möchte aufhören, der Nachfolger steht auf der Warteliste
+	s.d.Wertermittlungen = []Wertermittlung{{
+		ID: newID(), Gartennr: "11", Datum: heute.AddDate(0, 0, -6).Format("2006-01-02"), Anlass: "Pächterwechsel", Wertermittler: "Wertermittler des Bezirksverbands",
+		Positionen: []WertPosition{
+			{Kategorie: "Baulichkeiten", Bezeichnung: "Gartenlaube, Holz, Dach 2019 erneuert", Menge: 16, Einheit: "m²", Einzelwert: 95, Abschlag: 35},
+			{Kategorie: "Baulichkeiten", Bezeichnung: "Gewächshaus Alu/Glas", Menge: 1, Einheit: "Stück", Einzelwert: 450, Abschlag: 40},
+			{Kategorie: "Anpflanzungen", Bezeichnung: "Apfelbaum, Halbstamm", Menge: 3, Einheit: "Stück", Einzelwert: 60},
+			{Kategorie: "Anpflanzungen", Bezeichnung: "Johannisbeersträucher", Menge: 6, Einheit: "Stück", Einzelwert: 12},
+			{Kategorie: "Einrichtungen", Bezeichnung: "Regentonnen", Menge: 2, Einheit: "Stück", Einzelwert: 25, Abschlag: 20},
+			{Kategorie: "Abzug", Bezeichnung: "Entsorgung Altholz hinter der Laube", Menge: 1, Einheit: "pauschal", Einzelwert: 80},
+		},
+		Bemerkung: "Laube trocken, Fenster etwas undicht.",
+	}}
+	if w, err := cleanWertermittlung(s.d.Wertermittlungen[0]); err == nil {
+		s.d.Wertermittlungen[0] = w
 	}
 	s.d.Demo = true
 	s.audit("Beispieldaten geladen")
@@ -158,6 +175,9 @@ func fp(x float64) *float64 { return &x }
 func (s *Store) entferneBeispieldaten() {
 	for _, r := range s.d.Rechnungen {
 		s.entferneDatei("Rechnungen", r.Datei)
+	}
+	for _, d := range s.d.Dokumente {
+		s.entferneDokumentDatei(d.Datei)
 	}
 	for _, j := range s.d.Jahre {
 		for _, a := range j.Ausgaben {

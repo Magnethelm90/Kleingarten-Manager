@@ -216,7 +216,7 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 	d.Paechter = append(d.Paechter, neu)
 	wv, sv := *in.WasserStand, *in.StromStand
 	d.Jahre[yearKey(jahr)].Ablesungen[neu.ID] = Ablesung{WasserVJ: &wv, StromVJ: &sv}
-	a.st.gartenOeffnenAb(neu.ID, neu.Gartennr, neu.Mitgliedsnr, neu.Name, in.Datum)
+	a.st.gartenVergeben(neu.ID, neu.Gartennr, neu.Mitgliedsnr, neu.Name, in.Datum)
 	if wi >= 0 {
 		d.Warteliste = append(d.Warteliste[:wi], d.Warteliste[wi+1:]...)
 	}

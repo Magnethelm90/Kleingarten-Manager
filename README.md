@@ -15,7 +15,7 @@ Zählerstände eintragen – die Rechnungen kommen fertig als PDF heraus, mit QR
 
 ## So sieht es aus
 
-![Übersicht mit Kassenbestand, offenen Rechnungen und Schnellzugriff](docs/bilder/uebersicht.png)
+![Übersicht mit Begrüßung, Jahresfortschritt, Terminen und Kennzahlen](docs/bilder/uebersicht.png)
 
 | | |
 | --- | --- |
@@ -23,6 +23,8 @@ Zählerstände eintragen – die Rechnungen kommen fertig als PDF heraus, mit QR
 | **Einführung** beim ersten Start – fünf kurze Schritte | **Zählerstände:** Nummer eintippen, nur die neuen Stände eingeben |
 | ![Rechnungen prüfen und ausstellen](docs/bilder/rechnungen.png) | ![Zahlungen verfolgen](docs/bilder/zahlungen.png) |
 | **Rechnungen** prüfen und mit einem Klick für alle ausstellen | **Zahlungen** abhaken, offene Posten und Mahnungen |
+| ![Gartenakte mit Dokumenten und Wertermittlung](docs/bilder/gartenakte.png) | ![Berichte und Jahresmeldung](docs/bilder/berichte.png) |
+| **Gartenakte:** Dokumente, Fotos, Wertermittlung und Verlauf je Garten | **Berichte & Meldungen:** Jahresbericht, Jahresmeldung für den Verband, Aushänge |
 | ![Pächter verwalten](docs/bilder/paechter.png) | ![Beispielrechnung](docs/bilder/rechnung-beispiel.png) |
 | **Pächter** einmal anlegen oder aus Excel übernehmen | **Die fertige Rechnung** als PDF, mit GiroCode zum Bezahlen |
 
@@ -34,7 +36,7 @@ Zählerstände eintragen – die Rechnungen kommen fertig als PDF heraus, mit QR
    in einen eigenen Ordner legen und doppelklicken. Windows zeigt beim ersten Start eventuell
    „Der Computer wurde durch Windows geschützt“, weil das Programm nicht kostenpflichtig signiert ist:
    auf **Weitere Informationen → Trotzdem ausführen** klicken.
-2. **Einrichten:** unter *Admin → Preise & Einstellungen* Verein, Preise und Bankverbindung eintragen und
+2. **Einrichten:** unter *Preise & Einstellungen* Verein, Preise und Bankverbindung eintragen und
    die Pächter anlegen (oder eine vorhandene Excel-Liste importieren).
 3. **Abrechnen:** unter *Zählerstände* die neuen Stände eingeben, dann unter *Rechnungen* auf
    „Alle offenen ausstellen“ – fertig sind die PDFs zum Mailen oder Ausdrucken.
@@ -59,7 +61,7 @@ Cloud-Anbindung.
   ist oder die letzte Kopie dort älter als 30 Tage ist
 - **Jahresfortschritt:** auf der Übersicht in vier Stationen (Zählerstände, Rechnungen, Zahlungen, Jahresabschluss),
   mit Balken und einem Knopf zum nächsten Schritt
-- **Vereinsfarbe und Logo** (Admin → Preise & Einstellungen): eigene Farbe und Vereinslogo für Programm, Rechnung und
+- **Vereinsfarbe und Logo** (Preise & Einstellungen): eigene Farbe und Vereinslogo für Programm, Rechnung und
   Mahnung; zu helle Farben werden automatisch so abgedunkelt, dass alles lesbar bleibt
 - **»Gut lesbar«** (unten neben der Schriftgröße): kräftigere Schrift, stärkere Kontraste, größere Knöpfe
 - **Beispieldaten:** solange noch nichts eingegeben ist, lässt sich ein erfundener Verein mit 12 Pächtern,
@@ -68,7 +70,7 @@ Cloud-Anbindung.
 - **Einführung im Programm:** beim ersten Start führt ein kurzer Rundgang in 5 Schritten durch das Programm (einrichten,
   Zählerstände, Rechnungen, Zahlungen, Jahresabschluss). Jeder Schritt wechselt selbst zur passenden Stelle und
   markiert den Reiter; über den runden »?«-Knopf oben rechts lässt er sich jederzeit wieder aufrufen
-- **Datenschutz (DSGVO-Hilfen):** Admin → Datenschutz: Auskunft und Datenkopie je Person als Datei (Art. 15/20),
+- **Datenschutz (DSGVO-Hilfen):** Bereich »Datenschutz«: Auskunft und Datenkopie je Person als Datei (Art. 15/20),
   endgültiges Löschen entfernt den Personenbezug auch aus Protokoll, Garten-Historie und allen Sicherungen (Art. 17),
   nach Ablauf der Aufbewahrungsfrist lassen sich Rechnungen und Jahresunterlagen bereinigen. Vorlagen für
   Verarbeitungsverzeichnis und Mitgliederinformation: [DATENSCHUTZ.md](DATENSCHUTZ.md)
@@ -78,13 +80,28 @@ Cloud-Anbindung.
   Preise und Regeln einstellen (Wasser, Strom, Pacht, Arbeitsstunden, Bankverbindung, Rechnungsdatum), optionales Passwort.
   Gelöschte Pächter landen im Papierkorb (Zählerstände und Rechnungen bleiben erhalten) und lassen sich
   wiederherstellen oder endgültig entfernen
-- **Pächterwechsel** (Admin → Pächter → »Wechsel«): führt in einem Schritt durch die Gartenübergabe – Übergabetag,
+- **Übersichtliche Seitenleiste:** links stehen alle Bereiche in vier Gruppen (Abrechnung, Verein, Kasse & Berichte,
+  Einstellungen); bei schmalen Fenstern nur als Symbole, auf dem Handy über das Menü oben links
+- **Gartenakte** (Pächter → »Akte« oder im Lageplan): alles zu einem Garten an einer Stelle – Pächter, Verlauf,
+  Übergaben mit Protokoll, Wertermittlungen und **Dokumente** (Bauantrag, Genehmigung, Fotos der Laube, Pachtvertrag
+  als PDF oder Foto). Die Akte gehört zum Garten: Fotos und Genehmigungen bleiben beim Pächterwechsel erhalten,
+  Pachtvertrag und Schriftverkehr werden beim endgültigen Löschen des Pächters mit entfernt. Hochgeladene Dateien
+  werden auf ihren echten Inhalt geprüft und bleiben nur auf diesem Rechner
+- **Wertermittlung** (in der Gartenakte): Laube, Gewächshaus, Obstbäume, Einrichtungen mit Menge, Einzelwert und
+  Abschlag für Alter und Zustand erfassen, Abzüge für Mängel oder Rückbau; die Summe wird beim Pächterwechsel als
+  Ablösesumme vorgeschlagen. Als PDF mit Unterschriftsfeldern
+- **Berichte & Meldungen:** Jahresbericht, **Jahresmeldung für den Landes- oder Regionalverband** (Parzellen,
+  Flächen, neu vergebene Gärten, Warteliste, Gemeinschaftsstunden, Pacht, Beiträge, Verbrauch, Kasse – als Übersicht
+  und Excel-Datei), Pächterliste, Lageplan, Terminaushang und Ablesebogen an einer Stelle
+- **Besichtigungen:** zu jedem Eintrag auf der Warteliste Tag, Uhrzeit und Garten einer Besichtigung und das
+  Ergebnis festhalten; anstehende Besichtigungen stehen auf der Übersicht
+- **Pächterwechsel** (Pächter → »Wechsel«): führt in einem Schritt durch die Gartenübergabe – Übergabetag,
   gemeinsam abgelesene Zählerstände, Arbeitsstunden, neuer Pächter (auf Wunsch direkt von der Warteliste),
   Ablösesumme, Schlüssel und Zustand. Der bisherige Pächter bekommt eine **Schlussrechnung** über den Verbrauch bis
   zur Übergabe (ohne Pacht und Beiträge fürs Folgejahr), der neue startet mit den Übergabeständen. Dazu gibt es ein
   **Übergabeprotokoll** als PDF mit Checkliste und Unterschriftsfeldern. Der bisherige Pächter bleibt bis zum
   Jahreswechsel für seine Schlussrechnung sichtbar und kommt dann von selbst in den Papierkorb
-- **Warteliste** (Admin → Warteliste): Interessenten mit Anmeldedatum, Kontakt und Wunsch, in der Reihenfolge der
+- **Warteliste:** Interessenten mit Anmeldedatum, Kontakt und Wunsch, in der Reihenfolge der
   Anmeldung; »Garten vergeben« startet den Pächterwechsel mit den Angaben des Interessenten. Wer seit über 2 Jahren
   nicht nachgefragt wurde, wird markiert; gelöschte Einträge verschwinden auch aus den Sicherungen
 - **Vereinstermine** (Reiter »Termine«): Jahresplaner für Arbeitseinsätze, Versammlungen, Ablesung und Feste, als
@@ -94,7 +111,7 @@ Cloud-Anbindung.
 - **Ablesebogen:** Liste aller Gärten mit Zählernummern, Vorjahresständen und leeren Feldern zum Ausdrucken für den
   Ablese-Rundgang (A4 quer, nach Gartennummer sortiert)
 - **Pächterliste:** Garten, Name, Anschrift, Größe, Versandart, Telefon/E-Mail und Zähler aller Pächter als PDF zum Ausdrucken (nur mit
-  Admin-Zugang, Admin → Pächter)
+  Admin-Zugang, unter »Pächter« oder »Berichte & Meldungen«)
 - **Rechnungen:** PDF pro Pächter oder alle auf einmal, ausgestellte Rechnungen werden mit den damaligen Werten
   festgeschrieben und archiviert (spätere Änderungen verändern sie nicht); das Archiv lässt sich auch über alle
   Jahre hinweg durchsuchen (z. B. „wann wurde dieser Pächter zuletzt abgerechnet“)
@@ -131,7 +148,7 @@ Cloud-Anbindung.
   wie sie auf dem Gelände liegen. Gärten ohne Pächter erscheinen gestrichelt als **frei**, mit Hinweis auf die
   Warteliste; ein Klick vergibt den Garten direkt an jemanden von der Warteliste. **Drucken** liefert den Lageplan als
   Aushang (ohne Namen und ohne Abrechnungsstand) oder für den Vorstand mit Namen
-- **Jahresbericht** (Admin → Kassenbericht oder Jahreswechsel): ein PDF für die Mitgliederversammlung mit Kennzahlen
+- **Jahresbericht** (Berichte & Meldungen, Kassenbericht oder Jahreswechsel): ein PDF für die Mitgliederversammlung mit Kennzahlen
   und Vorjahresvergleich (Gärten, Wasser, Strom, Gemeinschaftsarbeit, Rechnungssumme, Zahlungseingang), Kasse,
   Ausgaben nach Art, Kassenbestand im Verlauf als Diagramm, Vereinsleben (Gartenübergaben, Warteliste, Pflichtstunden)
   und den nächsten Terminen – ohne Namen, kann also ausgelegt oder an die Wand geworfen werden
@@ -158,7 +175,7 @@ Cloud-Anbindung.
   dem Vorjahr direkt mit an (Betrag und Prozent)
 - **Gartengröße im Änderungsprotokoll:** wird die Gartengröße eines Pächters geändert (z. B. bei Teilung oder
   Zusammenlegung), steht die alte und neue Größe im Änderungsprotokoll
-- **Sicherung wiederherstellen** (Admin → Import / Export / Sicherung): Liste der vorhandenen Sicherungen mit Stand,
+- **Sicherung wiederherstellen** (Import, Export, Sicherung): Liste der vorhandenen Sicherungen mit Stand,
   Pächter- und Rechnungszahl; eine Auswahl wird eingespielt, der heutige Stand bleibt vorher als eigene Sicherung erhalten
   (also rückgängig machbar). Beschädigte Sicherungen oder solche aus einer neueren Programmversion werden gekennzeichnet
   und nicht eingespielt
