@@ -6,8 +6,10 @@ import (
 	"image"
 	"image/png"
 	"math"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Die Importdateien kommen von außen. Egal wie kaputt sie sind: kein Absturz (Panic).
@@ -113,6 +115,50 @@ func FuzzPruefeLogo(f *testing.F) {
 		out, err := pruefeLogo(data)
 		if err == nil && !bytes.HasPrefix(out, []byte("\x89PNG")) {
 			t.Fatal("angenommenes Logo ist kein PNG")
+		}
+	})
+}
+
+// Termine landen in Kalenderdatei und Aushang: seltsame Zeichen dürfen weder Einträge einschleusen noch die PDF zerstören.
+func FuzzTerminKalenderUndAushang(f *testing.F) {
+	f.Add("Arbeitseinsatz", "Tor", "Handschuhe", "09:00", "2026-04-04")
+	f.Add("A\r\nBEGIN:VEVENT\r\nSUMMARY:x", "O;rt,\\", "\x00\x1f‮", "24:61", "2026-02-30")
+	f.Add(strings.Repeat("Ä", 300), strings.Repeat("ß", 300), strings.Repeat("\n", 400), "", "")
+	f.Fuzz(func(t *testing.T, titel, ort, notiz, von, datum string) {
+		tm, err := cleanTermin(Termin{Titel: titel, Ort: ort, Notiz: notiz, Von: von, Datum: datum, Art: "Fest"})
+		if err != nil {
+			return
+		}
+		if strings.ContainsAny(tm.Titel+tm.Ort, "\r\n") {
+			t.Fatalf("Zeilenumbruch in Titel/Ort: %q %q", tm.Titel, tm.Ort)
+		}
+		st, err := openStore(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		app := &App{st: st, sessions: map[string]time.Time{}}
+		st.d.Termine = []Termin{tm}
+		rec := httptest.NewRecorder()
+		app.handleTermineICS(rec, httptest.NewRequest("GET", "/api/termine.ics", nil))
+		if n := strings.Count(rec.Body.String(), "BEGIN:VEVENT"); n > 1 {
+			t.Fatalf("eingeschleuster Kalendereintrag (%d):\n%s", n, rec.Body.String())
+		}
+		if _, err := buildJahresplan(defaultSettings(), jahrAusZeit(tm.Datum), []Termin{tm}); err != nil && !strings.Contains(err.Error(), "keine Termine") {
+			t.Fatalf("Aushang: %v", err)
+		}
+	})
+}
+
+// Übergabeprotokoll mit beliebigen Texten: nie ein Absturz, immer eine gültige PDF.
+func FuzzUebergabeprotokoll(f *testing.F) {
+	f.Add("Alt", "Neu", "Schlüssel", "Bemerkung")
+	f.Add(strings.Repeat("W", 500), "‮\x00", strings.Repeat("S", 400), strings.Repeat("Zeile\n", 400))
+	f.Fuzz(func(t *testing.T, alt, neu, schluessel, bem string) {
+		u := Uebergabe{Datum: "2025-06-15", Gartennr: "7", AltName: alt, NeuName: neu, AltAnschrift: alt, NeuAnschrift: neu,
+			Schluessel: trim(schluessel, 200), Bemerkungen: trim(bem, 1500)}
+		pdf, err := buildUebergabeprotokoll(defaultSettings(), u)
+		if err != nil || !bytes.HasPrefix(pdf, []byte("%PDF")) {
+			t.Fatalf("Protokoll: %v", err)
 		}
 	})
 }

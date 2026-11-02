@@ -301,6 +301,10 @@ func (s *Store) gartenSchliessen(id, bis string) {
 		e := &s.d.GartenHistorie[i]
 		if e.PaechterID == id && e.Bis == "" {
 			e.Bis = bis
+			if bis < e.Seit {
+				// Übergabe lag vor dem Tag, an dem der Pächter ins Programm eingetragen wurde: kein Zeitraum mit Ende vor Beginn
+				e.Seit = bis
+			}
 		}
 	}
 }
