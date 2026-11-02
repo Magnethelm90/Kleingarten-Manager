@@ -528,3 +528,6 @@ header.top .brand .logo.bild { background: #fff; }
 html.gutlesbar .termin-tag span { font-size: 13px; }
 
 td.aktionen { white-space: normal; min-width: 365px; line-height: 2.1; }
+.kachel-frei { background: var(--card); color: var(--green-dark); border: 2px dashed var(--green-line); box-shadow: none; }
+.kachel-frei .kachel-name { font-style: italic; color: var(--muted); }
+.kachel-dot.kachel-frei { border: 1.5px dashed var(--green-mid); box-shadow: none; }
