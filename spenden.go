@@ -122,8 +122,7 @@ func zahlWort(n int) string {
 	if n == 0 {
 		return "null"
 	}
-	var unter1000 func(n int) string
-	unter1000 = func(n int) string {
+	unter1000 := func(n int) string {
 		s := ""
 		if h := n / 100; h > 0 {
 			s += zahlEiner[h] + "hundert"
