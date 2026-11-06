@@ -64,6 +64,8 @@ const ICONS = {
   akte: ['M3 6.5h6l2 2h10V19H3z', 'M3 11h18'],
   waage: ['M12 4v16', 'M7 20h10', 'M5 7h14', 'M5 7l-3 6a3 3 0 0 0 6 0z', 'M19 7l-3 6a3 3 0 0 0 6 0z'],
   menue: ['M4 7h16', 'M4 12h16', 'M4 17h16'],
+  brief: ['M3 6h18v12H3z', 'M3 7l9 6 9-6'],
+  werkzeug: ['M14.7 6.3a4 4 0 0 0 5 5L12 19a2.1 2.1 0 0 1-3-3z', 'M14.7 6.3L17 4l3 3-2.3 2.3'],
   drucker: ['M7 9V3h10v6', 'M5 9h14a2 2 0 0 1 2 2v6h-4', 'M7 17H3v-6a2 2 0 0 1 2-2', 'M7 14h10v7H7z'],
 };
 
@@ -271,7 +273,9 @@ const NAV = [
     { tab: 'termine', label: 'Termine', ic: 'kalender' },
     { admin: 'paechter', label: 'Pächter', ic: 'personen', tour: 'admin' },
     { admin: 'warteliste', label: 'Warteliste', ic: 'warteliste' },
-    { admin: 'maengel', label: 'Mängel', ic: 'warnung' }] },
+    { admin: 'maengel', label: 'Mängel', ic: 'warnung' },
+    { admin: 'rundschreiben', label: 'Rundschreiben', ic: 'brief' },
+    { admin: 'inventar', label: 'Schlüssel & Geräte', ic: 'schluessel' }] },
   { gruppe: 'Kasse & Berichte', items: [
     { admin: 'kassenbericht', label: 'Kassenbericht', ic: 'kasse' },
     { admin: 'spenden', label: 'Spenden', ic: 'stern' },
@@ -298,6 +302,8 @@ function adminTabWaehlen(id) {
   if (id === 'warteliste') S.warteliste = null;
   if (id === 'maengel') { S.maengel = null; S.nutzung = null; }
   if (id === 'spenden') S.spenden = null;
+  if (id === 'rundschreiben') S.rundschreiben = null;
+  if (id === 'inventar') S.inventar = null;
   if (id === 'sepa') { S.sepa = null; S.sepaVorschau = null; }
   if (id === 'vorauszahlung') S.vz = null;
   if (id === 'paechter') S.uebergaben = null;
@@ -1284,27 +1290,94 @@ function viewLageplan() {
   counts.frei = freie.length;
 
   let kartenAnsicht;
-  if (!hatKarte && !edit) {
+  const kb = st.lageKarte || {};
+  const hatHintergrund = !!kb.bild || (kb.objekte || []).length > 0 || (kb.leitungen || []).length > 0;
+  if (!hatKarte && !edit && !hatHintergrund) {
     kartenAnsicht = h('div', { class: 'kachelgrid' }, list.map((p) => kachel(p)));
   } else {
+    const K = edit ? S.lageKarteEntwurf : kb;
+    const wz = edit ? S.lageWerkzeug : null;
     const platziert = mitNr.filter((p) => pos[p.gartennr.trim()]);
     const offen = mitNr.filter((p) => !pos[p.gartennr.trim()]);
-    let maxX = 0, maxY = 0;
-    for (const q of Object.values(pos)) { maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y); }
-    const flaeche = h('div', { class: 'lagekarte' + (edit ? ' bearbeiten' : ''), style: `width:${maxX + LP_W + 40}px;height:${maxY + LP_H + (edit ? 160 : 30)}px` });
+    const ms = K.massstab || 1;
+    const bildW = kb.bild ? Math.round(kb.bildBreite * ms) : 0, bildH = kb.bild ? Math.round(kb.bildHoehe * ms) : 0;
+    let maxX = bildW - LP_W - 40, maxY = bildH - LP_H - 30;
+    for (const q of Object.values(pos)) {
+      maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y);
+      for (const u of q.umriss || []) { maxX = Math.max(maxX, u.x - LP_W); maxY = Math.max(maxY, u.y - LP_H); }
+    }
+    for (const o of K.objekte || []) { maxX = Math.max(maxX, o.x - LP_W); maxY = Math.max(maxY, o.y - LP_H); }
+    for (const l of K.leitungen || []) for (const u of l.punkte) { maxX = Math.max(maxX, u.x - LP_W); maxY = Math.max(maxY, u.y - LP_H); }
+    const breite = Math.max(0, maxX) + LP_W + 40, hoehe = Math.max(0, maxY) + LP_H + (edit ? 160 : 30);
+    const flaeche = h('div', { class: 'lagekarte' + (edit ? ' bearbeiten' : '') + (wz ? ' werkzeug' : '') + (kb.bild ? ' mit-bild' : ''), style: `width:${breite}px;height:${hoehe}px` });
+    if (kb.bild) {
+      flaeche.append(h('img', { class: 'lagekarte-bild', src: `/api/lageplan-bild?v=${encodeURIComponent(kb.bild)}`, alt: '', draggable: 'false',
+        style: `width:${bildW}px;height:${bildH}px;opacity:${K.deckkraft || 0.85}` }));
+      if (kb.quelle) flaeche.append(h('div', { class: 'lagekarte-quelle' }, kb.quelle));
+    }
+    const svg = svgEl('svg', { class: 'lage-svg', width: breite, height: hoehe });
+    flaeche.append(svg);
+    const punkteText = (pts) => pts.map((u) => `${u.x},${u.y}`).join(' ');
+    // Leitungen
+    (K.leitungen || []).forEach((l, i) => {
+      const art = LP_LINIEN[l.art] || LP_LINIEN.wasser;
+      const g = svgEl('g', { class: 'lage-linie' + (edit && !wz ? ' klickbar' : '') },
+        svgEl('title', null, l.bez ? `${art[0]}: ${l.bez}` : art[0]),
+        svgEl('polyline', { points: punkteText(l.punkte), class: 'trefferflaeche' }),
+        svgEl('polyline', { points: punkteText(l.punkte), stroke: art[1], 'stroke-dasharray': art[2] || null }));
+      if (edit && !wz) g.addEventListener('click', () => leitungDialog(i));
+      svg.append(g);
+    });
+    // Gärten mit Umriss: Fläche plus kleines Schild in der Mitte
+    const mitte = (u) => {
+      let a = 0, cx = 0, cy = 0;
+      for (let i = 0; i < u.length; i++) {
+        const j = (i + 1) % u.length, k = u[i].x * u[j].y - u[j].x * u[i].y;
+        a += k; cx += (u[i].x + u[j].x) * k; cy += (u[i].y + u[j].y) * k;
+      }
+      if (Math.abs(a) < 1) return { x: u.reduce((s, q) => s + q.x, 0) / u.length, y: u.reduce((s, q) => s + q.y, 0) / u.length };
+      return { x: cx / (3 * a), y: cy / (3 * a) };
+    };
+    const umrissSetzen = (nr, el, klasse, aktion) => {
+      const u = pos[nr].umriss;
+      const poly = svgEl('polygon', { points: punkteText(u), class: 'umriss ' + klasse });
+      if (!edit && aktion) { poly.classList.add('klickbar'); poly.addEventListener('click', aktion); }
+      svg.append(poly);
+      const m = mitte(u);
+      el.classList.add('kachel-mini');
+      el.style.left = Math.round(m.x) + 'px'; el.style.top = Math.round(m.y) + 'px';
+      if (edit) umrissZiehbar(el, nr, poly);
+      return el;
+    };
+    const kachelSetzen = (nr, el, klasse, aktion) => {
+      if ((pos[nr].umriss || []).length >= 3) return umrissSetzen(nr, el, klasse, aktion);
+      el.style.left = pos[nr].x + 'px'; el.style.top = pos[nr].y + 'px';
+      if (edit) {
+        ziehbarMachen(el, nr, flaeche);
+        el.append(h('button', { class: 'kachel-umriss', title: `Umriss von Garten ${nr} auf der Karte nachzeichnen`, onpointerdown: (e) => e.stopPropagation(),
+          onclick: (e) => { e.stopPropagation(); S.lageWerkzeug = { art: 'umriss', nr, punkte: [] }; render(); } }, '⬠'));
+      }
+      return el;
+    };
     for (const p of platziert) {
       const nr = p.gartennr.trim();
-      const el = kachel(p, { style: `left:${pos[nr].x}px;top:${pos[nr].y}px` });
-      if (edit) ziehbarMachen(el, nr, flaeche);
-      flaeche.append(el);
+      flaeche.append(kachelSetzen(nr, kachel(p), 'kachel-' + status.get(p.id), () => { S.tab = 'eingabe'; S.eingabeMode = 'schnell'; S.quickId = p.id; render(); }));
     }
-    for (const nr of freie) {
-      const el = kachelFrei(nr);
-      el.style.left = pos[nr].x + 'px'; el.style.top = pos[nr].y + 'px';
-      if (edit) ziehbarMachen(el, nr, flaeche);
+    for (const nr of freie) flaeche.append(kachelSetzen(nr, kachelFrei(nr), 'kachel-frei', vergeben ? () => freienGartenVergeben(nr) : null));
+    // Einrichtungen
+    (K.objekte || []).forEach((o, i) => {
+      const art = LP_OBJEKTE[o.art] || LP_OBJEKTE.sonstiges;
+      const el = h('div', { class: 'lage-obj' + (edit ? ' ziehbar' : ''), style: `left:${o.x}px;top:${o.y}px;background:${art[2]}`, title: o.bez ? `${art[1]}: ${o.bez}` : art[1] }, art[0],
+        o.bez ? h('span', { class: 'lage-obj-bez' }, o.bez) : null);
+      if (edit) ziehenOderKlicken(el, {
+        bewegen: (dx, dy, start) => { o.x = Math.max(0, Math.round(start.x + dx)); o.y = Math.max(0, Math.round(start.y + dy)); el.style.left = o.x + 'px'; el.style.top = o.y + 'px'; },
+        start: () => ({ x: o.x, y: o.y }), ende: () => render(), klick: () => objektDialog(i) });
       flaeche.append(el);
-    }
-    kartenAnsicht = h('div', null, h('div', { class: 'lagekarte-wrap' }, flaeche),
+    });
+    if (wz) werkzeugAnbinden(flaeche, svg, pos);
+    const wrap = h('div', { class: 'lagekarte-wrap', onscroll: (e) => { S.lageScroll = { l: e.target.scrollLeft, t: e.target.scrollTop }; } }, flaeche);
+    if (S.lageScroll) { const sc = S.lageScroll; queueMicrotask(() => { wrap.scrollLeft = sc.l; wrap.scrollTop = sc.t; }); }
+    kartenAnsicht = h('div', null, wrap,
       offen.length || ohneNr.length ? h('div', { style: 'margin-top:14px' },
         h('h3', { class: 'sect' }, edit ? 'Noch nicht auf der Karte – auf die Fläche ziehen' : 'Noch nicht auf der Karte'),
         h('div', { class: 'kachelgrid' }, offen.map((p) => {
@@ -1318,20 +1391,24 @@ function viewLageplan() {
   let leiste = null;
   if (istAdmin && !st.readOnly && list.length) {
     leiste = edit
-      ? h('div', { class: 'banner info lage-leiste' },
-        h('span', null, '✋ Ziehe die Gärten mit der Maus an ihren Platz auf dem Gelände. Gespeichert wird erst mit »Anordnung speichern«.'),
+      ? (S.lageWerkzeug ? werkzeugLeiste() : h('div', null, h('div', { class: 'banner info lage-leiste' },
+        h('span', null, '✋ Ziehe die Gärten an ihren Platz. ⬠ auf einer Kachel zeichnet den Umriss der Parzelle nach. Gespeichert wird erst mit »Anordnung speichern«.'),
         h('div', { class: 'spacer' }),
         h('button', { class: 'btn small', title: 'Einen Garten ohne Pächter auf die Karte setzen, z. B. nach einer Kündigung', onclick: freienGartenHinzufuegen }, '+ Freier Garten'), ' ',
-        h('button', { class: 'btn small', onclick: () => { S.lageEntwurf = null; render(); } }, 'Abbrechen'), ' ',
+        h('button', { class: 'btn small', onclick: () => { S.lageEntwurf = null; S.lageKarteEntwurf = null; render(); } }, 'Abbrechen'), ' ',
         hatKarte ? h('button', { class: 'btn small danger', onclick: async () => {
-          if (!(await confirmBox('Die Anordnung löschen und die Gärten wieder als Raster nach Nummer zeigen?', 'Zurück zum Raster', true))) return;
-          try { await api('PUT', '/api/admin/lageplan', { positionen: {} }); S.lageEntwurf = null; toast('Lageplan zurückgesetzt', 'ok'); await reload(); } catch (e) { handleErr(e); }
+          if (!(await confirmBox('Die Anordnung und alle Umrisse löschen und die Gärten wieder als Raster nach Nummer zeigen? Hintergrund, Leitungen und Einrichtungen bleiben.', 'Zurück zum Raster', true))) return;
+          try { await api('PUT', '/api/admin/lageplan', { positionen: {} }); S.lageEntwurf = null; S.lageKarteEntwurf = null; toast('Lageplan zurückgesetzt', 'ok'); await reload(); } catch (e) { handleErr(e); }
         } }, 'Zurück zum Raster') : null, ' ',
         h('button', { class: 'btn small primary', onclick: async () => {
-          try { await api('PUT', '/api/admin/lageplan', { positionen: S.lageEntwurf }); S.lageEntwurf = null; toast('Anordnung gespeichert', 'ok'); await reload(); } catch (e) { handleErr(e); }
-        } }, 'Anordnung speichern'))
-      : h('button', { class: 'btn', onclick: () => { S.lageEntwurf = startEntwurf(mitNr, gespeichert); render(); } },
-        h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, icon('karte', 18), hatKarte ? 'Karte bearbeiten' : 'Gärten wie auf dem Gelände anordnen'));
+          try {
+            await api('PUT', '/api/admin/lageplan', { positionen: S.lageEntwurf, karte: S.lageKarteEntwurf });
+            S.lageEntwurf = null; S.lageKarteEntwurf = null; toast('Anordnung gespeichert', 'ok'); await reload();
+          } catch (e) { handleErr(e); }
+        } }, 'Anordnung speichern')),
+      werkzeugKasten()))
+      : h('button', { class: 'btn', onclick: () => { S.lageEntwurf = startEntwurf(mitNr, gespeichert); S.lageKarteEntwurf = startKarteEntwurf(); S.lageWerkzeug = null; render(); } },
+        h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, icon('karte', 18), hatKarte || hatHintergrund ? 'Karte bearbeiten' : 'Gärten wie auf dem Gelände anordnen'));
   }
 
   const druck = list.length && !edit ? h('button', { class: 'btn', title: 'Lageplan als Aushang zum Ausdrucken (ohne Abrechnungsstand)', onclick: () => lageplanDrucken(istAdmin) },
@@ -1425,11 +1502,271 @@ async function lageplanDrucken(istAdmin) {
 // Entwurf zum Anordnen: gespeicherte Positionen übernehmen; gibt es noch keine, alle Gärten als Raster vorlegen.
 function startEntwurf(mitNr, gespeichert) {
   const e = {};
-  for (const [k, v] of Object.entries(gespeichert)) e[k] = { x: v.x, y: v.y };
+  for (const [k, v] of Object.entries(gespeichert)) e[k] = { x: v.x, y: v.y, umriss: (v.umriss || []).map((u) => ({ x: u.x, y: u.y })) };
   if (!Object.keys(e).length) {
     mitNr.forEach((p, i) => { e[p.gartennr.trim()] = { x: 20 + (i % 8) * (LP_W + 20), y: 20 + Math.floor(i / 8) * (LP_H + 30) }; });
   }
   return e;
+}
+
+// ---- Karte unter dem Lageplan: Hintergrundbild, Umrisse, Leitungen und Einrichtungen
+// Kürzel, Name, Farbe (wie objektArten/linienArten in lagekarte.go)
+const LP_OBJEKTE = {
+  wasserzaehler: ['W', 'Wasserzähler', '#1d6ec4'], absperr: ['A', 'Absperrhahn', '#0e468c'], schacht: ['S', 'Schacht', '#6e6e6e'],
+  strom: ['E', 'Stromverteiler', '#d68c00'], tor: ['T', 'Tor / Eingang', '#7d5028'], vereinsheim: ['V', 'Vereinsheim', '#2f6f3e'],
+  kompost: ['K', 'Kompost / Container', '#5f7828'], parkplatz: ['P', 'Parkplatz', '#3c3ca0'], sonstiges: ['•', 'Sonstiges', '#963c78'],
+};
+const LP_LINIEN = { wasser: ['Wasserleitung', '#1d6ec4', ''], strom: ['Stromleitung', '#d68c00', ''], abwasser: ['Abwasser', '#785028', '9 5'], weg: ['Weg', '#8a8a8a', '9 5'] };
+
+function startKarteEntwurf() {
+  const kb = S.state.lageKarte || {};
+  return { massstab: kb.massstab || 1, massstabStart: kb.massstab || 1, deckkraft: kb.deckkraft || 0.85, quelle: kb.quelle || '',
+    objekte: (kb.objekte || []).map((o) => ({ ...o })), leitungen: (kb.leitungen || []).map((l) => ({ ...l, punkte: l.punkte.map((u) => ({ ...u })) })) };
+}
+
+// Ziehen mit der Maus; ein Klick ohne Bewegung ruft klick auf.
+function ziehenOderKlicken(el, o) {
+  el.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0 || ev.target.closest('button')) return;
+    ev.preventDefault(); ev.stopPropagation();
+    const sx = ev.clientX, sy = ev.clientY, start = o.start();
+    let bewegt = false;
+    el.setPointerCapture(ev.pointerId);
+    const mv = (e) => {
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (!bewegt && Math.hypot(dx, dy) < 4) return;
+      bewegt = true; el.classList.add('zieht');
+      o.bewegen(dx, dy, start);
+    };
+    const up = (e) => {
+      el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+      el.classList.remove('zieht');
+      if (bewegt) o.ende(); else if (e.type === 'pointerup') o.klick();
+    };
+    el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  });
+}
+
+// Garten mit Umriss: das Schild in der Mitte verschiebt die ganze Fläche.
+function umrissZiehbar(el, nr, poly) {
+  let orig;
+  ziehenOderKlicken(el, {
+    start: () => { orig = S.lageEntwurf[nr].umriss.map((u) => ({ ...u })); return { x: parseFloat(el.style.left), y: parseFloat(el.style.top) }; },
+    bewegen: (dx, dy, p0) => {
+      dx = Math.round(Math.max(dx, -Math.min(...orig.map((u) => u.x)))); dy = Math.round(Math.max(dy, -Math.min(...orig.map((u) => u.y))));
+      const u = orig.map((q) => ({ x: q.x + dx, y: q.y + dy }));
+      S.lageEntwurf[nr] = { x: Math.min(...u.map((q) => q.x)), y: Math.min(...u.map((q) => q.y)), umriss: u };
+      poly.setAttribute('points', u.map((q) => `${q.x},${q.y}`).join(' '));
+      el.style.left = (p0.x + dx) + 'px'; el.style.top = (p0.y + dy) + 'px';
+    },
+    ende: () => render(),
+    klick: () => umrissMenue(nr),
+  });
+}
+
+async function umrissMenue(nr) {
+  const w = await modal(`Garten ${nr}`, h('p', null, 'Der Garten ist als Fläche eingezeichnet. Zum Verschieben das Schild mit der Nummer ziehen.'),
+    [{ label: 'Abbrechen', value: '' }, { label: 'Wieder als Kachel', value: 'kachel' }, { label: 'Umriss neu zeichnen', cls: 'primary', value: 'neu' }]);
+  if (w === 'kachel') { const q = S.lageEntwurf[nr]; S.lageEntwurf[nr] = { x: q.x, y: q.y }; render(); }
+  if (w === 'neu') { S.lageWerkzeug = { art: 'umriss', nr, punkte: [] }; render(); }
+}
+
+// Zeichenwerkzeug auf der Fläche: Klicks setzen Einrichtungen oder Punkte einer Linie bzw. eines Umrisses.
+// Ecken vorhandener Umrisse rasten ein, damit benachbarte Parzellen lückenlos aneinanderliegen.
+function werkzeugAnbinden(flaeche, svg, pos) {
+  const wz = S.lageWerkzeug;
+  const linie = wz.art === 'linie' ? LP_LINIEN[wz.typ] : null;
+  const vorschau = svgEl(wz.art === 'umriss' ? 'polygon' : 'polyline', { class: 'lage-vorschau', stroke: linie ? linie[1] : null });
+  const ecken = svgEl('g');
+  svg.append(vorschau, ecken);
+  const zeichne = () => {
+    vorschau.setAttribute('points', wz.punkte.map((u) => `${u.x},${u.y}`).join(' '));
+    ecken.replaceChildren(...wz.punkte.map((u, i) => svgEl('circle', { cx: u.x, cy: u.y, r: i === 0 ? 6 : 4, class: 'lage-vorschau-punkt' })));
+  };
+  S.lageVorschau = zeichne;
+  if (wz.punkte) zeichne();
+  const fang = [];
+  for (const [nr, q] of Object.entries(pos)) if (wz.art !== 'umriss' || nr !== wz.nr) for (const u of q.umriss || []) fang.push(u);
+  flaeche.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0 || ev.target.closest('button')) return;
+    ev.preventDefault();
+    const f = flaeche.getBoundingClientRect();
+    let x = Math.max(0, Math.round(ev.clientX - f.left)), y = Math.max(0, Math.round(ev.clientY - f.top));
+    let best = 9;
+    for (const u of fang) { const d = Math.hypot(u.x - x, u.y - y); if (d < best) { best = d; x = u.x; y = u.y; } }
+    if (wz.art === 'objekt') { S.lageKarteEntwurf.objekte.push({ art: wz.typ, x, y, bez: '' }); render(); return; }
+    if (wz.art === 'umriss' && wz.punkte.length >= 3 && Math.hypot(wz.punkte[0].x - x, wz.punkte[0].y - y) < 10) { werkzeugFertig(); return; }
+    wz.punkte.push({ x, y });
+    zeichne();
+  });
+  flaeche.addEventListener('dblclick', (ev) => { ev.preventDefault(); werkzeugFertig(); });
+}
+
+function werkzeugFertig() {
+  const wz = S.lageWerkzeug;
+  if (!wz) return;
+  if (wz.art === 'objekt') { S.lageWerkzeug = null; render(); return; }
+  const pts = wz.punkte.filter((u, i, a) => i === 0 || Math.hypot(u.x - a[i - 1].x, u.y - a[i - 1].y) > 3);
+  if (wz.art === 'umriss') {
+    if (pts.length < 3) { toast('Ein Umriss braucht mindestens 3 Ecken.', 'err'); return; }
+    S.lageEntwurf[wz.nr] = { x: Math.min(...pts.map((u) => u.x)), y: Math.min(...pts.map((u) => u.y)), umriss: pts };
+  } else {
+    if (pts.length < 2) { toast('Eine Linie braucht mindestens 2 Punkte.', 'err'); return; }
+    S.lageKarteEntwurf.leitungen.push({ art: wz.typ, punkte: pts, bez: '' });
+  }
+  S.lageWerkzeug = null;
+  render();
+}
+
+function werkzeugLeiste() {
+  const wz = S.lageWerkzeug;
+  const text = wz.art === 'objekt' ? `Klicke auf die Karte, um »${LP_OBJEKTE[wz.typ][1]}« zu setzen. Mehrere nacheinander gehen auch.`
+    : wz.art === 'linie' ? `${LP_LINIEN[wz.typ][0]}: Punkt für Punkt auf die Karte klicken. Mit Doppelklick oder »Fertig« abschließen.`
+      : `Umriss von Garten ${wz.nr}: die Ecken der Parzelle nacheinander anklicken. Ecken benachbarter Umrisse rasten ein. Klick auf die erste Ecke, Doppelklick oder »Fertig« schließt den Umriss.`;
+  return h('div', { class: 'banner info lage-leiste' }, h('span', null, '✏️ ' + text), h('div', { class: 'spacer' }),
+    wz.art !== 'objekt' ? h('button', { class: 'btn small', onclick: () => { wz.punkte.pop(); if (S.lageVorschau) S.lageVorschau(); } }, 'Letzten Punkt zurück') : null, ' ',
+    wz.art !== 'objekt' ? h('button', { class: 'btn small', onclick: () => { S.lageWerkzeug = null; render(); } }, 'Abbrechen') : null, ' ',
+    h('button', { class: 'btn small primary', onclick: werkzeugFertig }, 'Fertig'));
+}
+
+function werkzeugKasten() {
+  const kb = S.state.lageKarte || {}, K = S.lageKarteEntwurf;
+  const bildEl = () => document.querySelector('.lagekarte-bild');
+  const regler = (label, min, max, step, wert, setze, anzeige) => {
+    const out = h('span', { class: 'lage-regler-wert' }, anzeige(wert));
+    return h('label', { class: 'lage-regler' }, label,
+      h('input', { type: 'range', min, max, step, value: wert,
+        oninput: (e) => { const v = Number(e.target.value); setze(v); out.textContent = anzeige(v); },
+        onchange: () => render() }), out);
+  };
+  const stufe = Math.log2((K.massstab || 1) / (K.massstabStart || 1));
+  return h('div', { class: 'lage-werkzeuge' },
+    h('button', { class: 'btn small', onclick: lageHintergrundDialog }, h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, icon('karte', 16),
+      kb.bild ? 'Hintergrund ändern' : 'Luftbild oder Plan als Hintergrund')),
+    kb.bild ? regler('Bildgröße', -2, 2, 0.05, stufe, (v) => {
+      K.massstab = Math.round((K.massstabStart || 1) * Math.pow(2, v) * 10000) / 10000;
+      const b = bildEl(); if (b) { b.style.width = Math.round(kb.bildBreite * K.massstab) + 'px'; b.style.height = Math.round(kb.bildHoehe * K.massstab) + 'px'; }
+    }, (v) => Math.round(Math.pow(2, v) * 100) + ' %') : null,
+    kb.bild ? regler('Deckkraft', 0.1, 1, 0.05, K.deckkraft, (v) => { K.deckkraft = v; const b = bildEl(); if (b) b.style.opacity = v; }, (v) => Math.round(v * 100) + ' %') : null,
+    h('select', { class: 'lage-auswahl', onchange: (e) => { if (e.target.value) { S.lageWerkzeug = { art: 'objekt', typ: e.target.value }; render(); } } },
+      h('option', { value: '' }, '+ Einrichtung setzen …'), Object.entries(LP_OBJEKTE).map(([k, v]) => h('option', { value: k }, `${v[0]} – ${v[1]}`))),
+    h('select', { class: 'lage-auswahl', onchange: (e) => { if (e.target.value) { S.lageWerkzeug = { art: 'linie', typ: e.target.value, punkte: [] }; render(); } } },
+      h('option', { value: '' }, '+ Leitung oder Weg zeichnen …'), Object.entries(LP_LINIEN).map(([k, v]) => h('option', { value: k }, v[0]))));
+}
+
+async function objektDialog(i) {
+  const o = S.lageKarteEntwurf.objekte[i];
+  const art = h('select', null, Object.entries(LP_OBJEKTE).map(([k, v]) => h('option', { value: k, selected: k === o.art }, `${v[0]} – ${v[1]}`)));
+  const bez = h('input', { type: 'text', maxlength: 60, value: o.bez || '', placeholder: 'z. B. Hauptzähler, Hahn Weg B' });
+  const w = await modal('Einrichtung', h('div', { class: 'form' },
+    h('div', { class: 'field' }, h('label', null, 'Art'), art),
+    h('div', { class: 'field' }, h('label', null, 'Bezeichnung'), bez, h('span', { class: 'fhint' }, 'Steht neben dem Zeichen auf der Karte und im Ausdruck.'))),
+  [{ label: 'Entfernen', cls: 'danger', value: 'weg' }, { label: 'Abbrechen', value: '' }, { label: 'Übernehmen', cls: 'primary', value: 'ok' }]);
+  if (w === 'weg') S.lageKarteEntwurf.objekte.splice(i, 1);
+  if (w === 'ok') { o.art = art.value; o.bez = bez.value.trim(); }
+  if (w) render();
+}
+
+async function leitungDialog(i) {
+  const l = S.lageKarteEntwurf.leitungen[i];
+  const art = h('select', null, Object.entries(LP_LINIEN).map(([k, v]) => h('option', { value: k, selected: k === l.art }, v[0])));
+  const bez = h('input', { type: 'text', maxlength: 60, value: l.bez || '', placeholder: 'z. B. Hauptleitung, 1 Zoll, 2019 erneuert' });
+  const w = await modal('Leitung / Weg', h('div', { class: 'form' },
+    h('div', { class: 'field' }, h('label', null, 'Art'), art),
+    h('div', { class: 'field' }, h('label', null, 'Bezeichnung'), bez, h('span', { class: 'fhint' }, 'Erscheint beim Darüberfahren mit der Maus.'))),
+  [{ label: 'Entfernen', cls: 'danger', value: 'weg' }, { label: 'Abbrechen', value: '' }, { label: 'Übernehmen', cls: 'primary', value: 'ok' }]);
+  if (w === 'weg') S.lageKarteEntwurf.leitungen.splice(i, 1);
+  if (w === 'ok') { l.art = art.value; l.bez = bez.value.trim(); }
+  if (w) render();
+}
+
+// Hintergrund: amtliches Luftbild (einmalig geladen) oder eigenes Bild.
+async function lageHintergrundDialog() {
+  const kb = S.state.lageKarte || {};
+  let dienste = [];
+  try { dienste = await api('GET', '/api/admin/lageplan/dienste'); } catch (e) { handleErr(e); return; }
+  const alt = kb.luftbild || {};
+  let ort = alt.lat ? { lat: alt.lat, lon: alt.lon, name: 'bisheriger Ausschnitt' } : null;
+  const zahl = (v) => { const el = h('input', { type: 'text', value: String(v), style: 'width:6em' }); el.setAttribute('inputmode', 'numeric'); return el; };
+  const suche = h('input', { type: 'text', placeholder: 'Anschrift der Anlage oder Koordinaten', style: 'flex:1;min-width:14em' });
+  const treffer = h('select', { style: 'display:none', onchange: () => { ort = gefunden[Number(treffer.value)]; if (ort.land) land.value = ort.land; ortInfo(); } });
+  let gefunden = [];
+  const info = h('span', { class: 'fhint' });
+  const ortInfo = () => { info.textContent = ort ? `Mitte: ${ort.lat.toFixed(5)}, ${ort.lon.toFixed(5)} (${ort.name})` : 'Noch kein Ort gewählt.'; };
+  ortInfo();
+  const land = h('select', { onchange: () => { eigen.style.display = land.value === 'eigen' ? '' : 'none'; } },
+    h('option', { value: '' }, 'Bitte wählen …'), dienste.map((d) => h('option', { value: d.kurz, selected: d.kurz === alt.land }, d.land)),
+    h('option', { value: 'eigen', selected: alt.land === 'eigen' }, 'Anderer Kartendienst (WMS) …'));
+  const wmsUrl = h('input', { type: 'text', value: alt.url || '', placeholder: 'https://…' });
+  const wmsLayer = h('input', { type: 'text', value: alt.layer || '', placeholder: 'Name der Ebene' });
+  const eigen = h('div', { class: 'form', style: alt.land === 'eigen' ? '' : 'display:none' },
+    h('div', { class: 'field' }, h('label', null, 'Adresse des Dienstes'), wmsUrl),
+    h('div', { class: 'field' }, h('label', null, 'Ebene (Layer)'), wmsLayer));
+  const breite = zahl(alt.breite || 400), hoehe = zahl(alt.hoehe || 300);
+  const suchKnopf = h('button', { class: 'btn', onclick: async () => {
+    if (!suche.value.trim()) return;
+    suchKnopf.disabled = true;
+    try {
+      gefunden = await api('GET', `/api/admin/lageplan/ortssuche?q=${encodeURIComponent(suche.value.trim())}`);
+      if (!gefunden.length) { toast('Nichts gefunden. Versuch es mit Straße und Ort oder mit Koordinaten.', 'err'); return; }
+      treffer.replaceChildren(...gefunden.map((t, i) => h('option', { value: i }, t.name)));
+      treffer.style.display = gefunden.length > 1 ? '' : 'none';
+      ort = gefunden[0];
+      if (ort.land) land.value = ort.land;
+      eigen.style.display = land.value === 'eigen' ? '' : 'none';
+      ortInfo();
+    } catch (e) { handleErr(e); } finally { suchKnopf.disabled = false; }
+  } }, 'Suchen');
+  suche.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); suchKnopf.click(); } });
+  let fertig = null;
+  const nachLaden = async (k) => {
+    if (S.lageKarteEntwurf) Object.assign(S.lageKarteEntwurf, { massstab: k.massstab, massstabStart: k.massstab, deckkraft: k.deckkraft, quelle: k.quelle || '' });
+    await reload();
+    if (fertig) fertig();
+  };
+  const ladeKnopf = h('button', { class: 'btn primary', onclick: async () => {
+    if (!ort) { toast('Bitte zuerst den Ort der Anlage suchen.', 'err'); return; }
+    if (!land.value) { toast('Bitte das Bundesland wählen.', 'err'); return; }
+    ladeKnopf.disabled = true; ladeKnopf.textContent = 'Wird geladen …';
+    try {
+      const k = await api('POST', '/api/admin/lageplan/luftbild', { land: land.value, lat: ort.lat, lon: ort.lon, breite: parseNum(breite.value), hoehe: parseNum(hoehe.value), url: wmsUrl.value, layer: wmsLayer.value });
+      toast('Luftbild geladen und gespeichert', 'ok');
+      await nachLaden(k);
+    } catch (e) { handleErr(e); } finally { ladeKnopf.disabled = false; ladeKnopf.textContent = 'Luftbild laden'; }
+  } }, 'Luftbild laden');
+  const datei = h('input', { type: 'file', accept: '.png,.jpg,.jpeg', style: 'display:none', onchange: async () => {
+    if (!datei.files.length) return;
+    const fd = new FormData(); fd.append('file', datei.files[0]);
+    try { const k = await api('POST', '/api/admin/lageplan/bild', fd, true); toast('Bild gespeichert', 'ok'); await nachLaden(k); } catch (e) { handleErr(e); }
+  } });
+  const quelle = h('input', { type: 'text', maxlength: 200, value: (S.lageKarteEntwurf && S.lageKarteEntwurf.quelle) || kb.quelle || '', placeholder: 'z. B. Plan: Vorstand 2024',
+    oninput: () => { if (S.lageKarteEntwurf) S.lageKarteEntwurf.quelle = quelle.value; } });
+  const body = h('div', { class: 'lage-hg' },
+    h('h4', null, 'Amtliches Luftbild (kostenlos)'),
+    h('p', { class: 'hint' }, 'Die Vermessungsämter der Länder stellen Luftbilder frei zur Verfügung. Das Programm lädt den Ausschnitt einmal herunter und speichert ihn – danach geht alles ohne Internet. Der vorgeschriebene Quellenvermerk steht automatisch auf jedem Ausdruck.'),
+    h('div', { class: 'form' },
+      h('div', { class: 'field wide' }, h('label', null, 'Ort der Anlage (Mitte des Ausschnitts)'),
+        h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, suche, suchKnopf), treffer, info,
+        h('span', { class: 'fhint' }, 'Anschrift (z. B. »Gartenweg 1, Musterstadt«) oder Koordinaten. Tipp: In Google Maps mit der rechten Maustaste auf die Anlage klicken, dann auf die Zahlen oben im Menü – schon sind die Koordinaten kopiert.')),
+      h('div', { class: 'field' }, h('label', null, 'Bundesland'), land),
+      h('div', { class: 'field' }, h('label', null, 'Ausschnitt in Metern'), h('div', null, breite, ' breit × ', hoehe, ' hoch'))),
+    eigen,
+    h('div', { style: 'margin:10px 0 18px' }, ladeKnopf),
+    h('h4', null, 'Oder ein eigenes Bild'),
+    h('p', { class: 'hint' }, 'Zum Beispiel ein Foto oder Scan des Vereinsplans oder ein Bildschirmfoto einer Karte (PNG oder JPG). Achte bei fremden Karten auf die Nutzungsrechte.'),
+    h('button', { class: 'btn', onclick: () => datei.click() }, 'Bild wählen …'), datei,
+    kb.bild ? h('div', { style: 'margin-top:18px' },
+      h('h4', null, 'Quellenvermerk'),
+      h('div', { class: 'form' }, h('div', { class: 'field wide' }, quelle,
+        h('span', { class: 'fhint' }, 'Steht klein auf dem Plan und im Ausdruck. Bei amtlichen Luftbildern ist er vorgeschrieben – bitte nicht löschen. Wird mit »Anordnung speichern« übernommen.'))),
+      h('button', { class: 'btn danger', style: 'margin-top:10px', onclick: async () => {
+        if (!(await confirmBox('Das Hintergrundbild entfernen? Gärten, Umrisse, Leitungen und Einrichtungen bleiben.', 'Entfernen', true))) return;
+        try { const k = await api('DELETE', '/api/admin/lageplan/bild'); toast('Hintergrund entfernt', 'ok'); await nachLaden(k); } catch (e) { handleErr(e); }
+      } }, 'Hintergrund entfernen')) : null);
+  const p = breiterDialog('Hintergrund des Lageplans', body, [{ label: 'Schließen', value: true }]);
+  const dlg = document.querySelector('dialog:last-of-type');
+  fertig = () => { if (dlg && dlg.open) dlg.dispatchEvent(new Event('cancel')); };
+  await p;
 }
 
 // Kachel per Maus (oder Finger) verschieben; Position rastet auf 10 px ein. Aus der Liste »noch nicht auf der
@@ -1995,6 +2332,303 @@ function adminSpenden() {
     h('p', { class: 'hint', style: 'margin-top:14px' }, 'Gut zu wissen: Mitgliedsbeiträge an Kleingartenvereine sind steuerlich nicht abziehbar, deshalb werden hier nur Spenden bestätigt. Bis 300 € je Spende genügt dem Spender meist der Kontoauszug als Nachweis. Ein Doppel jeder Bestätigung muss der Verein aufbewahren. Im Zweifel bitte mit dem Steuerberater klären.'));
 }
 
+// ------------------------------------------------------------------ Rundschreiben
+
+const RS_VORLAGEN = [
+  ['Wasser wird angestellt', 'Wasser wird angestellt – bitte Leitungen prüfen', 'Liebe Gartenfreundinnen und Gartenfreunde,\n\nam … stellen wir das Wasser in der Anlage wieder an. Bitte schließt vorher die Entleerungshähne in euren Gärten und prüft die Leitungen auf Frostschäden.\n\nWer beim Anstellen helfen möchte, ist um … Uhr am Haupttor herzlich willkommen.'],
+  ['Wasser wird abgestellt', 'Wasser wird abgestellt', 'Liebe Gartenfreundinnen und Gartenfreunde,\n\nam … wird das Wasser in der Anlage abgestellt. Bitte entleert danach eure Leitungen und lasst die Hähne geöffnet, damit über den Winter nichts einfriert.\n\nBitte denkt auch daran, uns bis … euren Zählerstand zu melden.'],
+  ['Arbeitseinsatz', 'Einladung zum Arbeitseinsatz', 'Liebe Gartenfreundinnen und Gartenfreunde,\n\nam … ab … Uhr findet unser nächster Arbeitseinsatz statt. Treffpunkt ist das Vereinsheim. Geplant sind: …\n\nBitte bringt, wenn vorhanden, eigenes Werkzeug mit. Die geleisteten Stunden werden auf die Gemeinschaftsarbeit angerechnet.'],
+  ['Allgemeine Information', '', 'Liebe Gartenfreundinnen und Gartenfreunde,\n\n'],
+];
+
+async function loadRundschreiben() {
+  if (S.rsLoading) return;
+  S.rsLoading = true;
+  try { S.rundschreiben = await api('GET', '/api/admin/rundschreiben'); } catch (e) { handleErr(e); S.rundschreiben = []; }
+  S.rsLoading = false;
+  render();
+}
+
+function adminRundschreiben() {
+  if (S.rundschreiben == null) { loadRundschreiben(); return h('p', { class: 'hint' }, 'Wird geladen …'); }
+  const l = S.rundschreiben;
+  const neu = async (vorlage) => { if (await rundschreibenDialog(vorlage || null)) { S.rundschreiben = null; render(); } };
+  const loeschen = async (x) => {
+    if (!(await confirmBox(`Rundschreiben »${x.betreff}« löschen?`, 'Löschen', true))) return;
+    try { await api('DELETE', `/api/admin/rundschreiben/${x.id}`); S.rundschreiben = null; render(); } catch (e) { handleErr(e); }
+  };
+  const briefe = (x, alle) => pdfDrucken({ url: `/api/admin/rundschreiben/${x.id}/briefe${alle ? '?alle=1' : ''}`, oeffnenUrl: `/api/admin/rundschreiben/${x.id}/briefe/oeffnen${alle ? '?alle=1' : ''}`,
+    titel: 'Rundschreiben', meldung: () => 'Die Briefe wurden im PDF-Programm geöffnet – dort drucken.' }).then(() => { S.rundschreiben = null; render(); });
+  const aushang = (x) => pdfDrucken({ url: `/api/admin/rundschreiben/${x.id}/aushang`, oeffnenUrl: `/api/admin/rundschreiben/${x.id}/aushang/oeffnen`,
+    titel: 'Aushang', meldung: () => 'Der Aushang wurde im PDF-Programm geöffnet – dort drucken.' });
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Ein Brief des Vorstands an alle Pächter oder an eine Auswahl. Wer »Versand per E-Mail« und eine Adresse hat, bekommt ihn über dein E-Mail-Programm (alle Adressen unsichtbar im Bcc), alle anderen als Brief zum Ausdrucken – mit Anschrift für den Fensterumschlag. Dazu gibt es den Text als Aushang für den Schaukasten.'),
+    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => neu() }, '+ Neues Rundschreiben')),
+    l.length ? h('div', { class: 'rs-liste' }, l.map((x) => h('div', { class: 'card rs-karte' },
+      h('div', { class: 'rs-kopf' },
+        h('div', null, h('b', null, x.betreff), h('div', { class: 'hint' }, `${deDate(x.datum)} · ${x.an === 'auswahl' ? 'an ausgewählte Pächter' : 'an alle Pächter'} (${x.empfaenger}): ${x.perMail} per E-Mail, ${x.perPost} per Post`)),
+        x.verschickt ? h('span', { class: 'badge ok' }, `verschickt ${deDate(x.verschickt)}`) : h('span', { class: 'badge warn' }, 'Entwurf')),
+      h('p', { class: 'rs-text' }, x.text.length > 260 ? x.text.slice(0, 260) + ' …' : x.text),
+      h('div', { class: 'rs-knoepfe' },
+        h('button', { class: 'btn small primary', disabled: !x.perMail, onclick: () => rundschreibenMail(x) }, `E-Mail an ${x.perMail}`), ' ',
+        h('button', { class: 'btn small', disabled: !x.perPost, onclick: () => briefe(x, false) }, `Briefe drucken (${x.perPost})`), ' ',
+        h('button', { class: 'btn small', onclick: () => aushang(x) }, 'Aushang'), ' ',
+        h('button', { class: 'btn small', onclick: async () => { if (await rundschreibenDialog(x)) { S.rundschreiben = null; render(); } } }, 'Bearbeiten'), ' ',
+        mehrMenue([
+          { label: `Briefe an alle drucken (${x.empfaenger})`, aktion: () => briefe(x, true) },
+          { label: 'Als Vorlage für ein neues', aktion: () => neu({ betreff: x.betreff, text: x.text, an: x.an, auswahl: x.auswahl }) },
+          { label: 'Löschen', gefahr: true, aktion: () => loeschen(x) }])))))
+      : h('div', { class: 'card' }, leer('brief', 'Noch keine Rundschreiben', 'Zum Beispiel: Wasser wird angestellt, Einladung zum Arbeitseinsatz, neue Gartenordnung. Vorlagen helfen beim Start.', '+ Neues Rundschreiben', () => neu())));
+}
+
+// Dialog zum Schreiben. x: gespeichertes Rundschreiben (mit id) oder Vorlage (ohne id) oder null.
+async function rundschreibenDialog(x) {
+  const st = S.state;
+  const aktiv = st.paechter.filter((p) => !p.ausgeschiedenAm).sort((a, b) => (a.gartennr || a.mitgliedsnr).localeCompare(b.gartennr || b.mitgliedsnr, 'de', { numeric: true }));
+  const f = {
+    datum: h('input', { type: 'date', value: (x && x.id && x.datum) || todayIso() }),
+    betreff: h('input', { type: 'text', maxlength: 150, value: (x && x.betreff) || '' }),
+    text: h('textarea', { rows: 13, maxlength: 12000, class: 'rs-eingabe' }),
+  };
+  f.text.value = (x && x.text) || 'Liebe Gartenfreundinnen und Gartenfreunde,\n\n';
+  let an = (x && x.an) || 'alle';
+  const gewaehlt = new Set((x && x.auswahl) || []);
+  const zaehler = h('span', { class: 'hint' });
+  const zaehlen = () => { zaehler.textContent = `${gewaehlt.size} ausgewählt`; };
+  const kaesten = aktiv.map((p) => {
+    const cb = h('input', { type: 'checkbox', checked: gewaehlt.has(p.id), onchange: (e) => { if (e.target.checked) gewaehlt.add(p.id); else gewaehlt.delete(p.id); zaehlen(); } });
+    const mail = p.versand === 'Emailsendung' && p.email;
+    return { p, el: h('label', { class: 'rs-wahl' }, cb, ` ${p.gartennr ? 'Garten ' + p.gartennr + ' – ' : ''}${p.name} `, h('span', { class: 'hint' }, mail ? '✉ E-Mail' : 'Post')), cb };
+  });
+  const filter = h('input', { type: 'search', placeholder: 'Name oder Garten suchen', oninput: () => {
+    const q = filter.value.trim().toLowerCase();
+    for (const k of kaesten) k.el.style.display = !q || `${k.p.name} ${k.p.gartennr}`.toLowerCase().includes(q) ? '' : 'none';
+  } });
+  const alleSetzen = (wert, nur) => () => { for (const k of kaesten) if (k.el.style.display !== 'none' && (!nur || nur(k.p))) { k.cb.checked = wert; if (wert) gewaehlt.add(k.p.id); else gewaehlt.delete(k.p.id); } zaehlen(); };
+  const auswahlBox = h('div', { class: 'rs-auswahl', style: an === 'auswahl' ? '' : 'display:none' },
+    h('div', { class: 'toolbar' }, filter, h('button', { class: 'btn small', type: 'button', onclick: alleSetzen(true) }, 'Alle'), h('button', { class: 'btn small', type: 'button', onclick: alleSetzen(false) }, 'Keine'), zaehler),
+    h('div', { class: 'rs-wahlliste' }, kaesten.map((k) => k.el)));
+  zaehlen();
+  const radio = (wert, label) => h('label', { class: 'rs-an' }, h('input', { type: 'radio', name: 'rs-an', checked: an === wert, onchange: () => { an = wert; auswahlBox.style.display = wert === 'auswahl' ? '' : 'none'; } }), ' ', label);
+  const vorlagen = h('select', { onchange: () => {
+    const v = RS_VORLAGEN[Number(vorlagen.value)];
+    if (!v) return;
+    if (v[1]) f.betreff.value = v[1];
+    f.text.value = v[2];
+    vorlagen.value = '';
+  } }, h('option', { value: '' }, 'Vorlage einsetzen …'), RS_VORLAGEN.map((v, i) => h('option', { value: i }, v[0])));
+  const fld = (label, el, hint) => h('div', { class: 'field wide' }, h('label', null, label), el, hint ? h('span', { class: 'fhint' }, hint) : null);
+  return breiterDialog(x && x.id ? 'Rundschreiben bearbeiten' : 'Neues Rundschreiben', h('div', { class: 'form' },
+    h('div', { class: 'field' }, h('label', null, 'Datum'), f.datum),
+    h('div', { class: 'field' }, h('label', null, 'Vorlagen'), vorlagen),
+    fld('Betreff *', f.betreff),
+    fld('Text *', f.text, 'Anrede und Text schreiben; Gruß und »Der Vorstand« setzt das Programm darunter. Leerzeilen trennen Absätze.'),
+    h('div', { class: 'field wide' }, h('label', null, 'Empfänger'), h('div', null, radio('alle', 'alle Pächter'), radio('auswahl', 'nur ausgewählte'))),
+    h('div', { class: 'field wide' }, auswahlBox)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    if (an === 'auswahl' && !gewaehlt.size) { toast('Bitte mindestens einen Empfänger auswählen.', 'err'); return false; }
+    try {
+      await api('POST', '/api/admin/rundschreiben', { id: x && x.id ? x.id : '', datum: f.datum.value, betreff: f.betreff.value, text: f.text.value, an, auswahl: an === 'auswahl' ? [...gewaehlt] : [] });
+      toast('Rundschreiben gespeichert', 'ok');
+    } catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+// E-Mail: öffnet das E-Mail-Programm, bei vielen Empfängern in mehreren Paketen. Passt der Text nicht in den
+// Link, liegt er in der Zwischenablage und wird im E-Mail-Programm eingefügt.
+async function rundschreibenMail(x) {
+  for (let n = 1; ; n++) {
+    let r;
+    try { r = await api('POST', `/api/admin/rundschreiben/${x.id}/mail?paket=${n}`); } catch (e) { handleErr(e); break; }
+    let kopiert = r.mitText;
+    if (!r.mitText) { try { await navigator.clipboard.writeText(r.text); kopiert = true; } catch { kopiert = false; } }
+    const textFeld = h('textarea', { rows: 8, readonly: true, class: 'rs-eingabe' }); textFeld.value = r.text;
+    const weiter = n < r.pakete;
+    const ok = await modal(r.pakete > 1 ? `E-Mail ${n} von ${r.pakete} geöffnet` : 'E-Mail geöffnet', h('div', null,
+      h('p', null, `Dein E-Mail-Programm hat eine neue Nachricht an ${r.pakete > 1 ? 'einen Teil der' : 'alle'} ${r.empfaenger} Empfänger geöffnet (Adressen im Bcc). Bitte prüfen und absenden.`),
+      r.mitText ? null : h('div', null,
+        h('p', null, kopiert ? 'Der Text ist zu lang für den direkten Weg und liegt in der Zwischenablage: im E-Mail-Programm in die Nachricht klicken und mit Strg+V einfügen.' : 'Der Text ist zu lang für den direkten Weg. Bitte hier markieren, kopieren und im E-Mail-Programm einfügen:'),
+        kopiert ? null : textFeld),
+      weiter ? h('p', { class: 'hint' }, 'Viele Empfänger passen nicht in eine Nachricht. Nach dem Absenden geht es mit der nächsten weiter.') : null),
+    weiter ? [{ label: 'Abbrechen', value: false }, { label: 'Nächste E-Mail öffnen', cls: 'primary', value: true }] : [{ label: 'Fertig', cls: 'primary', value: false }]);
+    if (!ok || !weiter) break;
+  }
+  S.rundschreiben = null; render();
+}
+
+// ------------------------------------------------------------------ Schlüssel und Geräte
+
+async function loadInventar() {
+  if (S.invLoading) return;
+  S.invLoading = true;
+  try {
+    const [k, g] = await Promise.all([api('GET', '/api/admin/schluessel'), api('GET', '/api/admin/geraete')]);
+    S.inventar = { schluessel: k.schluessel, arten: k.arten, geraete: g };
+  } catch (e) { handleErr(e); S.inventar = { schluessel: [], arten: [], geraete: [] }; }
+  S.invLoading = false;
+  render();
+}
+
+const invNeuLaden = () => { S.inventar = null; render(); };
+
+function adminInventar() {
+  if (S.inventar == null) { loadInventar(); return h('p', { class: 'hint' }, 'Wird geladen …'); }
+  const geraete = S.invSeite === 'geraete';
+  const sub = h('div', { class: 'subtabs' },
+    h('button', { class: geraete ? '' : 'active', onclick: () => { S.invSeite = 'schluessel'; render(); } }, `Schlüssel (${S.inventar.schluessel.length})`),
+    h('button', { class: geraete ? 'active' : '', onclick: () => { S.invSeite = 'geraete'; render(); } }, `Geräte (${S.inventar.geraete.length})`));
+  return h('div', null, sub, geraete ? inventarGeraete() : inventarSchluessel());
+}
+
+function verlaufDialog(titel, verlauf) {
+  const l = [...(verlauf || [])].reverse();
+  return modal(titel, l.length ? h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
+    h('thead', null, h('tr', null, ['Datum', 'Vorgang', 'Wer', 'Notiz'].map((t) => h('th', null, t)))),
+    h('tbody', null, l.map((v) => h('tr', null, h('td', null, deDate(v.datum)), h('td', null, v.aktion), h('td', null, v.name || ''), h('td', { class: 'wrap' }, v.notiz || ''))))))
+    : h('p', { class: 'hint' }, 'Noch keine Vorgänge.'), [{ label: 'Schließen', value: true }]);
+}
+
+// Wer bekommt den Schlüssel / das Gerät: ein Pächter oder jemand anderes (z. B. Vorstand).
+async function empfaengerDialog(titel, url, mitBis) {
+  const st = S.state;
+  const aktiv = st.paechter.filter((p) => !p.ausgeschiedenAm).sort((a, b) => (a.gartennr || a.mitgliedsnr).localeCompare(b.gartennr || b.mitgliedsnr, 'de', { numeric: true }));
+  const wer = h('select', null, h('option', { value: '' }, 'Jemand anderes (Name eintragen) …'), aktiv.map((p) => h('option', { value: p.id }, `${p.gartennr ? 'Garten ' + p.gartennr + ' – ' : ''}${p.name}`)));
+  const name = h('input', { type: 'text', maxlength: 80, placeholder: 'z. B. Vorstand (Vorsitz), Hausmeister' });
+  const nameFeld = h('div', { class: 'field wide' }, h('label', null, 'Name'), name);
+  wer.addEventListener('change', () => { nameFeld.style.display = wer.value ? 'none' : ''; });
+  if (aktiv.length) { wer.value = aktiv[0].id; nameFeld.style.display = 'none'; }
+  const datum = h('input', { type: 'date', value: todayIso() });
+  const bis = h('input', { type: 'date' });
+  const notiz = h('input', { type: 'text', maxlength: 200, placeholder: mitBis ? '' : 'z. B. 20 € Pfand bar erhalten' });
+  return modal(titel, h('div', { class: 'form' },
+    h('div', { class: 'field wide' }, h('label', null, 'An'), wer), nameFeld,
+    h('div', { class: 'field' }, h('label', null, 'Datum'), datum),
+    mitBis ? h('div', { class: 'field' }, h('label', null, 'Zurück bis'), bis) : null,
+    h('div', { class: 'field wide' }, h('label', null, 'Notiz'), notiz)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    try { await api('POST', url, { paechterId: wer.value, name: wer.value ? '' : name.value, datum: datum.value, bis: mitBis ? bis.value : '', notiz: notiz.value }); }
+    catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+async function datumDialog(titel, text, url) {
+  const datum = h('input', { type: 'date', value: todayIso() });
+  const notiz = h('input', { type: 'text', maxlength: 200 });
+  return modal(titel, h('div', { class: 'form' }, text ? h('p', { class: 'field wide' }, text) : null,
+    h('div', { class: 'field' }, h('label', null, 'Datum'), datum), h('div', { class: 'field wide' }, h('label', null, 'Notiz'), notiz)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    try { await api('POST', url, { datum: datum.value, notiz: notiz.value }); } catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+async function schluesselDialog(k) {
+  const arten = S.inventar.arten;
+  const f = {
+    art: h('select', null, arten.map((a) => h('option', { value: a, selected: k ? k.art === a : a === 'Tor' }, a))),
+    nummer: h('input', { type: 'text', maxlength: 30, value: k ? k.nummer : '' }),
+    bez: h('input', { type: 'text', maxlength: 100, value: k ? k.bezeichnung || '' : '', placeholder: 'z. B. Nebentor Parkplatz' }),
+    pfand: h('input', { type: 'text', inputmode: 'decimal', value: k && k.pfand ? numIn(k.pfand) : '' }),
+    notiz: h('input', { type: 'text', maxlength: 500, value: k ? k.notiz || '' : '' }),
+  };
+  const fld = (label, el, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), el);
+  return modal(k ? `Schlüssel ${k.art} ${k.nummer}` : 'Neuer Schlüssel', h('div', { class: 'form' },
+    fld('Art', f.art), fld('Nummer *', f.nummer), fld('Bezeichnung', f.bez, true), fld('Pfand in €', f.pfand), fld('Notiz', f.notiz, true)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    const pfand = f.pfand.value.trim() ? parseNum(f.pfand.value) : 0;
+    if (Number.isNaN(pfand)) { toast('Bitte das Pfand als Zahl eintragen.', 'err'); return false; }
+    try { await api('POST', '/api/admin/schluessel', { id: k ? k.id : '', art: f.art.value, nummer: f.nummer.value, bezeichnung: f.bez.value, pfand, notiz: f.notiz.value }); }
+    catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+function inventarSchluessel() {
+  const l = S.inventar.schluessel;
+  const aus = l.filter((k) => k.inhaberName);
+  const pfand = aus.reduce((a, k) => a + (k.pfand || 0), 0);
+  const nachher = async (p) => { if (await p) invNeuLaden(); };
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Wer hat welchen Schlüssel? Bei Ausgabe und Rückgabe wird der Verlauf festgehalten. Hat ein ausgeschiedener Pächter noch einen Schlüssel, meldet sich das Cockpit auf der Übersicht.'),
+    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(schluesselDialog(null)) }, '+ Schlüssel'),
+      h('div', { class: 'spacer' }), h('span', { class: 'stat' }, `${l.length} Schlüssel · ${aus.length} ausgegeben${pfand ? ' · Pfand ' + eur(pfand) : ''}`)),
+    l.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['Art', 'Nr.', 'Bezeichnung', 'Bei', 'Seit', 'Pfand', ''].map((t) => h('th', null, t)))),
+      h('tbody', null, l.map((k) => h('tr', null,
+        h('td', null, k.art), h('td', null, h('b', null, k.nummer)), h('td', { class: 'wrap' }, k.bezeichnung || ''),
+        h('td', { class: 'wrap' }, k.inhaberName ? [k.inhaberName, k.gartennr ? h('span', { class: 'hint' }, ` (Garten ${k.gartennr})`) : null,
+          k.ausgeschieden || k.inhaber === '(gelöschte Person)' ? h('span', { class: 'badge err', style: 'margin-left:6px' }, 'zurückfordern') : null] : h('span', { class: 'hint' }, 'im Schrank')),
+        h('td', null, deDate(k.seit)), h('td', { class: 'num' }, k.pfand ? eur(k.pfand) : ''),
+        h('td', { class: 'aktionen' },
+          k.inhaberName
+            ? h('button', { class: 'btn small', onclick: () => nachher(datumDialog(`Rückgabe ${k.art} ${k.nummer}`, `Zurück von ${k.inhaberName}.${k.pfand ? ' Pfand ' + eur(k.pfand) + ' zurückzahlen.' : ''}`, `/api/admin/schluessel/${k.id}/rueckgabe`)) }, 'Rückgabe')
+            : h('button', { class: 'btn small', onclick: () => nachher(empfaengerDialog(`${k.art}schlüssel ${k.nummer} ausgeben`, `/api/admin/schluessel/${k.id}/ausgabe`, false)) }, 'Ausgeben'), ' ',
+          mehrMenue([{ label: 'Bearbeiten', aktion: () => nachher(schluesselDialog(k)) }, { label: 'Verlauf', aktion: () => verlaufDialog(`Verlauf ${k.art} ${k.nummer}`, k.verlauf) },
+            { label: 'Löschen', gefahr: true, aktion: async () => {
+              if (!(await confirmBox(`Schlüssel ${k.art} ${k.nummer} löschen (z. B. verloren oder Schloss getauscht)?`, 'Löschen', true))) return;
+              try { await api('DELETE', `/api/admin/schluessel/${k.id}`); invNeuLaden(); } catch (e) { handleErr(e); }
+            } }])))))))
+      : h('div', { class: 'card' }, leer('schluessel', 'Noch keine Schlüssel', 'Trage Tor-, Vereinsheim- und Schachtschlüssel ein – dann weißt du jederzeit, wer welchen hat.', '+ Schlüssel', () => nachher(schluesselDialog(null)))));
+}
+
+async function geraetDialog(g) {
+  const f = {
+    name: h('input', { type: 'text', maxlength: 80, value: g ? g.name : '', placeholder: 'z. B. Gartenhäcksler' }),
+    inv: h('input', { type: 'text', maxlength: 30, value: g ? g.inventarnr || '' : '' }),
+    ort: h('input', { type: 'text', maxlength: 80, value: g ? g.standort || '' : '', placeholder: 'z. B. Geräteschuppen' }),
+    seit: h('input', { type: 'date', value: g ? g.angeschafft || '' : '' }),
+    wert: h('input', { type: 'text', inputmode: 'decimal', value: g && g.wert ? numIn(g.wert) : '' }),
+    monate: h('input', { type: 'text', inputmode: 'numeric', value: g && g.wartungMonate ? String(g.wartungMonate) : '', placeholder: 'z. B. 12' }),
+    letzte: h('input', { type: 'date', value: g ? g.letzteWartung || '' : '' }),
+    notiz: h('input', { type: 'text', maxlength: 500, value: g ? g.notiz || '' : '' }),
+  };
+  const fld = (label, el, wide, hint) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), el, hint ? h('span', { class: 'fhint' }, hint) : null);
+  return modal(g ? g.name : 'Neues Gerät', h('div', { class: 'form' },
+    fld('Name *', f.name, true), fld('Inventar-Nr.', f.inv), fld('Standort', f.ort), fld('Angeschafft am', f.seit), fld('Wert in €', f.wert),
+    fld('Wartung alle … Monate', f.monate, false, 'leer = keine regelmäßige Wartung'), fld('Letzte Wartung', f.letzte), fld('Notiz', f.notiz, true)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    const wert = f.wert.value.trim() ? parseNum(f.wert.value) : 0, monate = f.monate.value.trim() ? Number(f.monate.value) : 0;
+    if (Number.isNaN(wert) || !Number.isInteger(monate)) { toast('Bitte Wert und Wartungsabstand als Zahl eintragen.', 'err'); return false; }
+    try { await api('POST', '/api/admin/geraete', { id: g ? g.id : '', name: f.name.value, inventarnr: f.inv.value, standort: f.ort.value, angeschafft: f.seit.value, wert, wartungMonate: monate, letzteWartung: f.letzte.value, notiz: f.notiz.value }); }
+    catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+function inventarGeraete() {
+  const l = S.inventar.geraete;
+  const heute = todayIso();
+  const in30 = (() => { const d = new Date(); d.setDate(d.getDate() + 30); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
+  const nachher = async (p) => { if (await p) invNeuLaden(); };
+  const wert = l.reduce((a, g) => a + (g.wert || 0), 0);
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Vereinsgeräte mit Standort, Wert und Wartung. Verleihst du ein Gerät, steht es mit Rückgabedatum hier; ist es überfällig oder steht eine Wartung an, erinnert das Cockpit daran.'),
+    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(geraetDialog(null)) }, '+ Gerät'),
+      h('div', { class: 'spacer' }), h('span', { class: 'stat' }, `${l.length} Geräte${wert ? ' · Wert ' + eur(wert) : ''}`)),
+    l.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['Gerät', 'Standort', 'Status', 'Nächste Wartung', ''].map((t) => h('th', null, t)))),
+      h('tbody', null, l.map((g) => {
+        const verliehen = !!g.entleiherName;
+        const ueberfaellig = verliehen && g.bis && g.bis < heute;
+        return h('tr', null,
+          h('td', { class: 'wrap' }, h('b', null, g.name), g.inventarnr ? h('div', { class: 'hint' }, g.inventarnr) : null),
+          h('td', null, g.standort || ''),
+          h('td', { class: 'wrap' }, verliehen ? [`verliehen an ${g.entleiherName}`, h('div', { class: 'hint' }, `seit ${deDate(g.seit)}${g.bis ? ', zurück bis ' + deDate(g.bis) : ''}`),
+            ueberfaellig ? h('span', { class: 'badge err' }, 'überfällig') : null] : h('span', { class: 'badge ok' }, 'da')),
+          h('td', null, g.wartungFaellig ? [deDate(g.wartungFaellig), g.wartungFaellig <= in30 ? h('span', { class: 'badge warn', style: 'margin-left:6px' }, 'fällig') : null] : h('span', { class: 'hint' }, '–')),
+          h('td', { class: 'aktionen' },
+            verliehen
+              ? h('button', { class: 'btn small', onclick: () => nachher(datumDialog(`${g.name} zurück`, `Zurück von ${g.entleiherName}.`, `/api/admin/geraete/${g.id}/zurueck`)) }, 'Zurück')
+              : h('button', { class: 'btn small', onclick: () => nachher(empfaengerDialog(`${g.name} verleihen`, `/api/admin/geraete/${g.id}/verleihen`, true)) }, 'Verleihen'), ' ',
+            mehrMenue([
+              { label: 'Wartung erledigt', aktion: () => nachher(datumDialog(`Wartung ${g.name}`, '', `/api/admin/geraete/${g.id}/wartung`)) },
+              { label: 'Bearbeiten', aktion: () => nachher(geraetDialog(g)) },
+              { label: 'Verlauf', aktion: () => verlaufDialog(`Verlauf ${g.name}`, g.verlauf) },
+              { label: 'Löschen', gefahr: true, aktion: async () => {
+                if (!(await confirmBox(`Gerät »${g.name}« löschen?`, 'Löschen', true))) return;
+                try { await api('DELETE', `/api/admin/geraete/${g.id}`); invNeuLaden(); } catch (e) { handleErr(e); }
+              } }])));
+      }))))
+      : h('div', { class: 'card' }, leer('werkzeug', 'Noch keine Geräte', 'Häcksler, Rasenmäher, Leitern, Schubkarren … – mit Standort, Wartung und wer gerade was ausgeliehen hat.', '+ Gerät', () => nachher(geraetDialog(null)))));
+}
+
 // ------------------------------------------------------------------ Vorauszahlungen per Überweisung
 
 async function loadVz(jahr) {
@@ -2339,7 +2973,7 @@ function viewAdmin() {
   const st = S.state;
   if (st.hasPassword && !st.loggedIn) return viewLogin();
   const t = S.adminTab;
-  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'maengel' ? adminMaengel() : t === 'spenden' ? adminSpenden() : t === 'sepa' ? adminSepa() : t === 'vorauszahlung' ? adminVorauszahlung() : t === 'einstellungen' ? adminSettings()
+  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'maengel' ? adminMaengel() : t === 'spenden' ? adminSpenden() : t === 'sepa' ? adminSepa() : t === 'vorauszahlung' ? adminVorauszahlung() : t === 'rundschreiben' ? adminRundschreiben() : t === 'inventar' ? adminInventar() : t === 'einstellungen' ? adminSettings()
     : t === 'jahreswechsel' ? adminYear() : t === 'kassenbericht' ? adminKassenbericht(false) : t === 'berichte' ? adminBerichte()
       : t === 'jubilaeen' ? adminJubilaeen() : t === 'daten' ? adminData() : t === 'protokoll' ? adminProtokoll() : t === 'datenschutz' ? adminDatenschutz() : adminSecurity();
   const eintrag = navEintrag('admin', t);
@@ -2574,7 +3208,7 @@ function adminDatenschutz() {
     h('div', { class: 'card', style: 'margin-bottom:14px' },
       h('h3', { style: 'margin-top:0' }, 'Was wird wo gespeichert?'),
       h('ul', { style: 'margin:0;padding-left:20px;line-height:1.6' },
-        li(h('b', null, 'Alles liegt nur auf diesem Rechner'), ' (Datenordner: ', h('span', { class: 'mono' }, st.dataDir), '). Es gibt keine Cloud und keine Übertragung ins Internet.'),
+        li(h('b', null, 'Alles liegt nur auf diesem Rechner'), ' (Datenordner: ', h('span', { class: 'mono' }, st.dataDir), '). Es gibt keine Cloud und keine Übertragung der Daten ins Internet (nur Ortssuche und Luftbild im Lageplan fragen auf Knopfdruck die Lage der Anlage ab).'),
         li('Pächter: Name, Anschrift, Mitgliedsnummer, Garten, Zählernummern, interne Notiz; dazu Zählerstände, Arbeitsstunden, Rechnungen, Zahlungen, Übergabeprotokolle.'),
         li('Warteliste: Name, Anschrift und Kontakt der Interessenten. Wer kein Interesse mehr hat, wird gelöscht (auch aus den Sicherungen).'),
         li('Kopien davon stecken in ausgestellten Rechnungen (Archiv und PDF-Dateien), abgeschlossenen Jahren, der Garten-Historie, dem Änderungsprotokoll und den automatischen Sicherungen.'),
@@ -4322,8 +4956,9 @@ function cockpitKarte(st, istAdmin) {
   if (!istAdmin || st.leer) return null;
   if (S.aufgaben == null) { if (!S.aufgabenLoading) loadAufgaben(); return null; }
   const geh = (ziel) => {
-    const [art, wohin] = ziel.split(':');
+    const [art, wohin, unter] = ziel.split(':');
     if (art === 'admin') adminTabWaehlen(wohin); else S.tab = wohin;
+    if (wohin === 'inventar') S.invSeite = unter || 'schluessel';
     render();
   };
   if (!S.aufgaben.length) {

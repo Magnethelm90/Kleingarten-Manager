@@ -192,6 +192,8 @@ type Data struct {
 	// Lageplan: Position jedes Gartens (Schlüssel Gartennummer) auf der Karte im Lageplan, in Bildpunkten.
 	// Leer = Gärten erscheinen als Raster, nach Gartennummer sortiert.
 	Lageplan map[string]LagePos `json:"lageplan,omitempty"`
+	// LageKarte: Hintergrundbild (Luftbild oder eigener Plan), Leitungen und Einrichtungen (siehe lagekarte.go)
+	LageKarte LageKarte `json:"lageKarte"`
 	// Warteliste: Interessenten für einen Garten, in der Reihenfolge ihrer Anmeldung.
 	Warteliste []Bewerber `json:"warteliste,omitempty"`
 	// Termine: Jahresplaner des Vereins (Arbeitseinsätze, Versammlungen, Ablesung, ...).
@@ -215,6 +217,10 @@ type Data struct {
 	// Vorauszahlungen per Überweisung: Monatsbetrag je Pächter und eingegangene Zahlungen (siehe vorauszahlung.go)
 	VorauszahlungSoll map[string]float64 `json:"vorauszahlungSoll,omitempty"`
 	Vorauszahlungen   []Vorauszahlung    `json:"vorauszahlungen,omitempty"`
+	// Rundschreiben des Vorstands (siehe rundschreiben.go), Schlüssel und Geräte des Vereins (siehe inventar.go)
+	Rundschreiben []Rundschreiben `json:"rundschreiben,omitempty"`
+	Schluessel    []Schluessel    `json:"schluessel,omitempty"`
+	Geraete       []Geraet        `json:"geraete,omitempty"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).
@@ -222,10 +228,12 @@ type Data struct {
 	Wertermittlungen []Wertermittlung `json:"wertermittlungen,omitempty"`
 }
 
-// LagePos ist die Position eines Gartens im Lageplan (linke obere Ecke der Kachel).
+// LagePos ist die Position eines Gartens im Lageplan (linke obere Ecke der Kachel). Mit Umriss ist der Garten
+// eine Fläche auf der Karte; X/Y ist dann die linke obere Ecke des Umrisses.
 type LagePos struct {
-	X int `json:"x"`
-	Y int `json:"y"`
+	X      int     `json:"x"`
+	Y      int     `json:"y"`
+	Umriss []Punkt `json:"umriss,omitempty"`
 }
 
 func defaultSettings() Settings {

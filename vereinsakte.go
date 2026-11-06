@@ -42,6 +42,8 @@ type uebergabeDaten struct {
 	Termine  []Termin
 	Aufgaben []aufgabe
 	Jahre    []int
+	// Inventar: Schlüssel (wer hat welchen) und Geräte, je eine Zeile
+	Inventar [][2]string
 }
 
 func (s *Store) uebergabeLocked(heute time.Time) uebergabeDaten {
@@ -59,6 +61,23 @@ func (s *Store) uebergabeLocked(heute time.Time) uebergabeDaten {
 		if y, err := strconv.Atoi(k); err == nil {
 			d.Jahre = append(d.Jahre, y)
 		}
+	}
+	for _, k := range s.d.Schluessel {
+		wer, _ := s.inhaberName(k.PaechterID, k.Inhaber)
+		if wer == "" {
+			wer = "im Schrank"
+		}
+		d.Inventar = append(d.Inventar, [2]string{"Schlüssel " + k.Art + " " + k.Nummer, wer})
+	}
+	for _, g := range s.d.Geraete {
+		wo := g.Standort
+		if wo == "" {
+			wo = "–"
+		}
+		if wer, _ := s.inhaberName(g.PaechterID, g.Entleiher); wer != "" {
+			wo = "verliehen an " + wer
+		}
+		d.Inventar = append(d.Inventar, [2]string{g.Name, wo})
 	}
 	ab := heute.Format("2006-01-02")
 	for _, t := range s.d.Termine {
@@ -175,6 +194,20 @@ func buildUebergabe(d uebergabeDaten, heute time.Time) ([]byte, error) {
 			y = mappeText(pdf, y, germanDate(t.Datum)+"  "+t.Titel+" ("+t.Art+")", 9.5) - 1.5
 		}
 		y += 2
+	}
+	if len(d.Inventar) > 0 {
+		if y > 230 {
+			pdf.AddPage()
+			y = 20
+		}
+		y = mappeAbschnitt(pdf, s, y, "Schlüssel und Geräte")
+		for i := 0; i < len(d.Inventar); i += 12 {
+			if y > 250 {
+				pdf.AddPage()
+				y = 20
+			}
+			y = mappeTabelle(pdf, y, d.Inventar[i:min(i+12, len(d.Inventar))])
+		}
 	}
 	if d.Info.Ansprechpartner != "" || d.Info.Hinweise != "" {
 		if y > 230 {

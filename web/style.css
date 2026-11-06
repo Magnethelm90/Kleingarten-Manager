@@ -719,3 +719,55 @@ td.wrap .hint { font-size: 12.5px; }
 .vz-legende { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
 .vz-legende .vz-punkt { margin-left: 10px; }
 .vz-tab .std-in { width: 5.5em; }
+
+/* Lageplan mit Hintergrund, Umrissen, Leitungen und Einrichtungen */
+.lagekarte.mit-bild { background-image: none; }
+.lagekarte-bild { position: absolute; left: 0; top: 0; pointer-events: none; user-select: none; max-width: none; }
+.lagekarte-quelle { position: absolute; right: 4px; bottom: 4px; font-size: 10px; color: #333; background: rgba(255,255,255,.8); padding: 1px 6px; border-radius: 4px; pointer-events: none; z-index: 3; }
+.lage-svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.lage-svg .klickbar, .lage-linie.klickbar .trefferflaeche { pointer-events: auto; cursor: pointer; }
+.lage-linie polyline { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+.lage-linie .trefferflaeche { stroke: transparent; stroke-width: 14; }
+.lage-linie.klickbar:hover polyline:not(.trefferflaeche) { stroke-width: 5.5; }
+.umriss { stroke-width: 2; fill-opacity: .6; }
+.umriss.klickbar:hover { fill-opacity: .8; }
+.umriss.kachel-unvollstaendig { fill: var(--err-bg); stroke: var(--err); }
+.umriss.kachel-berechnet { fill: #eef1f8; stroke: #44506b; }
+.umriss.kachel-offen { fill: var(--warn-bg); stroke: var(--warn); }
+.umriss.kachel-bezahlt { fill: var(--ok-bg); stroke: var(--ok); }
+.umriss.kachel-frei { fill: #fff; fill-opacity: .45; stroke: var(--green-dark); stroke-dasharray: 6 4; }
+.lagekarte .kachel.kachel-mini { width: auto; height: auto; min-width: 34px; padding: 2px 8px; transform: translate(-50%, -50%); text-align: center; z-index: 2; }
+.lagekarte .kachel.kachel-mini:hover { transform: translate(-50%, -50%); }
+.kachel-mini .kachel-nr { font-size: 13px; }
+.kachel-mini .kachel-name, .kachel-mini .kachel-hist { display: none; }
+.kachel-umriss { position: absolute; top: 3px; left: 3px; border: none; background: transparent; cursor: pointer; font-size: 13px; opacity: .6; padding: 0 4px; border-radius: 4px; line-height: 1.3; }
+.kachel-umriss:hover { opacity: 1; background: rgba(0,0,0,.08); }
+.lage-obj { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; color: #fff; font-weight: 750; font-size: 12px;
+  display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); z-index: 4; }
+.lage-obj.ziehbar { cursor: grab; touch-action: none; user-select: none; }
+.lage-obj-bez { position: absolute; left: 24px; top: 1px; white-space: nowrap; font-size: 11px; font-weight: 600; color: #222; background: rgba(255,255,255,.85); padding: 0 5px; border-radius: 4px; }
+.lagekarte.werkzeug { cursor: crosshair; }
+.lagekarte.werkzeug .kachel, .lagekarte.werkzeug .lage-obj { pointer-events: none; opacity: .75; }
+.lage-vorschau { fill: rgba(47, 111, 62, .18); stroke: var(--green); stroke-width: 2.5; stroke-dasharray: 6 4; }
+polyline.lage-vorschau { fill: none; stroke-width: 3.5; }
+.lage-vorschau-punkt { fill: #fff; stroke: var(--green-dark); stroke-width: 2; }
+.lage-werkzeuge { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: -4px 0 12px; }
+.lage-regler { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.lage-regler input { width: 120px; }
+.lage-regler-wert { font-weight: 400; color: var(--muted); min-width: 3.2em; }
+.lage-auswahl { width: auto; }
+.lage-hg h4 { margin: 0 0 4px; }
+
+/* Rundschreiben */
+.rs-liste { display: grid; gap: 12px; }
+.rs-karte { padding: 14px 18px; }
+.rs-kopf { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.rs-text { white-space: pre-line; color: var(--muted); font-size: 13px; margin: 8px 0 10px; }
+.rs-knoepfe { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rs-eingabe { width: 100%; font: inherit; line-height: 1.45; }
+.form .rs-an { display: inline-flex; align-items: center; gap: 6px; margin-right: 22px; font-size: 14px; font-weight: 500; cursor: pointer; }
+.form .rs-an input, .form .rs-wahl input { width: auto; margin: 0; }
+.rs-auswahl .toolbar { margin-bottom: 6px; }
+.rs-wahlliste { max-height: 230px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; columns: 2 260px; }
+.form .rs-wahl { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13.5px; font-weight: 400; break-inside: avoid; cursor: pointer; }
+.form .rs-auswahl .toolbar input[type=search] { flex: 1; min-width: 12em; width: auto; }

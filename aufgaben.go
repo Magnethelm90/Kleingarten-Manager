@@ -206,6 +206,8 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 		}
 	}
 
+	s.inventarAufgabenLocked(heute, add)
+
 	// Warteliste
 	nachfragen := 0
 	for _, b := range s.d.Warteliste {

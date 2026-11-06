@@ -546,7 +546,8 @@ type stateResp struct {
 	Demo bool `json:"demo"`
 	Leer bool `json:"leer"`
 	// Lageplan: Positionen der Gärten auf der Karte (leer = Raster).
-	Lageplan map[string]LagePos `json:"lageplan"`
+	Lageplan  map[string]LagePos `json:"lageplan"`
+	LageKarte LageKarte          `json:"lageKarte"`
 	// OffeneVorjahre: noch nicht (voll) bezahlte, gültige Rechnungen aus allen anderen Jahren als dem
 	// angezeigten, damit sie nach einem Jahreswechsel nicht aus dem Blick geraten.
 	OffeneVorjahre []archiveEntry `json:"offeneVorjahre"`
@@ -600,6 +601,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	if res.Lageplan == nil {
 		res.Lageplan = map[string]LagePos{}
 	}
+	res.LageKarte = a.st.d.LageKarte
 	res.OffeneVorjahre = a.st.offeneAndererJahreLocked(year)
 	res.Termine = append([]Termin{}, a.st.d.Termine...)
 	res.WartelisteAnzahl = len(a.st.d.Warteliste)
@@ -1682,6 +1684,31 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/sicherung-jetzt", a.admin(a.handleSicherungJetzt))
 	mux.HandleFunc("POST /api/admin/beispieldaten", a.admin(a.handleDemoLaden))
 	mux.HandleFunc("PUT /api/admin/lageplan", a.admin(a.handleLageplan))
+	mux.HandleFunc("POST /api/admin/lageplan/bild", a.admin(a.handleKarteHochladen))
+	mux.HandleFunc("DELETE /api/admin/lageplan/bild", a.admin(a.handleKarteEntfernen))
+	mux.HandleFunc("POST /api/admin/lageplan/luftbild", a.admin(a.handleLuftbild))
+	mux.HandleFunc("GET /api/admin/lageplan/ortssuche", a.admin(a.handleOrtssuche))
+	mux.HandleFunc("GET /api/admin/lageplan/dienste", a.admin(a.handleLuftbildDienste))
+	mux.HandleFunc("GET /api/lageplan-bild", a.handleKarteBild)
+	mux.HandleFunc("GET /api/admin/rundschreiben", a.admin(a.handleRundschreibenListe))
+	mux.HandleFunc("POST /api/admin/rundschreiben", a.admin(a.handleRundschreibenSpeichern))
+	mux.HandleFunc("DELETE /api/admin/rundschreiben/{id}", a.admin(a.handleRundschreibenLoeschen))
+	mux.HandleFunc("GET /api/admin/rundschreiben/{id}/briefe", a.admin(a.pdfAnzeigen(a.rundschreibenBriefePDF)))
+	mux.HandleFunc("POST /api/admin/rundschreiben/{id}/briefe/oeffnen", a.admin(a.pdfOeffnen(a.rundschreibenBriefePDF)))
+	mux.HandleFunc("GET /api/admin/rundschreiben/{id}/aushang", a.admin(a.pdfAnzeigen(a.rundschreibenAushangPDF)))
+	mux.HandleFunc("POST /api/admin/rundschreiben/{id}/aushang/oeffnen", a.admin(a.pdfOeffnen(a.rundschreibenAushangPDF)))
+	mux.HandleFunc("POST /api/admin/rundschreiben/{id}/mail", a.admin(a.handleRundschreibenMail))
+	mux.HandleFunc("GET /api/admin/schluessel", a.admin(a.handleSchluesselListe))
+	mux.HandleFunc("POST /api/admin/schluessel", a.admin(a.handleSchluesselSpeichern))
+	mux.HandleFunc("DELETE /api/admin/schluessel/{id}", a.admin(a.handleSchluesselLoeschen))
+	mux.HandleFunc("POST /api/admin/schluessel/{id}/ausgabe", a.admin(a.handleSchluesselAusgabe))
+	mux.HandleFunc("POST /api/admin/schluessel/{id}/rueckgabe", a.admin(a.handleSchluesselRueckgabe))
+	mux.HandleFunc("GET /api/admin/geraete", a.admin(a.handleGeraeteListe))
+	mux.HandleFunc("POST /api/admin/geraete", a.admin(a.handleGeraetSpeichern))
+	mux.HandleFunc("DELETE /api/admin/geraete/{id}", a.admin(a.handleGeraetLoeschen))
+	mux.HandleFunc("POST /api/admin/geraete/{id}/verleihen", a.admin(a.handleGeraetVorgang("verliehen")))
+	mux.HandleFunc("POST /api/admin/geraete/{id}/zurueck", a.admin(a.handleGeraetVorgang("zurück")))
+	mux.HandleFunc("POST /api/admin/geraete/{id}/wartung", a.admin(a.handleGeraetVorgang("Wartung")))
 	mux.HandleFunc("POST /api/admin/logo", a.admin(a.handleLogoHochladen))
 	mux.HandleFunc("DELETE /api/admin/logo", a.admin(a.handleLogoEntfernen))
 	mux.HandleFunc("GET /api/logo", a.handleLogo)
@@ -1809,6 +1836,14 @@ func (a *App) routes(static http.Handler) http.Handler {
 func (a *App) handleLageplan(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Positionen map[string]LagePos `json:"positionen"`
+		// Karte: nur gesetzt, wenn das Programm Leitungen, Einrichtungen, Größe oder Deckkraft mitschickt
+		Karte *struct {
+			Massstab  float64      `json:"massstab"`
+			Deckkraft float64      `json:"deckkraft"`
+			Quelle    *string      `json:"quelle"`
+			Objekte   []LageObjekt `json:"objekte"`
+			Leitungen []LageLinie  `json:"leitungen"`
+		} `json:"karte"`
 	}
 	if err := readJSON(w, r, &in); err != nil {
 		writeErr(w, err)
@@ -1821,11 +1856,29 @@ func (a *App) handleLageplan(w http.ResponseWriter, r *http.Request) {
 	pos := map[string]LagePos{}
 	for nr, p := range in.Positionen {
 		nr = trim(nr, 20)
-		if nr == "" || p.X < 0 || p.Y < 0 || p.X > 20000 || p.Y > 20000 {
+		if nr == "" || !koordOK(p.X, p.Y) {
 			writeErr(w, bad("Ungültige Position im Lageplan"))
 			return
 		}
+		p, err := bereinigeUmriss(p)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
 		pos[nr] = p
+	}
+	var objekte []LageObjekt
+	var leitungen []LageLinie
+	if in.Karte != nil {
+		var err error
+		if objekte, leitungen, err = bereinigeKarte(in.Karte.Objekte, in.Karte.Leitungen); err != nil {
+			writeErr(w, err)
+			return
+		}
+		if in.Karte.Massstab < 0.02 || in.Karte.Massstab > 20 || in.Karte.Deckkraft < 0.1 || in.Karte.Deckkraft > 1 {
+			writeErr(w, bad("Ungültige Bildgröße oder Deckkraft"))
+			return
+		}
 	}
 	a.st.mu.Lock()
 	defer a.st.mu.Unlock()
@@ -1835,6 +1888,16 @@ func (a *App) handleLageplan(w http.ResponseWriter, r *http.Request) {
 	} else {
 		a.st.d.Lageplan = pos
 		a.st.audit("Lageplan angeordnet (%d Gärten)", len(pos))
+	}
+	if in.Karte != nil {
+		k := &a.st.d.LageKarte
+		k.Objekte, k.Leitungen = objekte, leitungen
+		if k.Bild != "" {
+			k.Massstab, k.Deckkraft = round4(in.Karte.Massstab), round4(in.Karte.Deckkraft)
+			if in.Karte.Quelle != nil {
+				k.Quelle = trim(*in.Karte.Quelle, 200)
+			}
+		}
 	}
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)

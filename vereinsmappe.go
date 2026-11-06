@@ -118,7 +118,7 @@ type willkommenDaten struct {
 	Seit      string
 	Info      Vereinsinfo
 	Termine   []Termin
-	Lageplan  []lageGarten
+	Lageplan  lagePlan
 	Rechnungs string
 }
 
@@ -133,7 +133,7 @@ func (s *Store) willkommenLocked(id string, heute time.Time) (willkommenDaten, e
 		return willkommenDaten{}, notFound("Pächter nicht gefunden")
 	}
 	v, _ := s.viewLocked(s.d.Settings.Jahr)
-	d := willkommenDaten{S: s.d.Settings, P: *p, A: v.Ablesungen[p.ID], Info: s.d.Vereinsinfo, Lageplan: s.lageplanGaertenLocked(false),
+	d := willkommenDaten{S: s.d.Settings, P: *p, A: v.Ablesungen[p.ID], Info: s.d.Vereinsinfo, Lageplan: s.lagePlanLocked(false),
 		Rechnungs: invoiceNumber(s.d.Settings, *p)}
 	for _, e := range s.d.GartenHistorie {
 		if e.PaechterID == p.ID && e.Bis == "" {
@@ -229,7 +229,7 @@ func buildWillkommensmappe(d willkommenDaten) ([]byte, error) {
 	// Seite 2: Lageplan und Termine
 	pdf.AddPage()
 	y = mappeAbschnitt(pdf, s, 16, "Hier liegt Ihr Garten")
-	if len(d.Lageplan) > 0 {
+	if len(d.Lageplan.Gaerten) > 0 {
 		_, hoehe := zeichneLageplan(pdf, s, d.Lageplan, leftX, y, rightX, y+100, p.Gartennr)
 		y += hoehe + 8
 	} else {
@@ -286,7 +286,7 @@ type exposeDaten struct {
 	Foto     []byte
 	FotoTyp  string
 	Info     Vereinsinfo
-	Lageplan []lageGarten
+	Lageplan lagePlan
 }
 
 func (s *Store) exposeLocked(nr string) (exposeDaten, error) {
@@ -294,7 +294,7 @@ func (s *Store) exposeLocked(nr string) (exposeDaten, error) {
 	if nr == "" {
 		return exposeDaten{}, bad("Bitte die Gartennummer angeben")
 	}
-	d := exposeDaten{S: s.d.Settings, Nr: nr, Info: s.d.Vereinsinfo, Lageplan: s.lageplanGaertenLocked(false)}
+	d := exposeDaten{S: s.d.Settings, Nr: nr, Info: s.d.Vereinsinfo, Lageplan: s.lagePlanLocked(false)}
 	_, belegt := s.belegteGaertenLocked()[nr]
 	d.Frei = !belegt
 	bekannt := belegt
@@ -427,7 +427,7 @@ func buildExpose(d exposeDaten) ([]byte, error) {
 	}
 	y = mappeTabelle(pdf, y, zeilen)
 
-	if len(d.Lageplan) > 0 && y < 200 {
+	if len(d.Lageplan.Gaerten) > 0 && y < 200 {
 		y = mappeAbschnitt(pdf, s, y, "Lage in der Anlage")
 		unten := 268.0
 		if d.Info.Ansprechpartner != "" {

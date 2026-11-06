@@ -10,8 +10,12 @@
 - **Verantwortlich** im Sinne der DSGVO ist der Verein (Vorstand), nicht der Programmautor.
 - Alle Daten liegen **nur lokal** im Datenordner (`kleingarten-manager-daten.json`, `Rechnungen/`, `Belege/`,
   `Sicherungen/`). Es gibt keine Cloud, keine Konten, keine Telemetrie, keinen Auftragsverarbeiter.
-- **Einzige Verbindung nach außen:** der Knopf „Nach Updates suchen“. Er fragt nur auf Klick die öffentliche
-  GitHub-Release-Seite ab; dabei sieht GitHub die IP-Adresse. Es werden keine Vereinsdaten übertragen.
+- **Verbindungen nach außen gibt es nur auf Knopfdruck**, und keine davon überträgt Mitgliederdaten:
+  - „Nach Updates suchen“ fragt die öffentliche GitHub-Release-Seite ab; dabei sieht GitHub die IP-Adresse.
+  - Im Lageplan sucht „Ort suchen“ die eingegebene Anschrift (gedacht: die der Gartenanlage) über die Ortssuche von
+    OpenStreetMap (Nominatim); „Luftbild laden“ fragt den gewählten Kartenausschnitt beim Kartendienst der
+    Landesvermessung des gewählten Bundeslandes ab. Beide sehen die IP-Adresse und den Ort, sonst nichts. Das
+    Luftbild wird danach im Datenordner (`Lageplan/`) gespeichert und offline verwendet.
 - **Achtung bei Cloud-Ordnern:** Liegt der Datenordner oder der „zweite Sicherungsordner“ in OneDrive, iCloud,
   Dropbox o. Ä., gibt der Verein Mitgliederdaten an diesen Anbieter weiter. Dann ist ein Auftragsverarbeitungsvertrag
   nötig. Besser: lokale Platte oder verschlüsselter USB-Stick.
@@ -77,6 +81,14 @@ Aufbewahrungsfrist und verlieren dann Namen und IBAN. Die Dateien für das Onlin
 
 **Vorauszahlungen:** Monatsbetrag und eingegangene Zahlungen je Pächter stehen in der Auskunft. Beim endgültigen
 Löschen der Person wird der Monatsbetrag gelöscht; die Zahlungen bleiben als Kassenbelege ohne Verknüpfung zur Person.
+
+**Rundschreiben:** Gespeichert werden Betreff, Text und – bei einer Auswahl – die Empfänger. Die Auskunft nennt die
+Rundschreiben, für die eine Person ausdrücklich ausgewählt war; beim endgültigen Löschen wird sie aus den
+Empfängerlisten entfernt. E-Mails verschickt das eigene E-Mail-Programm, alle Adressen stehen im Bcc.
+
+**Schlüssel und Geräte:** Wer einen Schlüssel oder ein Gerät hat oder hatte, steht mit Datum im Verlauf und in der
+Auskunft. Beim endgültigen Löschen der Person wird der Name überall durch „(gelöschte Person)“ ersetzt; ein noch
+ausgegebener Schlüssel bleibt so sichtbar, damit er nicht in Vergessenheit gerät.
 
 **Kontoauszug:** Die CSV-Datei aus dem Online-Banking wird nur im Arbeitsspeicher gelesen und nicht gespeichert;
 sie enthält auch Buchungen Dritter. Übernommen werden nur die bestätigten Zahlungsvermerke an den Rechnungen. Damit

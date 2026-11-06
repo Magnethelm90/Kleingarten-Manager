@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/go-pdf/fpdf"
 )
 
 // Gartenbegehung und Mängel: Beim Rundgang festgestellte Mängel je Garten mit Frist erfassen, als erledigt
@@ -299,28 +301,7 @@ func buildMaengelschreiben(s Settings, p Paechter, ms []Mangel, frist string) ([
 	}
 	pdf := neuesPDF(s, "Aufforderung zur Beseitigung von Mängeln – Garten "+p.Gartennr, false)
 	mr, mg, mb := markenfarbe(s.Farbe)
-	pdf.AddPage()
-	zeichneKopf(pdf, s)
-	y := 31.0
-	pdf.SetFont("lib", "", 7.5)
-	pdf.SetTextColor(60, 60, 60)
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, rowH, s.Absenderzeile, "", 0, "L", false, 0, "")
-	pdf.SetTextColor(0, 0, 0)
-	y += 6
-	pdf.SetFont("lib", "B", 10)
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, rowH, p.Versand, "", 0, "R", false, 0, "")
-	y += 5
-	y += adressZeile(pdf, leftX, y, p.Anrede, "")
-	y += adressZeile(pdf, leftX, y, p.Name, "B")
-	y += adressZeile(pdf, leftX, y, p.Strasse, "")
-	y += adressZeile(pdf, leftX, y, p.PLZOrt, "")
-	y += 10
-	pdf.SetFont("lib", "", 10)
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, rowH, fmt.Sprintf("Datum: %s", time.Now().Format("02.01.2006")), "", 0, "R", false, 0, "")
-	y += 8
+	y := briefAnfang(pdf, s, p, time.Now().Format("2006-01-02"))
 	pdf.SetFont("lib", "B", 13)
 	pdf.SetTextColor(mr, mg, mb)
 	pdf.SetXY(leftX, y)
@@ -367,6 +348,34 @@ func buildMaengelschreiben(s Settings, p Paechter, ms []Mangel, frist string) ([
 	pdf.SetXY(leftX, y)
 	pdf.CellFormat(rightX-leftX, 6, "Der Vorstand", "", 0, "L", false, 0, "")
 	return pdfBytes(pdf)
+}
+
+// briefAnfang beginnt eine neue Seite mit Briefkopf, Absenderzeile, Anschrift des Pächters und Datum
+// (Fensterumschlag DIN lang). Liefert die Höhe, ab der der Brieftext beginnt.
+func briefAnfang(pdf *fpdf.Fpdf, s Settings, p Paechter, datum string) float64 {
+	pdf.AddPage()
+	zeichneKopf(pdf, s)
+	y := 31.0
+	pdf.SetFont("lib", "", 7.5)
+	pdf.SetTextColor(60, 60, 60)
+	pdf.SetXY(leftX, y)
+	pdf.CellFormat(rightX-leftX, rowH, s.Absenderzeile, "", 0, "L", false, 0, "")
+	pdf.SetTextColor(0, 0, 0)
+	y += 6
+	pdf.SetFont("lib", "B", 10)
+	pdf.SetXY(leftX, y)
+	pdf.CellFormat(rightX-leftX, rowH, p.Versand, "", 0, "R", false, 0, "")
+	y += 5
+	y += adressZeile(pdf, leftX, y, p.Anrede, "")
+	y += adressZeile(pdf, leftX, y, p.Name, "B")
+	y += adressZeile(pdf, leftX, y, p.Strasse, "")
+	y += adressZeile(pdf, leftX, y, p.PLZOrt, "")
+	y += 10
+	pdf.SetFont("lib", "", 10)
+	pdf.SetXY(leftX, y)
+	pdf.CellFormat(rightX-leftX, rowH, "Datum: "+germanDate(datum), "", 0, "R", false, 0, "")
+	y += 8
+	return y
 }
 
 func (a *App) maengelschreibenPDF(r *http.Request) ([]byte, string, error) {

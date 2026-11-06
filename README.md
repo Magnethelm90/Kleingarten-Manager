@@ -7,7 +7,7 @@ Zählerstände eintragen – die Rechnungen kommen fertig als PDF heraus, mit QR
 
 - **Kostenlos**, ohne Anmeldung und ohne Abo
 - **Keine Installation:** eine Datei herunterladen und doppelklicken
-- **Eure Daten bleiben bei euch:** alles liegt auf dem eigenen Rechner, nichts wird ins Internet gesendet
+- **Eure Daten bleiben bei euch:** alles liegt auf dem eigenen Rechner, keine Mitgliederdaten gehen ins Internet
 - **Für Vorstand und Kassenwart gemacht:** Zählerstände, Rechnungen, Zahlungen, Mahnungen, Kassenbericht,
   Pächterwechsel, Warteliste, Gartenakte, Termine und die Jahresmeldung an den Verband
 - **Mit Einführung:** beim ersten Start zeigt ein kurzer Rundgang, was wohin gehört
@@ -49,7 +49,7 @@ Pächterwechsel bis zur Meldung an den Verband.
 
 Unter Windows ist es eine einzelne `.exe` ohne Installation, unter macOS eine `.app` für den Programme-Ordner.
 Es öffnet ein eigenes Programmfenster. **Alle Daten bleiben auf eurem Rechner**: Es gibt keine Cloud, kein
-Benutzerkonto und keine Übertragung ins Internet.
+Benutzerkonto und keine Übertragung von Vereinsdaten ins Internet.
 
 ## Was das Programm kann
 
@@ -88,6 +88,11 @@ Benutzerkonto und keine Übertragung ins Internet.
   Notiz; gelöschte Pächter kommen erst in den Papierkorb
 - **Lageplan:** die Gärten so angeordnet, wie sie auf dem Gelände liegen, farbig nach Abrechnungsstand; freie
   Gärten gestrichelt, mit einem Klick an jemanden von der Warteliste vergeben; als Aushang druckbar (ohne Namen)
+- **Echte Karte unter dem Lageplan:** amtliches Luftbild auf Knopfdruck (kostenlos von den Vermessungsämtern von
+  15 Bundesländern, Anschrift eingeben, fertig) oder ein eigenes Bild wie der eingescannte Vereinsplan. Darauf die
+  **Umrisse der Parzellen** nachzeichnen (benachbarte Ecken rasten ein), **Wasser- und Stromleitungen**, Wege und
+  **Einrichtungen** wie Hauptzähler, Absperrhähne, Schächte, Tor und Vereinsheim eintragen. Der Ausdruck zeigt alles
+  mit Legende, Maßstabsleiste, Nordpfeil und dem vorgeschriebenen Quellenvermerk
 - **Gartenakte:** alles zu einem Garten an einer Stelle – Verlauf, Übergaben, Wertermittlungen und Dokumente wie
   Bauantrag, Genehmigung, Fotos der Laube oder Pachtvertrag
 - **Pächterwechsel** in einem Schritt: Schlussrechnung für den bisherigen Pächter (nur Verbrauch bis zur Übergabe),
@@ -104,6 +109,12 @@ Benutzerkonto und keine Übertragung ins Internet.
   Tagesordnung** und die **Anwesenheitsliste** zum Unterschreiben
 - **Gemeinschaftsstunden aus Arbeitseinsätzen:** Stundenliste zum Ausdrucken, danach am Rechner abhaken, wer da
   war – die Stunden landen automatisch beim Pächter, Korrekturen zählen nicht doppelt
+- **Rundschreiben** an alle oder ausgewählte Pächter: per E-Mail über das eigene E-Mail-Programm (alle Adressen
+  im Bcc, bei vielen Empfängern in mehreren Paketen) und als Serienbrief für alle ohne E-Mail, mit Anschrift für den
+  Fensterumschlag; dazu als Aushang und mit Vorlagen (Wasser an/ab, Arbeitseinsatz)
+- **Schlüssel und Geräte:** wer welchen Tor-, Vereinsheim- oder Schachtschlüssel hat (mit Pfand und Verlauf), und
+  welche Vereinsgeräte verliehen sind oder zur Wartung müssen; das Cockpit erinnert an Schlüssel ausgeschiedener
+  Pächter, überfällige Rückgaben und fällige Wartungen
 - **Jubiläen** langjähriger Mitglieder für die Mitgliederversammlung
 
 ### Kasse und Berichte
@@ -197,8 +208,9 @@ Start meldet macOS „nicht verifizierter Entwickler“: mit Rechtsklick auf die
 - Wer sich am Rechner anmelden kann, kommt auch an die Datendatei. Sie ist nicht verschlüsselt. Deshalb gehört
   das Programm auf einen Rechner mit eigenem Benutzerkennwort und eingeschalteter Festplattenverschlüsselung
   (Windows: BitLocker bzw. Geräteverschlüsselung, macOS: FileVault).
-- Das Programm sendet nichts ins Internet. Nur »Nach Updates suchen« fragt auf Knopfdruck bei GitHub nach einer
-  neuen Version.
+- Das Programm sendet keine Vereinsdaten ins Internet. Nur auf Knopfdruck fragt »Nach Updates suchen« bei GitHub
+  nach einer neuen Version, und im Lageplan holen »Ort suchen« und »Luftbild laden« die Lage der Anlage bei
+  OpenStreetMap bzw. das Luftbild bei der Landesvermessung.
 
 Sicherheitslücken bitte nicht öffentlich melden, sondern direkt an den Autor.
 
