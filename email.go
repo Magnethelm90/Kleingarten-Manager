@@ -141,7 +141,7 @@ func (a *App) handleRechnungEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	betreff, text := rechnungsMail(&kopie)
-	openMailFn("mailto:" + email + "?subject=" + mailtoEscape(betreff) + "&body=" + mailtoEscape(text))
+	openMailFn("mailto:" + url.PathEscape(email) + "?subject=" + mailtoEscape(betreff) + "&body=" + mailtoEscape(text))
 	revealPathFn(full)
 
 	jetzt := time.Now().Format(time.RFC3339)

@@ -201,18 +201,6 @@ func newInvoiceDoc(title string, s Settings) *fpdf.Fpdf {
 	return pdf
 }
 
-// renderInvoice zeichnet eine einzelne Rechnung; squeeze (0 bis 1) verkleinert die Leerabstände
-// zwischen den Blöcken im Kopfbereich. Gibt zusätzlich die Position der letzten Zeile zurück.
-func renderInvoice(s Settings, p Paechter, a Ablesung, r Result, squeeze float64) ([]byte, float64, error) {
-	pdf := newInvoiceDoc("Rechnung "+invoiceNumber(s, p), s)
-	y := drawInvoicePage(pdf, s, p, a, r, squeeze)
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, 0, err
-	}
-	return buf.Bytes(), y, nil
-}
-
 // drawInvoicePage fügt dem Dokument eine Seite mit der Rechnung hinzu und gibt die Position
 // der letzten Zeile zurück.
 func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Result, squeeze float64) float64 {
@@ -657,7 +645,7 @@ func zeichneKopf(pdf *fpdf.Fpdf, s Settings) {
 	if raw, ok := logoDaten(s.Logo); ok {
 		name := "vereinslogo-" + s.Logo
 		info := pdf.RegisterImageOptionsReader(name, fpdf.ImageOptions{ImageType: "PNG"}, bytes.NewReader(raw))
-		if info != nil && pdf.Err() == false && info.Width() > 0 && info.Height() > 0 {
+		if info != nil && !pdf.Err() && info.Width() > 0 && info.Height() > 0 {
 			const maxH, maxW = 15.0, 42.0
 			h := maxH
 			w := info.Width() / info.Height() * h

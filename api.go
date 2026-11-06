@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // appVersion wird beim Release-Build über -ldflags "-X main.appVersion=..." gesetzt.
@@ -1003,6 +1004,13 @@ func cleanSettings(in, cur Settings) (Settings, error) {
 	in.IBAN = trim(in.IBAN, 42)
 	in.BIC = trim(in.BIC, 15)
 	in.ZweiteSicherung = trim(in.ZweiteSicherung, 250)
+	if in.ZweiteSicherung != cur.ZweiteSicherung {
+		z, err := sicherungsOrdnerPruefen(in.ZweiteSicherung)
+		if err != nil {
+			return in, bad(err.Error())
+		}
+		in.ZweiteSicherung = z
+	}
 	in.Logo = cur.Logo // nur über /api/admin/logo änderbar
 	in.Farbe = strings.ToLower(strings.TrimSpace(in.Farbe))
 	if in.Farbe != "" && !farbeGueltig(in.Farbe) {
@@ -1358,7 +1366,7 @@ func safeName(s string, max int) string {
 	var b strings.Builder
 	for _, r := range s {
 		switch {
-		case r < 0x20, strings.ContainsRune(`<>:"/\|?*`, r):
+		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), strings.ContainsRune(`<>:"/\|?*`, r):
 			b.WriteRune('_')
 		default:
 			b.WriteRune(r)
@@ -1703,6 +1711,22 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("PUT /api/admin/termine/{id}", a.admin(a.handleTerminUpdate))
 	mux.HandleFunc("DELETE /api/admin/termine/{id}", a.admin(a.handleTerminDelete))
 	mux.HandleFunc("POST /api/admin/termine-uebernehmen", a.admin(a.handleTermineUebernehmen))
+	mux.HandleFunc("GET /api/admin/termine/{id}/einladung", a.admin(a.pdfAnzeigen(a.einladungPDF)))
+	mux.HandleFunc("POST /api/admin/termine/{id}/einladung/oeffnen", a.admin(a.pdfOeffnen(a.einladungPDF)))
+	mux.HandleFunc("GET /api/admin/termine/{id}/anwesenheit", a.admin(a.pdfAnzeigen(a.anwesenheitPDF)))
+	mux.HandleFunc("POST /api/admin/termine/{id}/anwesenheit/oeffnen", a.admin(a.pdfOeffnen(a.anwesenheitPDF)))
+	mux.HandleFunc("GET /api/admin/maengel", a.admin(a.handleMaengelListe))
+	mux.HandleFunc("POST /api/admin/maengel", a.admin(a.handleMangelSpeichern(true)))
+	mux.HandleFunc("PUT /api/admin/maengel/{id}", a.admin(a.handleMangelSpeichern(false)))
+	mux.HandleFunc("DELETE /api/admin/maengel/{id}", a.admin(a.handleMangelLoeschen))
+	mux.HandleFunc("GET /api/admin/begehungsliste", a.admin(a.pdfAnzeigen(a.begehungslistePDF)))
+	mux.HandleFunc("POST /api/admin/begehungsliste/oeffnen", a.admin(a.pdfOeffnen(a.begehungslistePDF)))
+	mux.HandleFunc("GET /api/admin/maengelschreiben", a.admin(a.pdfAnzeigen(a.maengelschreibenPDF)))
+	mux.HandleFunc("POST /api/admin/maengelschreiben/oeffnen", a.admin(a.pdfOeffnen(a.maengelschreibenPDF)))
+	mux.HandleFunc("GET /api/admin/zaehler-fehlen", a.admin(a.handleZaehlerFehlen))
+	mux.HandleFunc("GET /api/admin/zaehler-aushang", a.admin(a.pdfAnzeigen(a.zaehlerAushangPDF)))
+	mux.HandleFunc("POST /api/admin/zaehler-aushang/oeffnen", a.admin(a.pdfOeffnen(a.zaehlerAushangPDF)))
+	mux.HandleFunc("POST /api/admin/zaehler-mail", a.admin(a.handleZaehlerMail))
 	mux.HandleFunc("GET /api/admin/jahresbericht", a.adminOrPruef(a.handleJahresbericht))
 	mux.HandleFunc("POST /api/admin/jahresbericht/oeffnen", a.adminOrPruef(a.handleJahresberichtOeffnen))
 	mux.HandleFunc("POST /api/admin/warteliste/{id}/vergeben", a.admin(a.handleGartenVergeben))

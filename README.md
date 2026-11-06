@@ -59,6 +59,8 @@ Benutzerkonto und keine Übertragung ins Internet.
   neuen Stände eingeben. Bei auffälligem Verbrauch (z. B. Tippfehler) kommt ein Hinweis. Ein Zählertausch während
   des Jahres wird richtig verrechnet.
 - **Ablesebogen** zum Ausdrucken für den Rundgang, mit Zählernummern und Vorjahresständen
+- **Zählerstand-Erinnerung:** zeigt, wer noch keinen Stand gemeldet hat, mit Aushang (nur Gartennummern) und
+  vorbereiteter E-Mail an alle auf einmal
 - **Rechnungen als PDF**, einzeln oder alle auf einmal, mit **GiroCode** zum Bezahlen per Banking-App. Ausgestellte
   Rechnungen werden festgeschrieben und archiviert, das Archiv lässt sich über alle Jahre durchsuchen.
 - **Versand:** alle Rechnungen mit Postversand in einer Druckdatei; für die übrigen bereitet das Programm die
@@ -82,8 +84,11 @@ Benutzerkonto und keine Übertragung ins Internet.
   beim Wechsel als Ablösesumme vorgeschlagen
 - **Warteliste** in der Reihenfolge der Anmeldung, mit Besichtigungsterminen und Erinnerung, lange nicht bestätigte
   Einträge nachzufragen
+- **Mängel und Gartenbegehung:** Begehungsliste zum Ausdrucken, Mängel je Garten mit Frist erfassen und dem Pächter
+  eine schriftliche Aufforderung als PDF schreiben
 - **Vereinstermine:** Jahresplaner für Arbeitseinsätze, Versammlungen und Feste, als Aushang und als Kalenderdatei
-  fürs Handy, mit einem Klick ins nächste Jahr übernommen
+  fürs Handy, mit einem Klick ins nächste Jahr übernommen; für Versammlungen gibt es die **Einladung mit
+  Tagesordnung** und die **Anwesenheitsliste** zum Unterschreiben
 - **Jubiläen** langjähriger Mitglieder für die Mitgliederversammlung
 
 ### Kasse und Berichte

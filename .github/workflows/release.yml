@@ -98,25 +98,30 @@ jobs:
           path: Kleingarten-Manager-mac.zip
           if-no-files-found: error
 
-  release:
-    needs: [build-windows, build-macos]
+  # Windows- und Mac-Datei werden unabhängig voneinander angehängt: Die .exe erscheint sofort nach dem Windows-Bau,
+  # der Mac-Build (GitHub hat manchmal lange keinen freien Mac) liefert seine Datei nach, sobald er fertig ist.
+  release-windows:
+    needs: build-windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: windows-exe
+      - name: Datei an den Release anhängen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/release-upload.sh Kleingarten-Manager.exe
+
+  release-macos:
+    needs: build-macos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: macos-zip
-      - name: Release anlegen
+      - name: Datei an den Release anhängen
         env:
           GH_TOKEN: ${{ github.token }}
-        # Wurde der Release schon auf der Webseite angelegt (z. B. mit eigenem Text), nur die Programmdateien
-        # anhängen und den Text unverändert lassen; sonst den Release neu anlegen.
-        run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" Kleingarten-Manager.exe Kleingarten-Manager-mac.zip --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" Kleingarten-Manager.exe Kleingarten-Manager-mac.zip --title "Kleingarten-Manager $GITHUB_REF_NAME" --generate-notes
-          fi
+        run: bash .github/scripts/release-upload.sh Kleingarten-Manager-mac.zip

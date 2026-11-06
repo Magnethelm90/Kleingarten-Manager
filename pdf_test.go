@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"regexp"
@@ -143,4 +144,16 @@ func TestMahnungGiroCodeNurMitGueltigerIBAN(t *testing.T) {
 			t.Errorf("IBAN %q: %d GiroCode-Bilder, erwartet %d", c.iban, n, c.bilder)
 		}
 	}
+}
+
+// renderInvoice zeichnet eine einzelne Rechnung; squeeze (0 bis 1) verkleinert die Leerabstände
+// zwischen den Blöcken im Kopfbereich. Gibt zusätzlich die Position der letzten Zeile zurück.
+func renderInvoice(s Settings, p Paechter, a Ablesung, r Result, squeeze float64) ([]byte, float64, error) {
+	pdf := newInvoiceDoc("Rechnung "+invoiceNumber(s, p), s)
+	y := drawInvoicePage(pdf, s, p, a, r, squeeze)
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, 0, err
+	}
+	return buf.Bytes(), y, nil
 }

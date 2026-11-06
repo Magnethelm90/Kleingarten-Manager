@@ -63,6 +63,12 @@ Pachtvertrag oder Schriftverkehr), werden beim endgültigen Löschen des Pächte
 Auskunft. Fotos, Genehmigungen und Wertermittlungen gehören zum Garten und enthalten keine Namen; bitte beim Hochladen
 darauf achten, dass Fotos keine Personen zeigen.
 
+**Mängel bei der Gartenbegehung:** Festgestellte Mängel werden dem Pächter des Gartens zugeordnet (Gartennummer und
+Beschreibung, ohne Namen im Text). Sie stehen in der Auskunft und werden beim endgültigen Löschen des Pächters mit
+entfernt; erledigte Mängel lassen sich jederzeit einzeln löschen. Sie sind nur für die Verwaltung sichtbar und tauchen
+weder im Jahresbericht noch in Aushängen auf. Der Aushang zu fehlenden Zählerständen nennt nur Gartennummern. Die
+Erinnerungs-E-Mail geht als Blindkopie (Bcc) raus, damit keine Adressen offengelegt werden.
+
 **Warteliste:** Einträge werden gelöscht, sobald kein Interesse mehr besteht (auch aus allen Sicherungen); wird ein
 Garten vergeben, gehen die Angaben in die Stammdaten des neuen Pächters über. Wer seit über 2 Jahren nicht
 nachgefragt wurde, wird markiert (unter »Warteliste« und »Datenschutz«): dann nachfragen oder löschen.
@@ -98,7 +104,7 @@ Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 | Zweck | Verwaltung der Pachtverhältnisse, Abrechnung von Wasser, Strom, Pacht und Beiträgen, Zahlungsüberwachung, Kassenführung des Vereins |
 | Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Pacht-/Mitgliedschaftsvertrag), lit. c (steuerliche Aufbewahrungspflichten), lit. f (Vereinsverwaltung) |
 | Betroffene | Pächterinnen und Pächter, Mitglieder, Interessenten auf der Warteliste |
-| Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, interne Notiz |
+| Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, bei Begehungen festgestellte Mängel, interne Notiz |
 | Empfänger | Vorstand/Kassenwart; Kassenprüfer (Lesezugriff auf den Kassenbericht); Steuerberatung, Bank bei Zahlungsvorgängen; keine Auftragsverarbeiter |
 | Drittlandübermittlung | keine |
 | Löschfristen | Stammdaten: nach Ende der Mitgliedschaft bzw. des Pachtverhältnisses; Rechnungen, Jahresunterlagen und Übergabeprotokolle: [10] Jahre ab Ende des Ausstellungs- bzw. Übergabejahres; Warteliste: sobald kein Interesse mehr besteht (Nachfrage spätestens alle 2 Jahre) |

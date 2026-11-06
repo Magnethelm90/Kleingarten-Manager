@@ -35,7 +35,7 @@ Konsolenfenster mit den Log-Ausgaben offen.
 **macOS** (der mitgelieferte `clang` baut Apple Silicon und Intel):
 
 ```
-VERSION=1.4
+VERSION=1.5
 CGO_ENABLED=1 GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-arm64 .
 CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64" go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-amd64 .
 ```
@@ -61,12 +61,15 @@ Lokal reicht meist `go vet ./... && go test ./...`. Für die Eingabeprüfung gib
 ## Neue Version veröffentlichen
 
 ```
-git tag v1.4
-git push origin v1.4
+git tag v1.5
+git push origin v1.5
 ```
 
 Alternativ auf der GitHub-Seite unter »Releases« einen neuen Release mit neuem Tag anlegen. In beiden Fällen
-baut GitHub `.exe` und `.app` mit dieser Versionsnummer und hängt sie an den Release an. Das Programm zeigt die
+baut GitHub `.exe` und `.app` mit dieser Versionsnummer und hängt sie an den Release an. Die Windows-Datei
+erscheint sofort nach ihrem Bau, die Mac-Datei kommt dazu, sobald GitHub einen Mac-Rechner frei hat (das kann
+dauern). Bleibt ein Bau-Job hängen oder wird abgebrochen, unter »Actions« den Lauf öffnen und »Re-run failed jobs«
+wählen; schon angehängte Dateien bleiben. Das Programm zeigt die
 Versionsnummer unten an und findet neue Versionen über »Nach Updates suchen«.
 
 ## Sicherheit im Detail

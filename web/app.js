@@ -269,7 +269,8 @@ const NAV = [
     { tab: 'lageplan', label: 'Lageplan', ic: 'karte' },
     { tab: 'termine', label: 'Termine', ic: 'kalender' },
     { admin: 'paechter', label: 'Pächter', ic: 'personen', tour: 'admin' },
-    { admin: 'warteliste', label: 'Warteliste', ic: 'warteliste' }] },
+    { admin: 'warteliste', label: 'Warteliste', ic: 'warteliste' },
+    { admin: 'maengel', label: 'Mängel', ic: 'warnung' }] },
   { gruppe: 'Kasse & Berichte', items: [
     { admin: 'kassenbericht', label: 'Kassenbericht', ic: 'kasse' },
     { admin: 'berichte', label: 'Berichte & Meldungen', ic: 'bericht' },
@@ -291,6 +292,7 @@ function adminTabWaehlen(id) {
   if (id === 'jubilaeen') S.jubilaeen = null;
   if (id === 'datenschutz') S.datenschutz = null;
   if (id === 'warteliste') S.warteliste = null;
+  if (id === 'maengel') S.maengel = null;
   if (id === 'paechter') S.uebergaben = null;
   if (id === 'berichte') S.meldung = null;
 }
@@ -1844,7 +1846,7 @@ function viewAdmin() {
   const st = S.state;
   if (st.hasPassword && !st.loggedIn) return viewLogin();
   const t = S.adminTab;
-  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'einstellungen' ? adminSettings()
+  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'maengel' ? adminMaengel() : t === 'einstellungen' ? adminSettings()
     : t === 'jahreswechsel' ? adminYear() : t === 'kassenbericht' ? adminKassenbericht(false) : t === 'berichte' ? adminBerichte()
       : t === 'jubilaeen' ? adminJubilaeen() : t === 'daten' ? adminData() : t === 'protokoll' ? adminProtokoll() : t === 'datenschutz' ? adminDatenschutz() : adminSecurity();
   const eintrag = navEintrag('admin', t);
@@ -3112,6 +3114,107 @@ function adminWarteliste() {
       : leer('personen', 'Niemand auf der Warteliste', 'Wer sich für einen Garten interessiert, kommt hier auf die Liste. Wird ein Garten frei, siehst du sofort, wer als Nächstes dran ist.', '+ Auf die Warteliste setzen', neu));
 }
 
+// ------------------------------------------------------------------ Tab: Mängel (Gartenbegehung)
+
+const MANGEL_ARTEN = ['Pflege und Unkraut', 'Hecke und Bäume', 'Laube und Bauten', 'Abfall und Lagerung', 'Wege und Zäune', 'Wasser und Strom', 'Sonstiges'];
+
+async function loadMaengel() {
+  if (S.maengelLoading) return;
+  S.maengelLoading = true;
+  try { S.maengel = await api('GET', '/api/admin/maengel'); } catch (e) { handleErr(e); S.maengel = []; }
+  S.maengelLoading = false;
+  render();
+}
+
+const begehungslisteDrucken = () => pdfDrucken({
+  url: '/api/admin/begehungsliste', oeffnenUrl: '/api/admin/begehungsliste/oeffnen',
+  titel: 'Begehungsliste', meldung: () => 'Die Begehungsliste wurde im PDF-Programm geöffnet – dort drucken und zur Begehung mitnehmen.',
+});
+const maengelschreibenDrucken = (nr) => pdfDrucken({
+  url: `/api/admin/maengelschreiben?gartennr=${encodeURIComponent(nr)}`,
+  oeffnenUrl: `/api/admin/maengelschreiben/oeffnen?gartennr=${encodeURIComponent(nr)}`,
+  titel: `Aufforderung Garten ${nr}`, meldung: () => 'Das Schreiben wurde im PDF-Programm geöffnet – dort drucken oder als PDF verschicken.',
+});
+
+function mangelDialog(m, gartennr) {
+  const isNew = !m || !m.id;
+  const cur = { gartennr: gartennr || '', datum: todayIso(), art: 'Pflege und Unkraut', beschreibung: '', frist: '', erledigtAm: '', ...(m || {}) };
+  const frist14 = () => { const d = new Date(); d.setDate(d.getDate() + 14); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const f = {
+    gartennr: h('input', { type: 'text', value: cur.gartennr, maxlength: 20, style: 'width:6em', placeholder: 'z. B. 12' }),
+    datum: h('input', { type: 'date', value: cur.datum }),
+    art: h('select', null, MANGEL_ARTEN.map((a) => h('option', { value: a, selected: a === cur.art }, a))),
+    beschreibung: h('textarea', { rows: 3, maxlength: 300, style: 'width:100%', placeholder: 'Was ist zu beseitigen? z. B. Hecke zur Wegseite höher als 1,25 m, bitte zurückschneiden' }, cur.beschreibung),
+    frist: h('input', { type: 'date', value: cur.frist || (isNew ? frist14() : '') }),
+    erledigt: h('input', { type: 'date', value: cur.erledigtAm }),
+  };
+  const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  const body = h('div', { class: 'form' },
+    fld('Garten *', f.gartennr), fld('Begehung am *', f.datum), fld('Art', f.art),
+    fld('Beschreibung *', f.beschreibung, null, true),
+    fld('Frist zur Beseitigung', f.frist), fld('Erledigt am', f.erledigt, 'leer = noch offen'));
+  return modal(isNew ? 'Mangel eintragen' : 'Mangel bearbeiten', body, [
+    { label: 'Abbrechen', value: false },
+    { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+      const data = { gartennr: f.gartennr.value, datum: f.datum.value, art: f.art.value, beschreibung: f.beschreibung.value, frist: f.frist.value, erledigtAm: f.erledigt.value };
+      try {
+        if (isNew) await api('POST', '/api/admin/maengel', data); else await api('PUT', `/api/admin/maengel/${cur.id}`, data);
+        toast('Gespeichert', 'ok');
+      } catch (e) { handleErr(e); return false; }
+    } }]);
+}
+
+function adminMaengel() {
+  if (S.maengel == null) {
+    if (!S.maengelLoading) loadMaengel();
+    return h('p', { class: 'hint' }, 'Wird geladen …');
+  }
+  const heute = todayIso();
+  const alle = S.maengel;
+  const offen = alle.filter((m) => !m.erledigtAm);
+  const erledigt = alle.filter((m) => m.erledigtAm);
+  const neu = async (nr) => { if (await mangelDialog(null, nr)) { S.maengel = null; render(); } };
+  const bearbeiten = async (m) => { if (await mangelDialog(m)) { S.maengel = null; render(); } };
+  const speichern = async (m, aenderung) => {
+    try { await api('PUT', `/api/admin/maengel/${m.id}`, { gartennr: m.gartennr, datum: m.datum, art: m.art, beschreibung: m.beschreibung, frist: m.frist || '', erledigtAm: m.erledigtAm || '', ...aenderung }); S.maengel = null; render(); } catch (e) { handleErr(e); }
+  };
+  const loeschen = async (m) => {
+    if (!(await confirmBox('Diesen Mangel löschen?', 'Löschen', true))) return;
+    try { await api('DELETE', `/api/admin/maengel/${m.id}`); S.maengel = null; render(); } catch (e) { handleErr(e); }
+  };
+  const zeile = (m) => h('li', { class: 'mangel' + (m.erledigtAm ? ' erledigt' : '') },
+    h('div', { class: 'mangel-text' }, h('b', null, m.art), h('div', null, m.beschreibung),
+      h('div', { class: 'hint' }, `Begehung ${deDate(m.datum)}`, m.frist && !m.erledigtAm ? ` · Frist ${deDate(m.frist)}` : '', m.erledigtAm ? ` · erledigt ${deDate(m.erledigtAm)}` : '')),
+    !m.erledigtAm && m.frist && m.frist < heute ? h('span', { class: 'badge warn' }, 'Frist abgelaufen') : null,
+    h('div', { class: 'termin-aktionen' },
+      m.erledigtAm ? h('button', { class: 'btn small', onclick: () => speichern(m, { erledigtAm: '' }) }, 'Wieder öffnen')
+        : h('button', { class: 'btn small primary', onclick: () => speichern(m, { erledigtAm: heute }) }, 'Erledigt'),
+      h('button', { class: 'btn small', onclick: () => bearbeiten(m) }, 'Bearbeiten'),
+      mehrMenue([{ label: 'Löschen', gefahr: true, aktion: () => loeschen(m) }])));
+  const gruppen = new Map();
+  for (const m of offen) { if (!gruppen.has(m.gartennr)) gruppen.set(m.gartennr, []); gruppen.get(m.gartennr).push(m); }
+  const garten = [...gruppen.entries()].sort((a, b) => a[0].localeCompare(b[0], 'de', { numeric: true }));
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Beim Rundgang gefundene Mängel je Garten mit Frist. Mit der Begehungsliste gehst du durch die Anlage, hier trägst du die Mängel ein und schreibst dem Pächter eine Aufforderung. Nur der Vorstand sieht diese Liste.'),
+    h('div', { class: 'toolbar' },
+      h('button', { class: 'btn primary', onclick: () => neu('') }, '+ Mangel eintragen'),
+      h('button', { class: 'btn', onclick: begehungslisteDrucken }, 'Begehungsliste drucken'),
+      h('div', { class: 'spacer' }),
+      h('span', { class: 'stat' }, `${offen.length} offen · ${erledigt.length} erledigt`)),
+    garten.length ? garten.map(([nr, l]) => h('div', { class: 'card mangel-garten' },
+      h('div', { class: 'fs-kopf' }, h('b', null, `Garten ${nr}`, l[0].name ? ` · ${l[0].name}` : ''),
+        h('span', { class: 'toolbar-gruppe' },
+          h('button', { class: 'btn small', onclick: () => neu(nr) }, '+ Mangel'),
+          h('button', { class: 'btn small primary', onclick: () => maengelschreibenDrucken(nr) }, 'Aufforderung schreiben'))),
+      h('ul', { class: 'mangel-liste' }, l.map(zeile))))
+      : h('div', { class: 'card' }, leer('fertig', 'Keine offenen Mängel', 'Bei der nächsten Begehung gefundene Mängel trägst du hier ein. Die Begehungsliste zum Ausdrucken liegt oben bereit.', '+ Mangel eintragen', () => neu(''))),
+    erledigt.length ? h('details', { class: 'card', style: 'margin-top:12px' }, h('summary', null, `Erledigt (${erledigt.length})`),
+      h('ul', { class: 'mangel-liste' }, erledigt.map((m) => h('li', { class: 'mangel erledigt' }, h('div', { class: 'mangel-text' },
+        h('b', null, `Garten ${m.gartennr} · ${m.art}`), h('div', null, m.beschreibung), h('div', { class: 'hint' }, `erledigt ${deDate(m.erledigtAm)}`)),
+      h('div', { class: 'termin-aktionen' }, h('button', { class: 'btn small', onclick: () => speichern(m, { erledigtAm: '' }) }, 'Wieder öffnen'),
+        mehrMenue([{ label: 'Löschen', gefahr: true, aktion: () => loeschen(m) }])))))) : null);
+}
+
 // ------------------------------------------------------------------ Tab: Termine (Jahresplaner)
 
 const TERMIN_ARTEN = ['Arbeitseinsatz', 'Versammlung', 'Ablesung', 'Fest', 'Vorstand', 'Sonstiges'];
@@ -3122,7 +3225,7 @@ const terminZeit = (t) => (t.von ? `${t.von}${t.bis ? '–' + t.bis : ''} Uhr` :
 
 function terminDialog(t) {
   const isNew = !t || !t.id;
-  const cur = { datum: todayIso(), von: '', bis: '', titel: '', art: 'Arbeitseinsatz', ort: '', notiz: '', ...(t || {}) };
+  const cur = { datum: todayIso(), von: '', bis: '', titel: '', art: 'Arbeitseinsatz', ort: '', notiz: '', tops: '', ...(t || {}) };
   const f = {
     datum: h('input', { type: 'date', value: cur.datum }),
     von: h('input', { type: 'time', value: cur.von }), bis: h('input', { type: 'time', value: cur.bis }),
@@ -3130,16 +3233,18 @@ function terminDialog(t) {
     art: h('select', null, TERMIN_ARTEN.map((a) => h('option', { value: a, selected: a === cur.art }, a))),
     ort: h('input', { type: 'text', value: cur.ort, maxlength: 100, placeholder: 'z. B. Vereinsheim' }),
     notiz: h('textarea', { rows: 2, maxlength: 300, style: 'width:100%', placeholder: 'z. B. Bitte Arbeitshandschuhe mitbringen' }, cur.notiz || ''),
+    tops: h('textarea', { rows: 5, maxlength: 3000, style: 'width:100%', placeholder: 'Ein Punkt pro Zeile, z. B.\nBegrüßung\nKassenbericht\nVerschiedenes' }, cur.tops || ''),
   };
   const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
   const body = h('div', { class: 'form' },
     fld('Titel *', f.titel, null, true), fld('Datum *', f.datum), fld('Art', f.art),
     fld('Beginn', f.von, 'leer = ganztägig'), fld('Ende', f.bis), fld('Ort', f.ort),
-    fld('Hinweis (für alle sichtbar – keine Namen oder persönlichen Angaben)', f.notiz, null, true));
+    fld('Hinweis (für alle sichtbar – keine Namen oder persönlichen Angaben)', f.notiz, null, true),
+    fld('Tagesordnung für die Einladung (optional)', f.tops, 'Leer lassen: bei Versammlungen werden die üblichen Punkte eingesetzt. Für alle sichtbar – keine Namen.', true));
   return modal(isNew ? 'Termin eintragen' : 'Termin bearbeiten', body, [
     { label: 'Abbrechen', value: false },
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
-      const data = { datum: f.datum.value, von: f.von.value, bis: f.bis.value, titel: f.titel.value, art: f.art.value, ort: f.ort.value, notiz: f.notiz.value.trim() };
+      const data = { datum: f.datum.value, von: f.von.value, bis: f.bis.value, titel: f.titel.value, art: f.art.value, ort: f.ort.value, notiz: f.notiz.value.trim(), tops: f.tops.value };
       try {
         if (isNew) await api('POST', '/api/admin/termine', data);
         else await api('PUT', `/api/admin/termine/${cur.id}`, data);
@@ -3158,6 +3263,15 @@ const jahresberichtDrucken = (jahr) => pdfDrucken({
 const jahresplanDrucken = (jahr) => pdfDrucken({
   url: `/api/termine-druck?jahr=${jahr}`, oeffnenUrl: `/api/termine-druck/oeffnen?jahr=${jahr}`,
   titel: `Vereinstermine ${jahr}`, meldung: () => 'Der Jahresplan wurde im PDF-Programm geöffnet – dort drucken oder aushängen.',
+});
+
+const einladungDrucken = (t) => pdfDrucken({
+  url: `/api/admin/termine/${t.id}/einladung`, oeffnenUrl: `/api/admin/termine/${t.id}/einladung/oeffnen`,
+  titel: `Einladung ${t.titel}`, meldung: () => 'Die Einladung wurde im PDF-Programm geöffnet – dort drucken oder per E-Mail verschicken.',
+});
+const anwesenheitDrucken = (t) => pdfDrucken({
+  url: `/api/admin/termine/${t.id}/anwesenheit`, oeffnenUrl: `/api/admin/termine/${t.id}/anwesenheit/oeffnen`,
+  titel: `Anwesenheitsliste ${t.titel}`, meldung: () => 'Die Anwesenheitsliste wurde im PDF-Programm geöffnet – dort drucken.',
 });
 
 function viewTermine() {
@@ -3212,6 +3326,8 @@ function viewTermine() {
             t.notiz ? h('div', { class: 'hint' }, t.notiz) : null),
           h('span', { class: 'chip termin-art' }, t.art),
           istAdmin ? h('div', { class: 'termin-aktionen' },
+            t.art === 'Versammlung' || t.art === 'Vorstand' ? h('button', { class: 'btn small', title: 'Einladung mit Tagesordnung als PDF', onclick: () => einladungDrucken(t) }, 'Einladung') : null,
+            t.art === 'Versammlung' || t.art === 'Vorstand' ? h('button', { class: 'btn small', title: 'Liste aller Pächter zum Unterschreiben', onclick: () => anwesenheitDrucken(t) }, 'Anwesenheit') : null,
             h('button', { class: 'btn small', onclick: () => neu(t) }, 'Bearbeiten'),
             h('button', { class: 'btn small danger', onclick: () => loeschen(t) }, 'Löschen')) : null);
       })))))
@@ -3434,6 +3550,45 @@ const wertermittlungDrucken = (x) => pdfDrucken({
   titel: `Wertermittlung Garten ${x.gartennr}`, meldung: () => 'Die Wertermittlung wurde im PDF-Programm geöffnet – dort drucken.',
 });
 
+// ------------------------------------------------------------------ Zählerstand-Erinnerung
+
+async function zaehlerErinnerungDialog(jahr) {
+  let d;
+  try { d = await api('GET', `/api/admin/zaehler-fehlen?year=${jahr}`); } catch (e) { handleErr(e); return; }
+  const in14 = new Date(); in14.setDate(in14.getDate() + 14);
+  const frist = h('input', { type: 'date', value: `${in14.getFullYear()}-${String(in14.getMonth() + 1).padStart(2, '0')}-${String(in14.getDate()).padStart(2, '0')}` });
+  const mitMail = d.fehlend.filter((f) => f.email).length;
+  const body = h('div', null,
+    d.fehlend.length
+      ? h('div', null,
+        h('p', null, `Bei ${d.fehlend.length} von ${d.gesamt} Gärten mit Zählern fehlt noch ein aktueller Stand.`),
+        h('div', { class: 'tablewrap', style: 'max-height:260px;overflow:auto' }, h('table', null,
+          h('thead', null, h('tr', null, ['Garten', 'Name', 'Es fehlt', 'E-Mail'].map((t) => h('th', null, t)))),
+          h('tbody', null, d.fehlend.map((f) => h('tr', null, h('td', null, f.gartennr), h('td', null, f.name), h('td', null, f.fehlt.join(' + ')),
+            h('td', { class: 'klein' }, f.email || '–')))))),
+        h('div', { class: 'field', style: 'margin-top:12px;max-width:16em' }, h('label', null, 'Bitte melden bis'), frist),
+        h('p', { class: 'hint', style: 'margin-top:8px' }, `Der Aushang nennt nur die Gartennummern, keine Namen. Die E-Mail geht als Blindkopie (Bcc) an ${mitMail} Pächter mit hinterlegter Adresse – niemand sieht die Adressen der anderen.`))
+      : leer('fertig', 'Alles gemeldet', `Für ${jahr} liegen von allen ${d.gesamt} Gärten mit Zählern aktuelle Stände vor.`));
+  const knoepfe = [{ label: 'Schließen', value: false }];
+  if (d.fehlend.length) {
+    knoepfe.push({ label: 'Aushang drucken', value: true, action: async () => {
+      pdfDrucken({ url: `/api/admin/zaehler-aushang?year=${jahr}&frist=${encodeURIComponent(frist.value)}`, oeffnenUrl: `/api/admin/zaehler-aushang/oeffnen?year=${jahr}&frist=${encodeURIComponent(frist.value)}`,
+        titel: 'Zählerstände fehlen', meldung: () => 'Der Aushang wurde im PDF-Programm geöffnet – dort drucken.' });
+      return false;
+    } });
+    if (mitMail) {
+      knoepfe.push({ label: 'E-Mail vorbereiten', cls: 'primary', value: true, action: async () => {
+        try {
+          const r = await api('POST', `/api/admin/zaehler-mail?year=${jahr}&frist=${encodeURIComponent(frist.value)}`);
+          toast(r.ohneMail ? `E-Mail an ${r.empfaenger} vorbereitet – ${r.ohneMail} ohne Adresse oder zu viele für einen Link.` : `E-Mail an ${r.empfaenger} vorbereitet.`, 'ok');
+        } catch (e) { handleErr(e); }
+        return false;
+      } });
+    }
+  }
+  return breiterDialog(`Fehlende Zählerstände ${jahr}`, body, knoepfe);
+}
+
 // ------------------------------------------------------------------ Berichte & Meldungen
 
 async function loadMeldung(jahr) {
@@ -3471,6 +3626,10 @@ function adminBerichte() {
         h('button', { class: 'btn', onclick: paechterlisteDrucken }, 'Drucken')),
       kachel('karte', 'Lageplan', 'Als Aushang ohne Namen oder für den Vorstand mit Namen.',
         h('button', { class: 'btn', onclick: () => lageplanDrucken(true) }, 'Drucken')),
+      kachel('zaehler', `Fehlende Zählerstände ${st.currentYear}`, 'Wer hat noch keinen Stand gemeldet? Mit Aushang ohne Namen und E-Mail-Erinnerung.',
+        h('button', { class: 'btn', onclick: () => zaehlerErinnerungDialog(st.currentYear) }, 'Prüfen')),
+      kachel('warnung', 'Begehungsliste', 'Vordruck für den Rundgang durch die Anlage, mit den noch offenen Mängeln je Garten.',
+        h('button', { class: 'btn', onclick: begehungslisteDrucken }, 'Drucken')),
       kachel('kalender', `Vereinstermine ${new Date().getFullYear()}`, 'Jahresplaner als Aushang für den Schaukasten.',
         h('button', { class: 'btn', onclick: () => jahresplanDrucken(new Date().getFullYear()) }, 'Drucken')),
       kachel('zaehler', `Ablesebogen ${st.currentYear}`, 'Alle Gärten mit Zählern und Vorjahresständen für den Rundgang.',
