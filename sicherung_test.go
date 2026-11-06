@@ -159,3 +159,24 @@ func TestSchreibeAtomar(t *testing.T) {
 		t.Error("Schreiben in einen fehlenden Ordner muss einen Fehler melden")
 	}
 }
+
+func TestSicherungsOrdnerPruefen(t *testing.T) {
+	abs := t.TempDir()
+	for _, c := range []struct {
+		in string
+		ok bool
+	}{{"", true}, {abs, true}, {abs + string(filepath.Separator) + "x" + string(filepath.Separator) + "..", true},
+		{"relativ/ordner", false}, {"..", false}, {abs + "\x00x", false}, {abs + "\nx", false}} {
+		_, err := sicherungsOrdnerPruefen(c.in)
+		if (err == nil) != c.ok {
+			t.Errorf("%q: Fehler %v, erwartet ok=%v", c.in, err, c.ok)
+		}
+	}
+	// eine vorhandene Datei gleichen Namens wird nie überschrieben
+	if err := checkWritableDir(abs); err != nil {
+		t.Fatal(err)
+	}
+	if rest, _ := os.ReadDir(abs); len(rest) != 0 {
+		t.Errorf("Probedatei liegen geblieben: %v", rest)
+	}
+}

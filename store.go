@@ -354,17 +354,44 @@ func (s *Store) gartenWechsel(id, altGartennr, neuGartennr, mitgliedsnr, name st
 	s.gartenOeffnen(id, neuGartennr, mitgliedsnr, name)
 }
 
+// sicherungsOrdnerPruefen bereinigt den vom Admin eingetragenen zweiten Sicherungsordner: nur ein vollständiger
+// Pfad (z. B. E:\Sicherung oder \\server\freigabe), ohne Steuerzeichen; ein relativer Pfad hinge davon ab,
+// aus welchem Ordner das Programm gestartet wurde.
+func sicherungsOrdnerPruefen(dir string) (string, error) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return "", nil
+	}
+	for _, r := range dir {
+		if r < 0x20 || r == 0x7f {
+			return "", errors.New("Der Ordnername enthält unzulässige Zeichen")
+		}
+	}
+	if !filepath.IsAbs(dir) {
+		return "", errors.New("Bitte den vollständigen Pfad des Ordners eintragen, z. B. E:\\Kleingarten-Sicherung")
+	}
+	return filepath.Clean(dir), nil
+}
+
 // checkWritableDir prüft, ob in einen Ordner geschrieben werden kann (legt ihn
 // bei Bedarf an). Für die Validierung eines vom Benutzer eingetragenen Pfades,
 // z. B. des zweiten Sicherungsordners, damit Tippfehler sofort auffallen.
+// Die Probedatei wird exklusiv neu angelegt, damit nie eine vorhandene Datei oder Verknüpfung
+// gleichen Namens überschrieben wird.
 func checkWritableDir(dir string) error {
+	dir, err := sicherungsOrdnerPruefen(dir)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("Ordner %s kann nicht angelegt werden: %w", dir, err)
 	}
-	probe := filepath.Join(dir, ".schreibtest")
-	if err := os.WriteFile(probe, []byte("x"), 0o600); err != nil {
+	probe := filepath.Join(dir, fmt.Sprintf(".schreibtest-%d", time.Now().UnixNano()))
+	f, err := os.OpenFile(probe, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
 		return fmt.Errorf("Ordner %s ist nicht beschreibbar: %w", dir, err)
 	}
+	_ = f.Close()
 	_ = os.Remove(probe)
 	return nil
 }

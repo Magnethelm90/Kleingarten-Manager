@@ -1004,6 +1004,13 @@ func cleanSettings(in, cur Settings) (Settings, error) {
 	in.IBAN = trim(in.IBAN, 42)
 	in.BIC = trim(in.BIC, 15)
 	in.ZweiteSicherung = trim(in.ZweiteSicherung, 250)
+	if in.ZweiteSicherung != cur.ZweiteSicherung {
+		z, err := sicherungsOrdnerPruefen(in.ZweiteSicherung)
+		if err != nil {
+			return in, bad(err.Error())
+		}
+		in.ZweiteSicherung = z
+	}
 	in.Logo = cur.Logo // nur über /api/admin/logo änderbar
 	in.Farbe = strings.ToLower(strings.TrimSpace(in.Farbe))
 	if in.Farbe != "" && !farbeGueltig(in.Farbe) {
