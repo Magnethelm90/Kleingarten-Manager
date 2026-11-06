@@ -74,6 +74,11 @@ sie enthält auch Buchungen Dritter. Übernommen werden nur die bestätigten Zah
 derselbe Auszug nicht zweimal gebucht wird, bleibt von jeder übernommenen Buchung ein gekürzter Prüfwert (Hash) ohne
 lesbaren Inhalt.
 
+**Spenden:** Name und Anschrift von Spendern (auch Nicht-Mitgliedern) werden für die Zuwendungsbestätigung
+gespeichert. Für bestätigte Spenden muss der Verein ein Doppel aufbewahren; sie bleiben deshalb auch beim Löschen
+eines Pächters erhalten und verlieren ihren Personenbezug erst nach Ablauf der Aufbewahrungsfrist. Unbestätigte Spenden
+verlieren beim Löschen der Person Name und Anschrift, der Betrag bleibt für die Kasse.
+
 **Arbeitseinsätze:** Wer bei welchem Einsatz wie viele Stunden geleistet hat, steht nur in der Verwaltung (nicht im
 öffentlichen Jahresplaner), ist Teil der Auskunft und wird beim endgültigen Löschen der Person entfernt.
 
@@ -111,8 +116,8 @@ Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 | Datenschutzbeauftragter | [Name/Kontakt oder „nicht benannt, da weniger als 20 Personen ständig mit der Verarbeitung beschäftigt sind (§ 38 BDSG)“] |
 | Zweck | Verwaltung der Pachtverhältnisse, Abrechnung von Wasser, Strom, Pacht und Beiträgen, Zahlungsüberwachung, Kassenführung des Vereins |
 | Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Pacht-/Mitgliedschaftsvertrag), lit. c (steuerliche Aufbewahrungspflichten), lit. f (Vereinsverwaltung) |
-| Betroffene | Pächterinnen und Pächter, Mitglieder, Interessenten auf der Warteliste |
-| Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, bei Begehungen festgestellte Mängel, interne Notiz |
+| Betroffene | Pächterinnen und Pächter, Mitglieder, Interessenten auf der Warteliste, Spenderinnen und Spender |
+| Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, bei Begehungen festgestellte Mängel, Spenden, interne Notiz |
 | Empfänger | Vorstand/Kassenwart; Kassenprüfer (Lesezugriff auf den Kassenbericht); Steuerberatung, Bank bei Zahlungsvorgängen; keine Auftragsverarbeiter |
 | Drittlandübermittlung | keine |
 | Löschfristen | Stammdaten: nach Ende der Mitgliedschaft bzw. des Pachtverhältnisses; Rechnungen, Jahresunterlagen und Übergabeprotokolle: [10] Jahre ab Ende des Ausstellungs- bzw. Übergabejahres; Warteliste: sobald kein Interesse mehr besteht (Nachfrage spätestens alle 2 Jahre) |

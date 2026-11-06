@@ -15,7 +15,7 @@ import (
 // datenbestandLeer meldet, ob noch nichts eingegeben wurde (keine Pächter, Rechnungen, Ausgaben,
 // kein abgeschlossenes Jahr). Der Aufrufer hält s.mu.
 func (s *Store) datenbestandLeer() bool {
-	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 || len(s.d.Einsatzstunden) > 0 {
+	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 || len(s.d.Einsatzstunden) > 0 || len(s.d.Spenden) > 0 {
 		return false
 	}
 	for _, j := range s.d.Jahre {
@@ -166,6 +166,14 @@ func (s *Store) ladeBeispieldaten() {
 			s.d.Maengel = append(s.d.Maengel, m)
 		}
 	}
+	// Spenden und erfundene Angaben zur Gemeinnützigkeit, damit sich die Zuwendungsbestätigung ausprobieren lässt
+	s.d.Gemeinnuetzigkeit = Gemeinnuetzigkeit{Anschrift: "Am Vereinsheim 1\n" + set.Ort, Zweck: "der Kleingärtnerei", Finanzamt: "Musterstadt",
+		Steuernummer: "000/000/00000", Bescheid: "freistellung", BescheidDatum: heute.AddDate(-1, -2, 0).Format("2006-01-02"),
+		Veranlagung: fmt.Sprintf("%d–%d", heute.Year()-4, heute.Year()-2)}
+	if p, ok := s.aktiverPaechterLocked("2"); ok {
+		s.d.Spenden = append(s.d.Spenden, Spende{ID: newID(), Datum: fmt.Sprintf("%d-05-10", jahr), Jahr: jahr, Betrag: 50, PaechterID: p.ID, Name: p.Name, Strasse: p.Strasse, PLZOrt: p.PLZOrt})
+	}
+	s.d.Spenden = append(s.d.Spenden, Spende{ID: newID(), Datum: fmt.Sprintf("%d-06-21", jahr), Jahr: jahr, Betrag: 120, Name: "Gartencenter Grünfink", Strasse: "Gewerbestraße 4", PLZOrt: set.Ort, Notiz: "für das Sommerfest"})
 	s.d.Demo = true
 	s.audit("Beispieldaten geladen")
 }

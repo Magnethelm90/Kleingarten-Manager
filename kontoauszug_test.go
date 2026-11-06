@@ -126,7 +126,7 @@ func TestKontoauszugZuordnenUndBuchen(t *testing.T) {
 		t.Fatalf("Vorschau: %d %s", rec.Code, rec.Body.String())
 	}
 	v := decode[kontoVorschau](t, rec)
-	want := []struct{ status, id string }{{"passt", a.ID}, {"teilbetrag", b.ID}, {"vorschlag", c.ID}, {"offen", ""}}
+	want := []struct{ status, id string }{{"passt", a.ID}, {"teilbetrag", b.ID}, {"vorschlag", c.ID}, {"spende", ""}}
 	if len(v.Buchungen) != 4 || v.Ausgaben != 1 {
 		t.Fatalf("Buchungen: %d, Ausgaben %d", len(v.Buchungen), v.Ausgaben)
 	}
@@ -148,6 +148,18 @@ func TestKontoauszugZuordnenUndBuchen(t *testing.T) {
 	}
 	if x := rechnung(b.ID); x.BezahltBetrag == nil || *x.BezahltBetrag != 10 {
 		t.Errorf("Teilzahlung: %v", x.BezahltBetrag)
+	}
+	// der Eingang »Spende« wird als Spende erfasst
+	sp := zahl(3)
+	sp["spende"], sp["name"] = true, v.Buchungen[3].Name
+	if rec := do(h, "POST", "/api/admin/kontoauszug/buchen", map[string]any{"zahlungen": []any{sp}}); rec.Code != 200 {
+		t.Fatalf("Spende buchen: %d %s", rec.Code, rec.Body.String())
+	}
+	app.st.mu.Lock()
+	letzte := app.st.d.Spenden[len(app.st.d.Spenden)-1]
+	app.st.mu.Unlock()
+	if letzte.Betrag != 20 || letzte.Name != "Unbekannt" || letzte.Datum != "2026-02-13" {
+		t.Errorf("Spende aus dem Kontoauszug: %+v", letzte)
 	}
 	// derselbe Auszug noch einmal: nichts doppelt
 	v2 := decode[kontoVorschau](t, doMultipart(h, "/api/admin/kontoauszug", "umsaetze.csv", []byte(csvText)))

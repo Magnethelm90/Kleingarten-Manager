@@ -273,6 +273,7 @@ const NAV = [
     { admin: 'maengel', label: 'Mängel', ic: 'warnung' }] },
   { gruppe: 'Kasse & Berichte', items: [
     { admin: 'kassenbericht', label: 'Kassenbericht', ic: 'kasse' },
+    { admin: 'spenden', label: 'Spenden', ic: 'stern' },
     { admin: 'berichte', label: 'Berichte & Meldungen', ic: 'bericht' },
     { admin: 'jahreswechsel', label: 'Jahreswechsel', ic: 'fertig' }] },
   { gruppe: 'Einstellungen', items: [
@@ -293,6 +294,7 @@ function adminTabWaehlen(id) {
   if (id === 'datenschutz') S.datenschutz = null;
   if (id === 'warteliste') S.warteliste = null;
   if (id === 'maengel') S.maengel = null;
+  if (id === 'spenden') S.spenden = null;
   if (id === 'paechter') S.uebergaben = null;
   if (id === 'berichte') S.meldung = null;
 }
@@ -1841,11 +1843,154 @@ function viewZahlungen() {
       tbody)));
 }
 
+// ------------------------------------------------------------------ Spenden und Zuwendungsbestätigungen
+
+async function loadSpenden() {
+  if (S.spendenLoading) return;
+  S.spendenLoading = true;
+  try { S.spenden = await api('GET', '/api/admin/spenden'); } catch (e) { handleErr(e); S.spenden = { spenden: [], gemeinnuetzigkeit: {} }; }
+  S.spendenLoading = false;
+  render();
+}
+
+function spendeDialog(x) {
+  const st = S.state;
+  const isNew = !x || !x.id;
+  const cur = { datum: todayIso(), betrag: '', name: '', strasse: '', plzOrt: '', paechterId: '', verzicht: false, notiz: '', ...(x || {}) };
+  const gesperrt = !!cur.bestaetigtAm;
+  const f = {
+    paechter: h('select', { disabled: gesperrt }, [h('option', { value: '' }, '– kein Pächter / andere Person –'),
+      ...st.paechter.filter((p) => !p.geloescht).map((p) => h('option', { value: p.id, selected: p.id === cur.paechterId }, `${p.gartennr ? 'Garten ' + p.gartennr + ' · ' : ''}${p.name}`))]),
+    datum: h('input', { type: 'date', value: cur.datum, disabled: gesperrt }),
+    betrag: h('input', { type: 'text', inputmode: 'decimal', value: cur.betrag === '' ? '' : numIn(cur.betrag), disabled: gesperrt, placeholder: '0,00' }),
+    name: h('input', { type: 'text', value: cur.name, maxlength: 100, disabled: gesperrt }),
+    strasse: h('input', { type: 'text', value: cur.strasse, maxlength: 100 }),
+    plzOrt: h('input', { type: 'text', value: cur.plzOrt, maxlength: 80 }),
+    verzicht: h('input', { type: 'checkbox', checked: !!cur.verzicht, disabled: gesperrt }),
+    notiz: h('input', { type: 'text', value: cur.notiz || '', maxlength: 200 }),
+  };
+  f.paechter.addEventListener('change', () => {
+    const p = st.paechter.find((q) => q.id === f.paechter.value);
+    if (p) { f.name.value = p.name; f.strasse.value = p.strasse || ''; f.plzOrt.value = p.plzOrt || ''; }
+  });
+  const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  const body = h('div', null,
+    gesperrt ? h('div', { class: 'banner info' }, `Für diese Spende wurde am ${deDate(cur.bestaetigtAm)} eine Bestätigung ausgestellt. Betrag, Datum und Spender lassen sich deshalb nicht mehr ändern.`) : null,
+    h('div', { class: 'form' },
+      fld('Spender ist Pächter', f.paechter, 'übernimmt Name und Anschrift', true),
+      fld('Tag der Zuwendung *', f.datum), fld('Betrag (€) *', f.betrag),
+      fld('Name *', f.name, null, true), fld('Straße', f.strasse), fld('PLZ und Ort', f.plzOrt),
+      h('div', { class: 'field wide' }, h('label', { class: 'check' }, f.verzicht, ' Verzicht auf Erstattung von Aufwendungen (Aufwandsspende)')),
+      fld('Notiz', f.notiz, null, true)));
+  return modal(isNew ? 'Spende erfassen' : 'Spende bearbeiten', body, [
+    { label: 'Abbrechen', value: false },
+    { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+      const betrag = parseNum(f.betrag.value);
+      if (betrag == null || Number.isNaN(betrag) || betrag <= 0) { toast('Bitte einen Betrag größer als 0 eintragen.', 'err'); return false; }
+      const daten = { ...cur, paechterId: f.paechter.value, datum: f.datum.value, betrag, name: f.name.value, strasse: f.strasse.value, plzOrt: f.plzOrt.value, verzicht: f.verzicht.checked, notiz: f.notiz.value };
+      try {
+        if (isNew) await api('POST', '/api/admin/spenden', daten); else await api('PUT', `/api/admin/spenden/${cur.id}`, daten);
+        toast('Gespeichert', 'ok');
+      } catch (e) { handleErr(e); return false; }
+    } }]);
+}
+
+async function bestaetigungAusstellen(liste) {
+  const schon = liste.filter((x) => x.bestaetigtAm);
+  if (schon.length && !(await confirmBox(`Für ${schon.length === 1 ? 'diese Spende' : schon.length + ' dieser Spenden'} wurde am ${deDate(schon[0].bestaetigtAm)} schon eine Bestätigung ausgestellt. Nur erneut ausstellen, wenn die erste nicht verwendet wird (z. B. verloren oder fehlerhaft).`, 'Erneut ausstellen'))) return;
+  const ids = liste.map((x) => x.id);
+  try { await api('POST', '/api/admin/spenden/bestaetigen', { ids }); } catch (e) { handleErr(e); return; }
+  const q = ids.map(encodeURIComponent).join(',');
+  await pdfDrucken({ url: `/api/admin/zuwendungsbestaetigung?ids=${q}`, oeffnenUrl: `/api/admin/zuwendungsbestaetigung/oeffnen?ids=${q}`,
+    titel: 'Zuwendungsbestätigung', meldung: () => 'Die Bestätigung wurde im PDF-Programm geöffnet – ausdrucken, unterschreiben und ein Doppel aufbewahren.' });
+  S.spenden = null; render();
+}
+
+function gemeinnuetzigkeitKarte(g, offen) {
+  const f = {
+    anschrift: h('textarea', { rows: 2, style: 'width:100%', placeholder: 'Straße Hausnummer\nPLZ Ort' }, g.anschrift || ''),
+    zweck: h('input', { type: 'text', value: g.zweck || 'der Kleingärtnerei', maxlength: 200 }),
+    finanzamt: h('input', { type: 'text', value: g.finanzamt || '', maxlength: 80, placeholder: 'z. B. Musterstadt' }),
+    steuernummer: h('input', { type: 'text', value: g.steuernummer || '', maxlength: 30 }),
+    bescheid: h('select', null, [['freistellung', 'Freistellungsbescheid (bzw. Anlage zum KSt-Bescheid)'], ['feststellung', 'Feststellungsbescheid nach § 60a AO (neu gegründet)']]
+      .map(([v, t]) => h('option', { value: v, selected: (g.bescheid || 'freistellung') === v }, t))),
+    datum: h('input', { type: 'date', value: g.bescheidDatum || '' }),
+    veranlagung: h('input', { type: 'text', value: g.veranlagung || '', maxlength: 30, placeholder: 'z. B. 2021–2023' }),
+  };
+  const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  const speichern = async () => {
+    try {
+      await api('PUT', '/api/admin/spenden/gemeinnuetzigkeit', { anschrift: f.anschrift.value, zweck: f.zweck.value, finanzamt: f.finanzamt.value, steuernummer: f.steuernummer.value,
+        bescheid: f.bescheid.value, bescheidDatum: f.datum.value, veranlagung: f.veranlagung.value });
+      toast('Gespeichert', 'ok'); S.spenden = null; render();
+    } catch (e) { handleErr(e); }
+  };
+  return h('details', { class: 'card', open: offen },
+    h('summary', null, h('b', null, 'Angaben zur Gemeinnützigkeit'), g.steuernummer ? h('span', { class: 'hint' }, ` · Finanzamt ${g.finanzamt}, StNr. ${g.steuernummer}`) : null),
+    h('p', { class: 'hint', style: 'margin-top:10px' }, 'Steht im Bescheid des Finanzamts. Ohne diese Angaben lässt sich keine Zuwendungsbestätigung ausstellen.'),
+    h('div', { class: 'form' },
+      fld('Anschrift des Vereins', f.anschrift, null, true),
+      fld('Begünstigter Zweck', f.zweck, '»Wir sind wegen Förderung … befreit« – meist »der Kleingärtnerei«', true),
+      fld('Finanzamt', f.finanzamt), fld('Steuernummer', f.steuernummer),
+      fld('Art des Bescheids', f.bescheid, null, true), fld('Datum des Bescheids', f.datum, 'Freistellung höchstens 5, Feststellung höchstens 3 Jahre alt'),
+      fld('Letzter Veranlagungszeitraum', f.veranlagung, 'nur beim Freistellungsbescheid')),
+    h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: speichern }, 'Speichern')));
+}
+
+function adminSpenden() {
+  if (S.spenden == null) {
+    if (!S.spendenLoading) loadSpenden();
+    return h('p', { class: 'hint' }, 'Wird geladen …');
+  }
+  const d = S.spenden;
+  const jahre = [...new Set([new Date().getFullYear(), ...d.spenden.map((x) => Number(x.datum.slice(0, 4)))])].sort((a, b) => b - a);
+  const neuestes = d.spenden.length ? Math.max(...d.spenden.map((x) => Number(x.datum.slice(0, 4)))) : jahre[0];
+  const jahr = S.spendenJahr && jahre.includes(S.spendenJahr) ? S.spendenJahr : neuestes;
+  const l = d.spenden.filter((x) => x.datum.startsWith(jahr + '-'));
+  S.spendenAuswahl = S.spendenAuswahl instanceof Set ? S.spendenAuswahl : new Set();
+  for (const id of [...S.spendenAuswahl]) if (!l.some((x) => x.id === id)) S.spendenAuswahl.delete(id);
+  const neu = async () => { if (await spendeDialog(null)) { S.spenden = null; render(); } };
+  const loeschen = async (x) => {
+    if (!(await confirmBox(`Spende von ${x.name} über ${eur(x.betrag)} löschen?`, 'Löschen', true))) return;
+    try { await api('DELETE', `/api/admin/spenden/${x.id}`); S.spenden = null; render(); } catch (e) { handleErr(e); }
+  };
+  const auswahl = l.filter((x) => S.spendenAuswahl.has(x.id));
+  const summe = l.reduce((a, x) => a + x.betrag, 0);
+  const jahrSel = h('select', { onchange: (e) => { S.spendenJahr = Number(e.target.value); S.spendenAuswahl.clear(); render(); } },
+    jahre.map((j) => h('option', { value: j, selected: j === jahr }, String(j))));
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Geldspenden an den Verein erfassen und die Zuwendungsbestätigung nach dem amtlichen Muster ausstellen – einzeln oder als Sammelbestätigung für ein Jahr. Spenden zählen im Kassenbericht als Einnahme.'),
+    d.hinweis ? h('div', { class: 'banner warn' }, d.hinweis) : null,
+    gemeinnuetzigkeitKarte(d.gemeinnuetzigkeit || {}, !!d.hinweis),
+    h('div', { class: 'toolbar', style: 'margin-top:14px' },
+      h('button', { class: 'btn primary', onclick: neu }, '+ Spende erfassen'),
+      h('label', null, 'Jahr'), jahrSel,
+      h('button', { class: 'btn', disabled: !auswahl.length || !!d.hinweis, title: 'Eine Spende: Einzelbestätigung; mehrere desselben Spenders: Sammelbestätigung', onclick: () => bestaetigungAusstellen(auswahl) },
+        auswahl.length > 1 ? `Sammelbestätigung (${auswahl.length})` : 'Bestätigung für Auswahl'),
+      h('div', { class: 'spacer' }), h('span', { class: 'stat' }, `${l.length} Spende(n) · ${eur(summe)}`)),
+    l.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['', 'Datum', 'Spender', 'Betrag', 'Bestätigung', ''].map((x) => h('th', null, x)))),
+      h('tbody', null, l.map((x) => h('tr', null,
+        h('td', null, h('input', { type: 'checkbox', checked: S.spendenAuswahl.has(x.id), disabled: x.bereinigt, 'aria-label': 'auswählen',
+          onchange: (e) => { if (e.target.checked) S.spendenAuswahl.add(x.id); else S.spendenAuswahl.delete(x.id); render(); } })),
+        h('td', null, deDate(x.datum)),
+        h('td', { class: 'wrap' }, h('b', null, x.name), h('div', { class: 'hint' }, [x.strasse, x.plzOrt].filter(Boolean).join(', ') || 'Anschrift fehlt'),
+          x.verzicht ? h('span', { class: 'badge neu' }, 'Aufwandsspende') : null),
+        h('td', { class: 'num' }, eur(x.betrag)),
+        h('td', null, x.bestaetigtAm ? h('span', { class: 'badge ok' }, `ausgestellt ${deDate(x.bestaetigtAm)}`) : h('span', { class: 'badge warn' }, 'offen')),
+        h('td', { class: 'aktionen' },
+          h('button', { class: 'btn small', disabled: !!d.hinweis || x.bereinigt, onclick: () => bestaetigungAusstellen([x]) }, 'Bestätigung'), ' ',
+          h('button', { class: 'btn small', disabled: x.bereinigt, onclick: async () => { if (await spendeDialog(x)) { S.spenden = null; render(); } } }, 'Bearbeiten'), ' ',
+          mehrMenue([{ label: 'Löschen', gefahr: true, aktion: () => loeschen(x) }])))))))
+      : h('div', { class: 'card' }, leer('stern', `Noch keine Spenden in ${jahr}`, 'Erfasse Spenden hier oder übernimm sie beim Einlesen des Kontoauszugs. Daraus entsteht die Zuwendungsbestätigung für das Finanzamt.', '+ Spende erfassen', neu)),
+    h('p', { class: 'hint', style: 'margin-top:14px' }, 'Gut zu wissen: Mitgliedsbeiträge an Kleingartenvereine sind steuerlich nicht abziehbar, deshalb werden hier nur Spenden bestätigt. Bis 300 € je Spende genügt dem Spender meist der Kontoauszug als Nachweis. Ein Doppel jeder Bestätigung muss der Verein aufbewahren. Im Zweifel bitte mit dem Steuerberater klären.'));
+}
+
 // ------------------------------------------------------------------ Kontoauszug einlesen
 
 const KONTO_STATUS = {
   passt: ['ok', 'Nummer und Betrag passen'], teilbetrag: ['warn', 'Teil- oder Mehrzahlung'], vorschlag: ['neu', 'Vorschlag – bitte prüfen'],
-  bezahlt: ['', 'schon bezahlt'], doppelt: ['', 'schon übernommen'], offen: ['', 'nicht zugeordnet'],
+  spende: ['neu', 'Spende?'], bezahlt: ['', 'schon bezahlt'], doppelt: ['', 'schon übernommen'], offen: ['', 'nicht zugeordnet'],
 };
 
 function kontoauszugEinlesen() {
@@ -1863,11 +2008,11 @@ function kontoauszugEinlesen() {
 
 function kontoauszugVorschau(v) {
   if (!v.buchungen.length) { toast(`Keine Eingänge in der Datei gefunden${v.ausgaben ? ` (${v.ausgaben} Abbuchungen übersprungen)` : ''}.`, 'err'); return false; }
-  const optionen = (sel) => [h('option', { value: '' }, '– nicht zuordnen –'),
+  const optionen = (sel) => [h('option', { value: '' }, '– nicht zuordnen –'), h('option', { value: 'spende', selected: sel === 'spende' }, '→ als Spende erfassen'),
     ...v.offene.map((r) => h('option', { value: r.id, selected: r.id === sel }, `${r.nummer} · ${r.name} · offen ${eur(r.offen)}${r.jahr ? ` (${r.jahr})` : ''}`))];
   const zeilen = v.buchungen.map((b) => {
     const fest = b.status === 'doppelt' || b.status === 'bezahlt';
-    const wahl = h('select', { disabled: fest, class: 'konto-wahl' }, optionen(b.rechnungId));
+    const wahl = h('select', { disabled: fest, class: 'konto-wahl' }, optionen(b.status === 'spende' ? 'spende' : b.rechnungId));
     const an = h('input', { type: 'checkbox', disabled: fest, checked: b.status === 'passt' || b.status === 'teilbetrag', 'aria-label': 'übernehmen' });
     wahl.addEventListener('change', () => { an.checked = !!wahl.value; zaehlen(); });
     an.addEventListener('change', () => { if (an.checked && !wahl.value) { an.checked = false; toast('Bitte zuerst eine Rechnung auswählen.', 'err'); } zaehlen(); });
@@ -1886,7 +2031,7 @@ function kontoauszugVorschau(v) {
   zaehlen();
   const n = (st) => v.buchungen.filter((b) => b.status === st).length;
   const body = h('div', null,
-    h('p', { class: 'hint' }, `${v.buchungen.length} Eingänge gelesen${v.ausgaben ? `, ${v.ausgaben} Abbuchungen übersprungen` : ''}: ${n('passt')} passen genau, ${n('teilbetrag')} Teilzahlungen, ${n('vorschlag')} Vorschläge über den Namen, ${n('offen')} nicht zugeordnet${n('doppelt') ? `, ${n('doppelt')} schon früher übernommen` : ''}. Übernommen wird nur, was angehakt ist. Die Datei selbst wird nicht gespeichert.`),
+    h('p', { class: 'hint' }, `${v.buchungen.length} Eingänge gelesen${v.ausgaben ? `, ${v.ausgaben} Abbuchungen übersprungen` : ''}: ${n('passt')} passen genau, ${n('teilbetrag')} Teilzahlungen, ${n('vorschlag')} Vorschläge über den Namen, ${n('spende')} mögliche Spenden, ${n('offen')} nicht zugeordnet${n('doppelt') ? `, ${n('doppelt')} schon früher übernommen` : ''}. Übernommen wird nur, was angehakt ist. Die Datei selbst wird nicht gespeichert.`),
     h('div', { class: 'toolbar' }, h('div', { class: 'spacer' }), zaehlerEl),
     h('div', { class: 'tablewrap', style: 'max-height:420px;overflow:auto' }, h('table', { class: 'konto-tab' },
       h('thead', null, h('tr', null, ['', 'Datum', 'Von / Verwendungszweck', 'Betrag', 'Rechnung'].map((x) => h('th', null, x)))),
@@ -1894,11 +2039,13 @@ function kontoauszugVorschau(v) {
   return breiterDialog('Kontoauszug einlesen', body, [
     { label: 'Abbrechen', value: false },
     { label: 'Angehakte übernehmen', cls: 'primary', value: true, action: async () => {
-      const zahlungen = zeilen.filter((z) => z.an.checked && z.wahl.value).map((z) => ({ rechnungId: z.wahl.value, datum: z.b.datum, betrag: z.b.betrag, fingerprint: z.b.fingerprint }));
+      const zahlungen = zeilen.filter((z) => z.an.checked && z.wahl.value).map((z) => (z.wahl.value === 'spende'
+        ? { spende: true, name: z.b.name, datum: z.b.datum, betrag: z.b.betrag, fingerprint: z.b.fingerprint }
+        : { rechnungId: z.wahl.value, datum: z.b.datum, betrag: z.b.betrag, fingerprint: z.b.fingerprint }));
       if (!zahlungen.length) { toast('Es ist nichts angehakt.', 'err'); return false; }
       try {
         const r = await api('POST', '/api/admin/kontoauszug/buchen', { zahlungen });
-        toast(`${r.gebucht} Zahlung(en) über ${eur(r.summe)} übernommen`, 'ok');
+        toast(`${r.gebucht} Zahlung(en) über ${eur(r.summe)} übernommen${r.spenden ? ` – davon ${r.spenden} als Spende; Anschrift unter »Spenden« ergänzen` : ''}`, 'ok');
       } catch (e) { handleErr(e); return false; }
     } }]);
 }
@@ -1909,7 +2056,7 @@ function viewAdmin() {
   const st = S.state;
   if (st.hasPassword && !st.loggedIn) return viewLogin();
   const t = S.adminTab;
-  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'maengel' ? adminMaengel() : t === 'einstellungen' ? adminSettings()
+  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'maengel' ? adminMaengel() : t === 'spenden' ? adminSpenden() : t === 'einstellungen' ? adminSettings()
     : t === 'jahreswechsel' ? adminYear() : t === 'kassenbericht' ? adminKassenbericht(false) : t === 'berichte' ? adminBerichte()
       : t === 'jubilaeen' ? adminJubilaeen() : t === 'daten' ? adminData() : t === 'protokoll' ? adminProtokoll() : t === 'datenschutz' ? adminDatenschutz() : adminSecurity();
   const eintrag = navEintrag('admin', t);
@@ -2518,9 +2665,10 @@ function adminKassenbericht(pruefMode) {
   const card = (t, big, small, cls, ic) => h('div', { class: 'card stat ' + (cls || '') }, ic ? h('div', { class: 'statico' }, icon(ic, 22)) : null,
     h('div', null, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small)));
   const cards = h('div', { class: 'cards' },
-    card('Kassenbestand', eur(k.kassenbestand), `Anfangsbestand ${eur(k.anfangsbestand)} + Zahlungen − Ausgaben${vorjahr ? vjDelta(k.kassenbestand, vorjahr.kassenbestand) : ''}`, k.kassenbestand >= 0 ? 'ok' : 'err'),
+    card('Kassenbestand', eur(k.kassenbestand), `Anfangsbestand ${eur(k.anfangsbestand)} + Zahlungen${k.spenden ? ' + Spenden' : ''} − Ausgaben${vorjahr ? vjDelta(k.kassenbestand, vorjahr.kassenbestand) : ''}`, k.kassenbestand >= 0 ? 'ok' : 'err'),
     card('Von Pächtern eingegangen', `${eur(k.einnahmenBezahlt)}`, `tatsächlich gezahlt, nach heutigem Stand${vorjahr ? vjDelta(k.einnahmenBezahlt, vorjahr.einnahmenBezahlt) : ''}`, 'ok'),
     k.guthabenAusgezahlt ? card('An Pächter ausgezahlt', eur(k.guthabenAusgezahlt), 'Guthaben') : null,
+    k.spenden ? card('Spenden', eur(k.spenden), `an den Verein${vorjahr ? vjDelta(k.spenden, vorjahr.spenden || 0) : ''}`, 'ok') : null,
     card('Sonstige Ausgaben', eur(k.ausgabenSumme), `${k.ausgaben.length} Buchung(en)${vorjahr ? vjDelta(k.ausgabenSumme, vorjahr.ausgabenSumme) : ''}`, k.ausgabenSumme ? 'warn' : 'ok'));
 
   const anfInput = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.anfangsbestand), style: 'width:140px', autocomplete: 'off' });

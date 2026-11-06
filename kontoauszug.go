@@ -27,7 +27,7 @@ type kontoBuchung struct {
 	Betrag      float64 `json:"betrag"`
 	Fingerprint string  `json:"fingerprint"`
 	RechnungID  string  `json:"rechnungId,omitempty"` // Vorschlag
-	Status      string  `json:"status"`               // passt | teilbetrag | vorschlag | bezahlt | doppelt | offen
+	Status      string  `json:"status"`               // passt | teilbetrag | vorschlag | spende | bezahlt | doppelt | offen
 	Hinweis     string  `json:"hinweis,omitempty"`
 }
 
@@ -290,6 +290,8 @@ func (s *Store) zuordnenLocked(bs []kontoBuchung) []offeneRechnung {
 				b.RechnungID, b.Status = kandidat.ID, "vorschlag"
 				b.Hinweis = "über Name und Betrag gefunden – bitte prüfen"
 				vergeben[kandidat.ID] += b.Betrag
+			} else if strings.Contains(text, "SPENDE") {
+				b.Status, b.Hinweis = "spende", "»Spende« im Verwendungszweck – als Spende erfassen?"
 			} else {
 				b.Status = "offen"
 			}
@@ -338,6 +340,8 @@ func (a *App) handleKontoauszugBuchen(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Zahlungen []struct {
 			RechnungID  string  `json:"rechnungId"`
+			Spende      bool    `json:"spende"` // statt einer Rechnung als Spende erfassen
+			Name        string  `json:"name"`   // Absender laut Bank (für Spenden)
 			Datum       string  `json:"datum"`
 			Betrag      float64 `json:"betrag"`
 			Fingerprint string  `json:"fingerprint"`
@@ -363,7 +367,9 @@ func (a *App) handleKontoauszugBuchen(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, z := range in.Zahlungen {
 		x := rech[z.RechnungID]
-		if x == nil || x.Status != statusGueltig || x.Bereinigt {
+		if z.Spende {
+			x = nil
+		} else if x == nil || x.Status != statusGueltig || x.Bereinigt {
 			writeErr(w, bad("Eine ausgewählte Rechnung gibt es nicht mehr – bitte den Auszug neu einlesen"))
 			return
 		}
@@ -385,9 +391,25 @@ func (a *App) handleKontoauszugBuchen(w http.ResponseWriter, r *http.Request) {
 		}
 		gesehen[z.Fingerprint] = true
 	}
+	if len(a.st.d.Spenden)+len(in.Zahlungen) > maxSpenden {
+		writeErr(w, bad("Es sind sehr viele Spenden gespeichert"))
+		return
+	}
 	a.st.snapshotBackup("vor-Kontoauszug")
 	summe := 0.0
+	spenden := 0
 	for _, z := range in.Zahlungen {
+		summe += z.Betrag
+		a.st.d.KontoFingerprints = append(a.st.d.KontoFingerprints, z.Fingerprint)
+		if z.Spende {
+			name := trim(strings.Join(strings.Fields(z.Name), " "), 100)
+			if name == "" {
+				name = "(Name laut Kontoauszug fehlt)"
+			}
+			a.st.d.Spenden = append(a.st.d.Spenden, Spende{ID: newID(), Datum: z.Datum, Jahr: a.st.d.Settings.Jahr, Betrag: round2(z.Betrag), Name: name})
+			spenden++
+			continue
+		}
 		x := rech[z.RechnungID]
 		bezahlt := round2(paidAmount(x) + z.Betrag)
 		if x.BezahltAm == "" || z.Datum > x.BezahltAm {
@@ -397,16 +419,14 @@ func (a *App) handleKontoauszugBuchen(w http.ResponseWriter, r *http.Request) {
 		if bezahlt != round2(absf(x.Result.Gesamt)) {
 			x.BezahltBetrag = &bezahlt // nur bei Teil- oder Mehrzahlung speichern, wie bei der Eingabe von Hand
 		}
-		a.st.d.KontoFingerprints = append(a.st.d.KontoFingerprints, z.Fingerprint)
-		summe += z.Betrag
 	}
 	if n := len(a.st.d.KontoFingerprints); n > maxFingerprints {
 		a.st.d.KontoFingerprints = append([]string(nil), a.st.d.KontoFingerprints[n-maxFingerprints:]...)
 	}
-	a.st.audit("Kontoauszug: %d Zahlung(en) über %s übernommen", len(in.Zahlungen), fmtEUR(summe))
+	a.st.audit("Kontoauszug: %d Zahlung(en) über %s übernommen, davon %d Spende(n)", len(in.Zahlungen), fmtEUR(summe), spenden)
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"gebucht": len(in.Zahlungen), "summe": round2(summe)})
+	writeJSON(w, 200, map[string]any{"gebucht": len(in.Zahlungen), "summe": round2(summe), "spenden": spenden})
 }

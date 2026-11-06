@@ -101,6 +101,8 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Kontoauszug einlesen:** die CSV-Datei aus dem Online-Banking laden, das Programm ordnet die Eingänge über die
   Rechnungsnummer im Verwendungszweck den Rechnungen zu (sonst Vorschlag über Name und Betrag); übernommen wird nur, was
   du bestätigst, und nichts doppelt
+- **Spenden und Zuwendungsbestätigungen** nach dem amtlichen Muster, einzeln oder als Sammelbestätigung fürs Jahr;
+  das Programm prüft, ob der Bescheid des Finanzamts noch gilt, und zählt Spenden im Kassenbericht als Einnahme
 - **Kassenprüfer-Zugang** mit eigenem Passwort: sieht den Kassenbericht und hakt Ausgaben als geprüft ab, sonst nichts
 - **Jahresbericht** als PDF für die Mitgliederversammlung – Kennzahlen, Kasse, Diagramm, Termine, ohne Namen
 - **Jahresmeldung** für den Landes- oder Regionalverband: Parzellen, Flächen, Wechsel, Warteliste,
