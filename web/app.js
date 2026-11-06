@@ -1829,6 +1829,7 @@ function viewZahlungen() {
     summary,
     h('div', { class: 'toolbar' },
       h('input', { type: 'search', placeholder: 'Suchen (Nummer oder Name)', value: S.payQ, style: 'width:240px', oninput: (e) => { S.payQ = e.target.value; draw(); } }),
+      !st.hasPassword || st.loggedIn ? h('button', { class: 'btn primary', title: 'CSV-Datei aus dem Online-Banking: Eingänge werden den Rechnungen zugeordnet', onclick: kontoauszugEinlesen }, 'Kontoauszug einlesen') : null,
       h('div', { class: 'spacer' }),
       h('a', { class: 'btn', href: `/api/export-payments?year=${st.year}&nur=offen` }, 'Offene Posten als Excel'),
       h('a', { class: 'btn', href: `/api/export-payments?year=${st.year}` }, 'Alle Zahlungen als Excel'),
@@ -1838,6 +1839,68 @@ function viewZahlungen() {
     h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
       h('thead', null, h('tr', null, ['', 'Nr.', 'Name', 'Rechnungs-Nr.', 'Betrag', 'Fällig am', 'Status', 'Bezahlt / am', 'Notiz', ''].map((t) => h('th', null, t)))),
       tbody)));
+}
+
+// ------------------------------------------------------------------ Kontoauszug einlesen
+
+const KONTO_STATUS = {
+  passt: ['ok', 'Nummer und Betrag passen'], teilbetrag: ['warn', 'Teil- oder Mehrzahlung'], vorschlag: ['neu', 'Vorschlag – bitte prüfen'],
+  bezahlt: ['', 'schon bezahlt'], doppelt: ['', 'schon übernommen'], offen: ['', 'nicht zugeordnet'],
+};
+
+function kontoauszugEinlesen() {
+  const datei = h('input', { type: 'file', accept: '.csv,.txt,text/csv', style: 'display:none' });
+  datei.addEventListener('change', async () => {
+    if (!datei.files.length) return;
+    const fd = new FormData(); fd.append('file', datei.files[0]);
+    let v;
+    try { v = await api('POST', '/api/admin/kontoauszug', fd, true); } catch (e) { handleErr(e); return; } finally { datei.remove(); }
+    if (await kontoauszugVorschau(v)) await reload();
+  });
+  document.body.append(datei);
+  datei.click();
+}
+
+function kontoauszugVorschau(v) {
+  if (!v.buchungen.length) { toast(`Keine Eingänge in der Datei gefunden${v.ausgaben ? ` (${v.ausgaben} Abbuchungen übersprungen)` : ''}.`, 'err'); return false; }
+  const optionen = (sel) => [h('option', { value: '' }, '– nicht zuordnen –'),
+    ...v.offene.map((r) => h('option', { value: r.id, selected: r.id === sel }, `${r.nummer} · ${r.name} · offen ${eur(r.offen)}${r.jahr ? ` (${r.jahr})` : ''}`))];
+  const zeilen = v.buchungen.map((b) => {
+    const fest = b.status === 'doppelt' || b.status === 'bezahlt';
+    const wahl = h('select', { disabled: fest, class: 'konto-wahl' }, optionen(b.rechnungId));
+    const an = h('input', { type: 'checkbox', disabled: fest, checked: b.status === 'passt' || b.status === 'teilbetrag', 'aria-label': 'übernehmen' });
+    wahl.addEventListener('change', () => { an.checked = !!wahl.value; zaehlen(); });
+    an.addEventListener('change', () => { if (an.checked && !wahl.value) { an.checked = false; toast('Bitte zuerst eine Rechnung auswählen.', 'err'); } zaehlen(); });
+    const [cls, text] = KONTO_STATUS[b.status] || ['', b.status];
+    return { b, wahl, an, tr: h('tr', { class: fest ? 'vorbei' : '' },
+      h('td', null, an), h('td', null, deDate(b.datum)),
+      h('td', { class: 'wrap klein' }, h('b', null, b.name || '–'), h('div', { class: 'hint' }, b.zweck)),
+      h('td', { class: 'num' }, eur(b.betrag)),
+      h('td', null, wahl, h('div', null, h('span', { class: 'badge ' + cls }, text), b.hinweis ? h('span', { class: 'hint', style: 'margin-left:6px' }, b.hinweis) : null))) };
+  });
+  const zaehlerEl = h('b', null);
+  const zaehlen = () => {
+    const l = zeilen.filter((z) => z.an.checked);
+    zaehlerEl.textContent = `${l.length} Zahlung(en) · ${eur(l.reduce((a, z) => a + z.b.betrag, 0))}`;
+  };
+  zaehlen();
+  const n = (st) => v.buchungen.filter((b) => b.status === st).length;
+  const body = h('div', null,
+    h('p', { class: 'hint' }, `${v.buchungen.length} Eingänge gelesen${v.ausgaben ? `, ${v.ausgaben} Abbuchungen übersprungen` : ''}: ${n('passt')} passen genau, ${n('teilbetrag')} Teilzahlungen, ${n('vorschlag')} Vorschläge über den Namen, ${n('offen')} nicht zugeordnet${n('doppelt') ? `, ${n('doppelt')} schon früher übernommen` : ''}. Übernommen wird nur, was angehakt ist. Die Datei selbst wird nicht gespeichert.`),
+    h('div', { class: 'toolbar' }, h('div', { class: 'spacer' }), zaehlerEl),
+    h('div', { class: 'tablewrap', style: 'max-height:420px;overflow:auto' }, h('table', { class: 'konto-tab' },
+      h('thead', null, h('tr', null, ['', 'Datum', 'Von / Verwendungszweck', 'Betrag', 'Rechnung'].map((x) => h('th', null, x)))),
+      h('tbody', null, zeilen.map((z) => z.tr)))));
+  return breiterDialog('Kontoauszug einlesen', body, [
+    { label: 'Abbrechen', value: false },
+    { label: 'Angehakte übernehmen', cls: 'primary', value: true, action: async () => {
+      const zahlungen = zeilen.filter((z) => z.an.checked && z.wahl.value).map((z) => ({ rechnungId: z.wahl.value, datum: z.b.datum, betrag: z.b.betrag, fingerprint: z.b.fingerprint }));
+      if (!zahlungen.length) { toast('Es ist nichts angehakt.', 'err'); return false; }
+      try {
+        const r = await api('POST', '/api/admin/kontoauszug/buchen', { zahlungen });
+        toast(`${r.gebucht} Zahlung(en) über ${eur(r.summe)} übernommen`, 'ok');
+      } catch (e) { handleErr(e); return false; }
+    } }]);
 }
 
 // ------------------------------------------------------------------ Tab: Admin
@@ -3274,6 +3337,73 @@ const anwesenheitDrucken = (t) => pdfDrucken({
   titel: `Anwesenheitsliste ${t.titel}`, meldung: () => 'Die Anwesenheitsliste wurde im PDF-Programm geöffnet – dort drucken.',
 });
 
+const stundenlisteDrucken = (t) => pdfDrucken({
+  url: `/api/admin/termine/${t.id}/stundenliste`, oeffnenUrl: `/api/admin/termine/${t.id}/stundenliste/oeffnen`,
+  titel: `Stundenliste ${t.titel}`, meldung: () => 'Die Stundenliste wurde im PDF-Programm geöffnet – dort drucken und zum Einsatz mitnehmen.',
+});
+
+// zeitspanneStunden versteht »9-11:30«, »09:00–12:00« oder »9 bis 12« und liefert die Stunden (sonst null).
+function zeitspanneStunden(text) {
+  const m = String(text).trim().match(/^(\d{1,2})(?:[:.](\d{2}))?\s*(?:-|–|bis)\s*(\d{1,2})(?:[:.](\d{2}))?$/i);
+  if (!m) return null;
+  const von = Number(m[1]) * 60 + Number(m[2] || 0), bis = Number(m[3]) * 60 + Number(m[4] || 0);
+  if (Number(m[1]) > 23 || Number(m[3]) > 24 || Number(m[2] || 0) > 59 || Number(m[4] || 0) > 59 || bis <= von) return null;
+  return Math.round((bis - von) / 60 * 100) / 100;
+}
+// Stunden: Zahl (»2,5«) oder Zeitspanne (»9-11:30«)
+const stundenWert = (text) => { const z = zeitspanneStunden(text); return z != null ? z : parseNum(text); };
+
+// Stunden eines Arbeitseinsatzes abhaken: wer da war, bekommt die Dauer des Termins vorgeschlagen.
+async function stundenDialog(t) {
+  let v;
+  try { v = await api('GET', `/api/admin/termine/${t.id}/stunden`); } catch (e) { handleErr(e); return false; }
+  const zeilen = v.zeilen.map((z) => {
+    const std = h('input', { type: 'text', inputmode: 'decimal', class: 'std-in', value: z.stunden != null ? nfFlex.format(z.stunden) : '', placeholder: '–', 'aria-label': `Stunden ${z.name}`, title: 'Stunden (z. B. 2,5) oder Zeit von–bis (z. B. 9-11:30)' });
+    const dabei = h('input', { type: 'checkbox', checked: z.stunden != null, 'aria-label': `${z.name} war dabei` });
+    dabei.addEventListener('change', () => {
+      if (dabei.checked && !std.value) std.value = v.dauer ? nfFlex.format(v.dauer) : '';
+      if (!dabei.checked) std.value = '';
+      summe();
+    });
+    std.addEventListener('input', () => { dabei.checked = std.value.trim() !== ''; summe(); });
+    // »9-11:30« beim Verlassen des Feldes in Stunden umrechnen, damit man sieht, was gebucht wird
+    std.addEventListener('blur', () => { const z = zeitspanneStunden(std.value); if (z != null) { std.value = nfFlex.format(z); summe(); } });
+    const bisher = (z.gesamt || 0) - (z.stunden || 0);
+    return { z, std, dabei, tr: h('tr', null, h('td', null, dabei), h('td', null, z.gartennr), h('td', null, z.name), h('td', null, std),
+      h('td', { class: 'num klein' }, `${nfFlex.format(bisher)} h`, v.pflicht && bisher >= v.pflicht ? h('span', { class: 'badge ok', style: 'margin-left:6px' }, 'erfüllt') : null)) };
+  });
+  const summeEl = h('b', null);
+  const summe = () => {
+    let n = 0, s = 0;
+    for (const x of zeilen) { const w = stundenWert(x.std.value); if (x.dabei.checked && w > 0) { n++; s += w; } }
+    summeEl.textContent = `${n} Teilnehmer · ${nfFlex.format(Math.round(s * 100) / 100)} Stunden`;
+  };
+  summe();
+  const jahrSel = h('select', null, v.jahre.map((j) => h('option', { value: j, selected: j === v.jahr }, String(j))));
+  const alle = () => { for (const x of zeilen) { if (!x.dabei.checked) { x.dabei.checked = true; if (!x.std.value) x.std.value = v.dauer ? nfFlex.format(v.dauer) : ''; } } summe(); };
+  const body = h('div', null,
+    h('p', { class: 'hint' }, `${deDate(t.datum)} · ${terminZeit(t)}. Hake ab, wer dabei war – die Dauer des Termins${v.dauer ? ` (${nfFlex.format(v.dauer)} h)` : ''} wird vorgeschlagen. Wer früher gegangen oder später gekommen ist, bekommt seine eigenen Stunden: als Zahl (2,5) oder als Uhrzeit von–bis (9-11:30). Die Stunden werden auf die Gemeinschaftsstunden gebucht; spätere Korrekturen zählen nicht doppelt.`),
+    h('div', { class: 'toolbar' }, h('label', null, 'Buchen auf Abrechnungsjahr'), jahrSel, h('button', { class: 'btn small', onclick: alle }, 'Alle waren dabei'), h('div', { class: 'spacer' }), summeEl),
+    h('div', { class: 'tablewrap', style: 'max-height:380px;overflow:auto' }, h('table', { class: 'std-tab' },
+      h('thead', null, h('tr', null, ['Dabei', 'Garten', 'Name', 'Stunden', 'Bisher im Jahr'].map((x) => h('th', null, x)))),
+      h('tbody', null, zeilen.map((x) => x.tr)))));
+  return breiterDialog(`Stunden: ${t.titel}`, body, [
+    { label: 'Abbrechen', value: false },
+    { label: 'Stunden buchen', cls: 'primary', value: true, action: async () => {
+      const eintraege = [];
+      for (const x of zeilen) {
+        if (!x.dabei.checked) continue;
+        const w = stundenWert(x.std.value);
+        if (w == null || Number.isNaN(w) || w < 0 || w > 24) { toast(`Bitte für ${x.z.name} Stunden (z. B. 2,5) oder die Zeit (z. B. 9-11:30) eintragen.`, 'err'); x.std.focus(); return false; }
+        eintraege.push({ paechterId: x.z.paechterId, stunden: w });
+      }
+      try {
+        const r = await api('PUT', `/api/admin/termine/${t.id}/stunden`, { jahr: Number(jahrSel.value), eintraege });
+        toast(`${r.teilnehmer} Teilnehmer, ${nfFlex.format(r.stunden)} Stunden gebucht`, 'ok');
+      } catch (e) { handleErr(e); return false; }
+    } }]);
+}
+
 function viewTermine() {
   const st = S.state;
   const istAdmin = !st.hasPassword || st.loggedIn;
@@ -3328,6 +3458,8 @@ function viewTermine() {
           istAdmin ? h('div', { class: 'termin-aktionen' },
             t.art === 'Versammlung' || t.art === 'Vorstand' ? h('button', { class: 'btn small', title: 'Einladung mit Tagesordnung als PDF', onclick: () => einladungDrucken(t) }, 'Einladung') : null,
             t.art === 'Versammlung' || t.art === 'Vorstand' ? h('button', { class: 'btn small', title: 'Liste aller Pächter zum Unterschreiben', onclick: () => anwesenheitDrucken(t) }, 'Anwesenheit') : null,
+            t.art === 'Arbeitseinsatz' ? h('button', { class: 'btn small', title: 'Liste zum Eintragen von Beginn und Ende', onclick: () => stundenlisteDrucken(t) }, 'Stundenliste') : null,
+            t.art === 'Arbeitseinsatz' ? h('button', { class: 'btn small primary', title: 'Abhaken, wer dabei war, und die Stunden buchen', onclick: async () => { if (await stundenDialog(t)) await reload(); } }, 'Stunden eintragen') : null,
             h('button', { class: 'btn small', onclick: () => neu(t) }, 'Bearbeiten'),
             h('button', { class: 'btn small danger', onclick: () => loeschen(t) }, 'Löschen')) : null);
       })))))

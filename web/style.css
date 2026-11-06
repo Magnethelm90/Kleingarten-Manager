@@ -674,3 +674,12 @@ td.wrap .hint { font-size: 12.5px; }
 .mangel.erledigt .mangel-text { opacity: .65; }
 .toolbar-gruppe { display: inline-flex; gap: 6px; }
 @media (max-width: 760px) { .mangel { flex-wrap: wrap; } }
+
+/* Stunden eines Arbeitseinsatzes */
+.std-tab .std-in { width: 5.5em; }
+.std-tab td:first-child { width: 3em; text-align: center; }
+
+/* Kontoauszug */
+.konto-tab .konto-wahl { max-width: 330px; }
+.konto-tab tr.vorbei td { opacity: .6; }
+.konto-tab td:first-child { width: 2.5em; text-align: center; }

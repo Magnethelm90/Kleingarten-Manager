@@ -197,6 +197,10 @@ type Data struct {
 	// Termine: Jahresplaner des Vereins (Arbeitseinsätze, Versammlungen, Ablesung, ...).
 	Termine []Termin `json:"termine,omitempty"`
 	Maengel []Mangel `json:"maengel,omitempty"`
+	// Einsatzstunden: wer bei welchem Arbeitseinsatz wie viele Stunden geleistet hat (siehe einsatz.go)
+	Einsatzstunden []EinsatzStunden `json:"einsatzstunden,omitempty"`
+	// KontoFingerprints: gekürzte Hashes bereits übernommener Kontobuchungen (kein Klartext), gegen doppeltes Buchen
+	KontoFingerprints []string `json:"kontoFingerprints,omitempty"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).

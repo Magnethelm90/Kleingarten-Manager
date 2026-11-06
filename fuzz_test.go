@@ -123,7 +123,7 @@ func FuzzPruefeLogo(f *testing.F) {
 // Termine landen in Kalenderdatei und Aushang: seltsame Zeichen dürfen weder Einträge einschleusen noch die PDF zerstören.
 func FuzzTerminKalenderUndAushang(f *testing.F) {
 	f.Add("Arbeitseinsatz", "Tor", "Handschuhe", "09:00", "2026-04-04")
-	f.Add("A\r\nBEGIN:VEVENT\r\nSUMMARY:x", "O;rt,\\", "\x00\x1f‮", "24:61", "2026-02-30")
+	f.Add("A\r\nBEGIN:VEVENT\r\nSUMMARY:x", "O;rt,\\", "\x00\x1f\u202e", "24:61", "2026-02-30")
 	f.Add(strings.Repeat("Ä", 300), strings.Repeat("ß", 300), strings.Repeat("\n", 400), "", "")
 	f.Fuzz(func(t *testing.T, titel, ort, notiz, von, datum string) {
 		tm, err := cleanTermin(Termin{Titel: titel, Ort: ort, Notiz: notiz, Von: von, Datum: datum, Art: "Fest"})
@@ -153,7 +153,7 @@ func FuzzTerminKalenderUndAushang(f *testing.F) {
 // Übergabeprotokoll mit beliebigen Texten: nie ein Absturz, immer eine gültige PDF.
 func FuzzUebergabeprotokoll(f *testing.F) {
 	f.Add("Alt", "Neu", "Schlüssel", "Bemerkung")
-	f.Add(strings.Repeat("W", 500), "‮\x00", strings.Repeat("S", 400), strings.Repeat("Zeile\n", 400))
+	f.Add(strings.Repeat("W", 500), "\u202e\x00", strings.Repeat("S", 400), strings.Repeat("Zeile\n", 400))
 	f.Fuzz(func(t *testing.T, alt, neu, schluessel, bem string) {
 		u := Uebergabe{Datum: "2025-06-15", Gartennr: "7", AltName: alt, NeuName: neu, AltAnschrift: alt, NeuAnschrift: neu,
 			Schluessel: trim(schluessel, 200), Bemerkungen: trim(bem, 1500)}
@@ -168,14 +168,14 @@ func FuzzUebergabeprotokoll(f *testing.F) {
 // Dateinamen mit Pfad- oder Steuerzeichen liefern.
 func FuzzVersammlungUndMaengel(f *testing.F) {
 	f.Add("Jahreshauptversammlung", "Begrüßung\nKassenbericht", "Bitte pünktlich", "Hecke zu hoch", "12")
-	f.Add("‮exe.fdp", strings.Repeat("x\n", 50), "", "\x00\r\n", "../5")
+	f.Add("\u202eexe.fdp", strings.Repeat("x\n", 50), "", "\x00\r\n", "../5")
 	f.Fuzz(func(t *testing.T, titel, tops, notiz, beschreibung, garten string) {
 		s := defaultSettings()
 		if tr, err := cleanTermin(Termin{Datum: "2027-03-20", Von: "10:00", Titel: titel, Art: "Versammlung", Tops: tops, Notiz: notiz}); err == nil {
 			if _, err := buildEinladung(s, tr); err != nil {
 				t.Fatalf("Einladung: %v", err)
 			}
-			if _, err := buildAnwesenheit(s, tr, []anwesenheitZeile{{garten, "1", titel}}); err != nil {
+			if _, err := buildAnwesenheit(s, tr, []anwesenheitZeile{{garten, "1", titel}}, len(tops)%2 == 0); err != nil {
 				t.Fatalf("Anwesenheitsliste: %v", err)
 			}
 		}
@@ -189,6 +189,25 @@ func FuzzVersammlungUndMaengel(f *testing.F) {
 			if r < 0x20 || r == 0x7f || strings.ContainsRune(`<>:"/\|?*`, r) {
 				t.Fatalf("Dateiname mit %U", r)
 			}
+		}
+	})
+}
+
+// Beliebige Bank-Dateien dürfen das Einlesen nicht zum Absturz bringen; erkannte Buchungen sind immer Eingänge
+// mit gültigem Datum.
+func FuzzKontoauszug(f *testing.F) {
+	f.Add([]byte("Buchungstag;Verwendungszweck;Name;Betrag\n01.02.2026;RE 2025-1;A;12,50\n"))
+	f.Add([]byte("\"Buchung\",\"Betrag (€)\"\n\"2026-01-01\",\"1.000,00\"\n"))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		bs, _, err := parseKontoCSV(data)
+		if err != nil {
+			return
+		}
+		for _, b := range bs {
+			if _, err := parseDate(b.Datum); err != nil || b.Betrag <= 0 || len(b.Fingerprint) != 24 {
+				t.Fatalf("ungültige Buchung: %+v", b)
+			}
+			_ = enthaeltNummer(kompakt(b.Zweck), b.Name)
 		}
 	})
 }

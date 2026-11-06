@@ -174,11 +174,17 @@ func (s *Store) anwesenheitLocked() []anwesenheitZeile {
 	return l
 }
 
-func buildAnwesenheit(s Settings, t Termin, l []anwesenheitZeile) ([]byte, error) {
+// buildAnwesenheit erzeugt die Anwesenheitsliste einer Versammlung oder (stunden = true) die Stundenliste eines
+// Arbeitseinsatzes mit Spalten für Beginn, Ende und Stunden.
+func buildAnwesenheit(s Settings, t Termin, l []anwesenheitZeile, stunden bool) ([]byte, error) {
 	if len(l) == 0 {
 		return nil, bad("Es sind keine Pächter angelegt")
 	}
-	pdf := neuesPDF(s, "Anwesenheitsliste "+t.Titel, false)
+	titel := "Anwesenheitsliste"
+	if stunden {
+		titel = "Stundenliste"
+	}
+	pdf := neuesPDF(s, titel+" "+t.Titel, false)
 	pdf.AliasNbPages("{nb}")
 	mr, mg, mb := markenfarbe(s.Farbe)
 	fr, fg, fb := aufgehellt(mr, mg, mb, 0.9)
@@ -186,17 +192,21 @@ func buildAnwesenheit(s Settings, t Termin, l []anwesenheitZeile) ([]byte, error
 		rowH   = 9.0
 		bottom = 258.0
 	)
-	cols := []struct {
+	type spalte struct {
 		titel string
 		w     float64
-	}{{"Garten", 17}, {"Mitgl.-Nr.", 20}, {"Name", 58}, {"Unterschrift", 75}}
+	}
+	cols := []spalte{{"Garten", 17}, {"Mitgl.-Nr.", 20}, {"Name", 58}, {"Unterschrift", 75}}
+	if stunden {
+		cols = []spalte{{"Garten", 17}, {"Mitgl.-Nr.", 20}, {"Name", 58}, {"von", 14}, {"bis", 14}, {"Std.", 14}, {"Unterschrift", 33}}
+	}
 	var y float64
 	seite := func() {
 		pdf.AddPage()
 		pdf.SetFont("lib", "B", 16)
 		pdf.SetTextColor(mr, mg, mb)
 		pdf.SetXY(leftX, 14)
-		pdf.CellFormat(rightX-leftX, 8, "Anwesenheitsliste", "", 0, "L", false, 0, "")
+		pdf.CellFormat(rightX-leftX, 8, titel, "", 0, "L", false, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 		pdf.SetFont("lib", "B", 11)
 		pdf.SetXY(leftX, 23)
@@ -219,7 +229,7 @@ func buildAnwesenheit(s Settings, t Termin, l []anwesenheitZeile) ([]byte, error
 		pdf.SetFont("lib", "", 7.5)
 		pdf.SetTextColor(110, 110, 110)
 		pdf.SetXY(leftX, 287)
-		pdf.CellFormat(rightX-leftX, 4, fmt.Sprintf("%s · Anwesenheitsliste · Seite %d von {nb}", s.VereinName, pdf.PageNo()), "", 0, "C", false, 0, "")
+		pdf.CellFormat(rightX-leftX, 4, fmt.Sprintf("%s · %s · Seite %d von {nb}", s.VereinName, titel, pdf.PageNo()), "", 0, "C", false, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 	}
 	seite()
@@ -228,13 +238,24 @@ func buildAnwesenheit(s Settings, t Termin, l []anwesenheitZeile) ([]byte, error
 			seite()
 		}
 		x := leftX
-		for i, txt := range []string{z.Garten, z.Nr, z.Name, ""} {
+		zellen := []string{z.Garten, z.Nr, z.Name}
+		for len(zellen) < len(cols) {
+			zellen = append(zellen, "")
+		}
+		for i, txt := range zellen {
 			pdf.SetFont("lib", "", 10)
 			pdf.SetXY(x, y)
 			pdf.CellFormat(cols[i].w, rowH, passendKlein(pdf, txt, cols[i].w-2, 10, 7), "1", 0, "L", false, 0, "")
 			x += cols[i].w
 		}
 		y += rowH
+	}
+	if stunden {
+		y += 8
+		pdf.SetFont("lib", "", 9.5)
+		pdf.SetXY(leftX, y)
+		pdf.MultiCell(rightX-leftX, 5, "Bitte Beginn und Ende eintragen. Der Vorstand überträgt die Stunden anschließend im Programm (Termine → Stunden eintragen).", "", "L", false)
+		return pdfBytes(pdf)
 	}
 	if y+34 > 280 {
 		seite()
@@ -266,6 +287,6 @@ func (a *App) anwesenheitPDF(r *http.Request) ([]byte, string, error) {
 	a.st.mu.Lock()
 	l := a.st.anwesenheitLocked()
 	a.st.mu.Unlock()
-	pdf, err := buildAnwesenheit(s, t, l)
+	pdf, err := buildAnwesenheit(s, t, l, false)
 	return pdf, safeName("Anwesenheitsliste_"+t.Titel, 80) + ".pdf", err
 }

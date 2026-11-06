@@ -154,6 +154,7 @@ func (a *App) handleTerminDelete(w http.ResponseWriter, r *http.Request) {
 	for i, t := range a.st.d.Termine {
 		if t.ID == id {
 			a.st.d.Termine = append(a.st.d.Termine[:i], a.st.d.Termine[i+1:]...)
+			a.st.d.einsatzTerminGeloescht(t.ID)
 			a.st.audit("Termin gelöscht: %s am %s", t.Titel, germanDate(t.Datum))
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)

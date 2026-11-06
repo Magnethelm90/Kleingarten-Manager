@@ -89,6 +89,8 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Vereinstermine:** Jahresplaner für Arbeitseinsätze, Versammlungen und Feste, als Aushang und als Kalenderdatei
   fürs Handy, mit einem Klick ins nächste Jahr übernommen; für Versammlungen gibt es die **Einladung mit
   Tagesordnung** und die **Anwesenheitsliste** zum Unterschreiben
+- **Gemeinschaftsstunden aus Arbeitseinsätzen:** Stundenliste zum Ausdrucken, danach am Rechner abhaken, wer da
+  war – die Stunden landen automatisch beim Pächter, Korrekturen zählen nicht doppelt
 - **Jubiläen** langjähriger Mitglieder für die Mitgliederversammlung
 
 ### Kasse und Berichte
@@ -96,6 +98,9 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Kassenbericht** mit Anfangs- und Endbestand, Vorjahresvergleich, Verlauf über die Jahre und Vergleich mit der
   Rechnung des Versorgers; sonstige Ausgaben mit Kategorie und Beleg-Fotos, wiederkehrende Ausgaben werden
   vorgeschlagen; als Excel-Datei
+- **Kontoauszug einlesen:** die CSV-Datei aus dem Online-Banking laden, das Programm ordnet die Eingänge über die
+  Rechnungsnummer im Verwendungszweck den Rechnungen zu (sonst Vorschlag über Name und Betrag); übernommen wird nur, was
+  du bestätigst, und nichts doppelt
 - **Kassenprüfer-Zugang** mit eigenem Passwort: sieht den Kassenbericht und hakt Ausgaben als geprüft ab, sonst nichts
 - **Jahresbericht** als PDF für die Mitgliederversammlung – Kennzahlen, Kasse, Diagramm, Termine, ohne Namen
 - **Jahresmeldung** für den Landes- oder Regionalverband: Parzellen, Flächen, Wechsel, Warteliste,

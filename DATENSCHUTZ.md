@@ -69,6 +69,14 @@ entfernt; erledigte Mängel lassen sich jederzeit einzeln löschen. Sie sind nur
 weder im Jahresbericht noch in Aushängen auf. Der Aushang zu fehlenden Zählerständen nennt nur Gartennummern. Die
 Erinnerungs-E-Mail geht als Blindkopie (Bcc) raus, damit keine Adressen offengelegt werden.
 
+**Kontoauszug:** Die CSV-Datei aus dem Online-Banking wird nur im Arbeitsspeicher gelesen und nicht gespeichert;
+sie enthält auch Buchungen Dritter. Übernommen werden nur die bestätigten Zahlungsvermerke an den Rechnungen. Damit
+derselbe Auszug nicht zweimal gebucht wird, bleibt von jeder übernommenen Buchung ein gekürzter Prüfwert (Hash) ohne
+lesbaren Inhalt.
+
+**Arbeitseinsätze:** Wer bei welchem Einsatz wie viele Stunden geleistet hat, steht nur in der Verwaltung (nicht im
+öffentlichen Jahresplaner), ist Teil der Auskunft und wird beim endgültigen Löschen der Person entfernt.
+
 **Warteliste:** Einträge werden gelöscht, sobald kein Interesse mehr besteht (auch aus allen Sicherungen); wird ein
 Garten vergeben, gehen die Angaben in die Stammdaten des neuen Pächters über. Wer seit über 2 Jahren nicht
 nachgefragt wurde, wird markiert (unter »Warteliste« und »Datenschutz«): dann nachfragen oder löschen.
