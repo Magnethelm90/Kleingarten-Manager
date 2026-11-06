@@ -131,6 +131,15 @@ func (d *Data) entfernePerson(id string) bool {
 		behalten = append(behalten, x)
 	}
 	d.Dokumente = behalten
+	maengel := d.Maengel[:0]
+	for _, m := range d.Maengel {
+		if m.PaechterID == id {
+			changed = true
+			continue
+		}
+		maengel = append(maengel, m)
+	}
+	d.Maengel = maengel
 	for i := range d.Uebergaben {
 		u := &d.Uebergaben[i]
 		if u.AltID == id && u.AltName != geloeschtText {
@@ -302,6 +311,7 @@ type auskunft struct {
 	Protokoll   []AuditEntry       `json:"aenderungsprotokoll"`
 	Uebergaben  []Uebergabe        `json:"gartenuebergaben"`
 	Dokumente   []GartenDokument   `json:"dokumente"`
+	Maengel     []Mangel           `json:"maengelBeiBegehungen"`
 	Aufbewahrng string             `json:"aufbewahrung"`
 }
 
@@ -329,6 +339,7 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 		Protokoll:  []AuditEntry{},
 		Uebergaben: []Uebergabe{},
 		Dokumente:  []GartenDokument{},
+		Maengel:    []Mangel{},
 		Aufbewahrng: fmt.Sprintf("Rechnungen und Jahresunterlagen werden %d Jahre ab Ende des Ausstellungsjahres aufbewahrt "+
 			"(steuerrechtliche Pflicht), danach wird der Personenbezug entfernt.", aufbewahrungJahre),
 	}
@@ -364,6 +375,11 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 	for _, x := range s.d.Dokumente {
 		if x.PaechterID == id {
 			a.Dokumente = append(a.Dokumente, x)
+		}
+	}
+	for _, m := range s.d.Maengel {
+		if m.PaechterID == id {
+			a.Maengel = append(a.Maengel, m)
 		}
 	}
 	for _, e := range s.d.AuditLog {

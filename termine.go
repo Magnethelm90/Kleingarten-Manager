@@ -27,6 +27,8 @@ type Termin struct {
 	Art   string `json:"art"`
 	Ort   string `json:"ort,omitempty"`
 	Notiz string `json:"notiz,omitempty"`
+	// Tops: Tagesordnung für die Einladung, ein Punkt pro Zeile (leer = Standard bei Versammlungen)
+	Tops string `json:"tops,omitempty"`
 }
 
 var terminArten = []string{"Arbeitseinsatz", "Versammlung", "Ablesung", "Fest", "Vorstand", "Sonstiges"}
@@ -45,6 +47,7 @@ func cleanTermin(t Termin) (Termin, error) {
 	t.Titel = trim(einzeilig(t.Titel), 100)
 	t.Ort = trim(einzeilig(t.Ort), 100)
 	t.Notiz = trim(t.Notiz, 300)
+	t.Tops = bereinigeTops(t.Tops)
 	t.Von, t.Bis = strings.TrimSpace(t.Von), strings.TrimSpace(t.Bis)
 	if t.Titel == "" {
 		return t, bad("Bitte einen Titel eintragen, z. B. »Frühjahrsarbeitseinsatz«")
@@ -440,4 +443,16 @@ func (a *App) handleJahresplanOeffnen(w http.ResponseWriter, r *http.Request) {
 	}
 	openPathFn(full)
 	writeJSON(w, 200, map[string]string{"datei": filepath.ToSlash(filepath.Join(druckOrdner, filepath.Base(full)))})
+}
+
+// bereinigeTops macht aus dem Eingabefeld eine Liste einzeiliger Punkte (höchstens 20, je 150 Zeichen).
+func bereinigeTops(s string) string {
+	var out []string
+	for _, z := range strings.Split(s, "\n") {
+		z = trim(strings.Join(strings.Fields(z), " "), 150)
+		if z != "" && len(out) < 20 {
+			out = append(out, z)
+		}
+	}
+	return strings.Join(out, "\n")
 }

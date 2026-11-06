@@ -664,3 +664,13 @@ table.meldung td.num { text-align: right; white-space: nowrap; }
 .zaehler-zelle { font-size: 12.5px; line-height: 1.45; }
 td.klein { font-size: 12.5px; line-height: 1.45; }
 td.wrap .hint { font-size: 12.5px; }
+
+/* Mängel */
+.mangel-garten { margin-bottom: 12px; }
+.mangel-liste { list-style: none; margin: 8px 0 0; padding: 0; }
+.mangel { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.mangel:first-child { border-top: 0; }
+.mangel-text { flex: 1; min-width: 0; }
+.mangel.erledigt .mangel-text { opacity: .65; }
+.toolbar-gruppe { display: inline-flex; gap: 6px; }
+@media (max-width: 760px) { .mangel { flex-wrap: wrap; } }

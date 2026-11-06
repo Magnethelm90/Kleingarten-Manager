@@ -196,6 +196,7 @@ type Data struct {
 	Warteliste []Bewerber `json:"warteliste,omitempty"`
 	// Termine: Jahresplaner des Vereins (Arbeitseinsätze, Versammlungen, Ablesung, ...).
 	Termine []Termin `json:"termine,omitempty"`
+	Maengel []Mangel `json:"maengel,omitempty"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).

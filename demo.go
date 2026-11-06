@@ -15,7 +15,7 @@ import (
 // datenbestandLeer meldet, ob noch nichts eingegeben wurde (keine Pächter, Rechnungen, Ausgaben,
 // kein abgeschlossenes Jahr). Der Aufrufer hält s.mu.
 func (s *Store) datenbestandLeer() bool {
-	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 {
+	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 {
 		return false
 	}
 	for _, j := range s.d.Jahre {
@@ -153,6 +153,18 @@ func (s *Store) ladeBeispieldaten() {
 	}}
 	if w, err := cleanWertermittlung(s.d.Wertermittlungen[0]); err == nil {
 		s.d.Wertermittlungen[0] = w
+	}
+	// Mängel aus der letzten Begehung
+	for _, m := range []Mangel{
+		{Gartennr: "3", Art: "Hecke und Bäume", Beschreibung: "Hecke zur Wegseite höher als 1,25 m, bitte zurückschneiden", Datum: heute.AddDate(0, 0, -9).Format("2006-01-02"), Frist: heute.AddDate(0, 0, 14).Format("2006-01-02")},
+		{Gartennr: "3", Art: "Pflege und Unkraut", Beschreibung: "Beete am Weg stark verunkrautet", Datum: heute.AddDate(0, 0, -9).Format("2006-01-02"), Frist: heute.AddDate(0, 0, 14).Format("2006-01-02")},
+		{Gartennr: "7", Art: "Abfall und Lagerung", Beschreibung: "Altholz und Bauschutt hinter der Laube lagern", Datum: heute.AddDate(0, 0, -9).Format("2006-01-02"), Frist: heute.AddDate(0, 0, -2).Format("2006-01-02")},
+		{Gartennr: "5", Art: "Wege und Zäune", Beschreibung: "Zaunfeld zum Nachbarn hängt durch", Datum: heute.AddDate(0, 0, -9).Format("2006-01-02"), ErledigtAm: heute.AddDate(0, 0, -3).Format("2006-01-02")},
+	} {
+		if p, ok := s.aktiverPaechterLocked(m.Gartennr); ok {
+			m.ID, m.PaechterID = newID(), p.ID
+			s.d.Maengel = append(s.d.Maengel, m)
+		}
 	}
 	s.d.Demo = true
 	s.audit("Beispieldaten geladen")
