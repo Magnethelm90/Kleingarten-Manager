@@ -275,7 +275,8 @@ const NAV = [
   { gruppe: 'Kasse & Berichte', items: [
     { admin: 'kassenbericht', label: 'Kassenbericht', ic: 'kasse' },
     { admin: 'spenden', label: 'Spenden', ic: 'stern' },
-    { admin: 'sepa', label: 'Lastschrift', ic: 'euro' },
+    { admin: 'vorauszahlung', label: 'Vorauszahlungen', ic: 'kalender' },
+    { admin: 'sepa', label: 'Lastschrift', ic: 'euro', nur: (st) => st.sepaAktiv },
     { admin: 'berichte', label: 'Berichte & Meldungen', ic: 'bericht' },
     { admin: 'jahreswechsel', label: 'Jahreswechsel', ic: 'fertig' }] },
   { gruppe: 'Einstellungen', items: [
@@ -298,6 +299,7 @@ function adminTabWaehlen(id) {
   if (id === 'maengel') { S.maengel = null; S.nutzung = null; }
   if (id === 'spenden') S.spenden = null;
   if (id === 'sepa') { S.sepa = null; S.sepaVorschau = null; }
+  if (id === 'vorauszahlung') S.vz = null;
   if (id === 'paechter') S.uebergaben = null;
   if (id === 'berichte') S.meldung = null;
 }
@@ -315,7 +317,7 @@ function seitenleiste(st) {
   return h('aside', { class: 'sidebar' + (S.menueOffen ? ' offen' : ''), 'aria-label': 'Bereiche' },
     NAV.map((g) => h('div', { class: 'nav-gruppe' },
       h('div', { class: 'nav-titel' }, g.gruppe),
-      g.items.map((x) => {
+      g.items.filter((x) => !x.nur || x.nur(st)).map((x) => {
         const aktiv = x.admin ? S.tab === 'admin' && S.adminTab === x.admin : S.tab === x.tab;
         return h('button', { class: 'nav-item' + (aktiv ? ' active' : ''), 'data-tour': x.tour || x.tab || null, title: x.label,
           'aria-current': aktiv ? 'page' : null, onclick: () => geh(x) },
@@ -1993,6 +1995,103 @@ function adminSpenden() {
     h('p', { class: 'hint', style: 'margin-top:14px' }, 'Gut zu wissen: Mitgliedsbeiträge an Kleingartenvereine sind steuerlich nicht abziehbar, deshalb werden hier nur Spenden bestätigt. Bis 300 € je Spende genügt dem Spender meist der Kontoauszug als Nachweis. Ein Doppel jeder Bestätigung muss der Verein aufbewahren. Im Zweifel bitte mit dem Steuerberater klären.'));
 }
 
+// ------------------------------------------------------------------ Vorauszahlungen per Überweisung
+
+async function loadVz(jahr) {
+  if (S.vzLoading) return;
+  S.vzLoading = true;
+  try { S.vz = await api('GET', `/api/admin/vorauszahlungen?jahr=${jahr}`); } catch (e) { handleErr(e); S.vz = { jahr, zeilen: [] }; }
+  S.vzLoading = false;
+  render();
+}
+
+function vzZahlungDialog(z, jahr) {
+  const f = { datum: h('input', { type: 'date', value: todayIso() }), betrag: h('input', { type: 'text', inputmode: 'decimal', value: z.soll ? numIn(z.soll) : '' }),
+    jahr: h('select', null, [jahr - 1, jahr, jahr + 1].map((j) => h('option', { value: j, selected: j === jahr }, String(j)))),
+    notiz: h('input', { type: 'text', maxlength: 200, placeholder: 'z. B. bar beim Arbeitseinsatz' }) };
+  const fld = (label, input, hint) => h('div', { class: 'field' }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  return modal(`Vorauszahlung: ${z.name}`, h('div', { class: 'form' },
+    fld('Eingegangen am', f.datum), fld('Betrag (€)', f.betrag, z.soll ? `Monatsbetrag ${eur(z.soll)} – mehrere Monate auf einmal gehen auch` : null),
+    fld('Für das Abrechnungsjahr', f.jahr), fld('Notiz', f.notiz)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    const b = parseNum(f.betrag.value);
+    if (!b || Number.isNaN(b) || b <= 0) { toast('Bitte einen Betrag eintragen.', 'err'); return false; }
+    try {
+      const v = await api('POST', '/api/admin/vorauszahlungen', { paechterId: z.paechterId, datum: f.datum.value, betrag: b, jahr: Number(f.jahr.value), notiz: f.notiz.value });
+      toast(v.gebucht ? 'Gespeichert' : `Gespeichert – vorgemerkt, wird beim Jahreswechsel auf ${v.jahr} gebucht`, 'ok');
+    } catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+async function vzZahlungenDialog(z) {
+  await modal(`Zahlungen ${z.name}`, z.zahlungen.length ? h('div', { class: 'tablewrap' }, h('table', null,
+    h('thead', null, h('tr', null, ['Datum', 'Betrag', 'Herkunft', ''].map((x) => h('th', null, x)))),
+    h('tbody', null, z.zahlungen.map((v) => h('tr', null, h('td', null, deDate(v.datum)), h('td', { class: 'num' }, eur(v.betrag)),
+      h('td', { class: 'klein' }, (v.quelle === 'kontoauszug' ? 'Kontoauszug' : 'von Hand') + (v.gebucht ? '' : ' · vorgemerkt') + (v.notiz ? ' · ' + v.notiz : '')),
+      h('td', null, h('button', { class: 'btn small danger', onclick: async () => {
+        if (!(await confirmBox(`Zahlung vom ${deDate(v.datum)} über ${eur(v.betrag)} löschen? Sie wird auch vom Abschlag der Jahresrechnung abgezogen.`, 'Löschen', true))) return;
+        try { await api('DELETE', `/api/admin/vorauszahlungen/${v.id}`); toast('Gelöscht', 'ok'); S.vz = null; document.querySelector('dialog[open] .btn.primary')?.click(); await reload(); } catch (e) { handleErr(e); }
+      } }, 'Löschen')))))))
+    : h('p', { class: 'hint' }, 'Noch keine Zahlungen in diesem Jahr.'),
+  [{ label: 'Schließen', cls: 'primary', value: true }]);
+}
+
+function adminVorauszahlung() {
+  const jahrHeute = S.state.currentYear; // Abrechnungsjahr: darauf werden die Vorauszahlungen gebucht
+  const jahr = S.vzJahr || jahrHeute;
+  if (S.vz == null || S.vz.jahr !== jahr) { if (!S.vzLoading) loadVz(jahr); return h('p', { class: 'hint' }, 'Wird geladen …'); }
+  const d = S.vz;
+  const jahrSel = h('select', { onchange: (e) => { S.vzJahr = Number(e.target.value); S.vz = null; render(); } },
+    [jahrHeute - 1, jahrHeute, jahrHeute + 1].map((j) => h('option', { value: j, selected: j === jahr }, String(j))));
+  const sollSpeichern = async (z, feld) => {
+    const b = parseNum(feld.value) ?? 0;
+    if (Number.isNaN(b) || b < 0) { toast('Bitte einen gültigen Betrag eintragen.', 'err'); feld.value = z.soll ? numIn(z.soll) : ''; return; }
+    if (b === z.soll) return;
+    try { await api('PUT', '/api/admin/vorauszahlungen/soll', { paechterId: z.paechterId, betrag: b }); toast('Monatsbetrag gespeichert', 'ok'); S.vz = null; render(); } catch (e) { handleErr(e); }
+  };
+  const zelle = (z, m) => {
+    const wert = z.monate[m];
+    const faellig = m < d.faelligeMonate;
+    const cls = !z.soll ? 'vz-leer' : wert >= 0.999 ? 'vz-ok' : wert > 0 ? 'vz-teil' : faellig ? 'vz-offen' : 'vz-kommt';
+    return h('td', { class: 'vz-zelle' }, h('span', { class: 'vz-punkt ' + cls, title: `${MONATE[m]}: ${!z.soll ? 'kein Monatsbetrag' : wert >= 0.999 ? 'bezahlt' : wert > 0 ? 'teilweise' : faellig ? 'offen' : 'noch nicht fällig'}` }));
+  };
+  const erinnerung = (z) => pdfDrucken({ url: `/api/admin/vorauszahlungen/erinnerung?paechter=${z.paechterId}&jahr=${jahr}`, oeffnenUrl: `/api/admin/vorauszahlungen/erinnerung/oeffnen?paechter=${z.paechterId}&jahr=${jahr}`,
+    titel: `Erinnerung ${z.name}`, meldung: () => 'Die Erinnerung wurde im PDF-Programm geöffnet – dort drucken oder verschicken.' });
+  const mitSoll = d.zeilen.filter((z) => z.soll > 0).length;
+  const sepaSchalter = h('input', { type: 'checkbox', checked: !!S.state.sepaAktiv });
+  sepaSchalter.addEventListener('change', async () => {
+    try {
+      const sepa = await api('GET', '/api/admin/sepa');
+      await api('PUT', '/api/admin/sepa/einstellungen', { ...sepa.einstellungen, aktiv: sepaSchalter.checked });
+      await reload();
+    } catch (e) { handleErr(e); sepaSchalter.checked = !sepaSchalter.checked; }
+  });
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Monatliche Vorauszahlungen, die Pächter selbst überweisen (z. B. per Dauerauftrag). Monatsbetrag je Pächter eintragen; eingegangene Zahlungen erkennt der Kontoauszug (Name und Betrag), sonst »+ Zahlung«. Alles wird als Abschlag auf die Jahresrechnung gebucht.'),
+    d.vorgemerkt ? h('div', { class: 'banner info' }, `${d.vorgemerkt} Zahlung(en) für ${jahr} sind vorgemerkt – das Abrechnungsjahr ist im Programm noch nicht angelegt. Sie werden beim Jahreswechsel automatisch gebucht.`) : null,
+    h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), jahrSel,
+      h('button', { class: 'btn', onclick: () => { S.tab = 'zahlungen'; render(); }, title: 'Unter »Zahlungen« → »Kontoauszug einlesen«' }, 'Kontoauszug einlesen →'),
+      h('div', { class: 'spacer' }), h('span', { class: 'stat' }, `${mitSoll} mit Monatsbetrag · eingegangen ${eur(d.summe)}${d.rueckstand ? ' · Rückstand ' + eur(d.rueckstand) : ''}`)),
+    h('div', { class: 'card tablewrap' }, h('table', { class: 'data vz-tab' },
+      h('thead', null, h('tr', null, h('th', null, 'Garten'), h('th', null, 'Pächter'), h('th', null, 'je Monat'), ...MONATE.map((m) => h('th', { class: 'vz-zelle' }, m.slice(0, 3))),
+        h('th', null, 'Eingang'), h('th', null, 'Rückstand'), h('th', null, ''))),
+      h('tbody', null, d.zeilen.map((z) => {
+        const feld = h('input', { type: 'text', inputmode: 'decimal', class: 'std-in', value: z.soll ? numIn(z.soll) : '', placeholder: '–', 'aria-label': `Monatsbetrag ${z.name}` });
+        feld.addEventListener('change', () => sollSpeichern(z, feld));
+        return h('tr', null, h('td', null, z.gartennr), h('td', null, z.name), h('td', null, feld), ...z.monate.map((_, m) => zelle(z, m)),
+          h('td', { class: 'num' }, z.summe ? eur(z.summe) : '–'), h('td', { class: 'num' }, z.rueckstand ? h('b', { class: 'warn-text' }, eur(z.rueckstand)) : '–'),
+          h('td', { class: 'aktionen' }, h('button', { class: 'btn small', onclick: async () => { if (await vzZahlungDialog(z, jahr)) { S.vz = null; await reload(); } } }, '+ Zahlung'), ' ',
+            mehrMenue([
+              { label: `Zahlungen ansehen (${z.zahlungen.length})`, aktion: () => vzZahlungenDialog(z) },
+              z.rueckstand ? { label: 'Erinnerung schreiben', aktion: () => erinnerung(z) } : null])));
+      })))),
+    h('div', { class: 'vz-legende hint' }, h('span', { class: 'vz-punkt vz-ok' }), ' bezahlt ', h('span', { class: 'vz-punkt vz-teil' }), ' teilweise ',
+      h('span', { class: 'vz-punkt vz-offen' }), ' offen ', h('span', { class: 'vz-punkt vz-kommt' }), ' noch nicht fällig (ab dem 10. eines Monats fällig)'),
+    h('details', { class: 'card', style: 'margin-top:16px' }, h('summary', null, 'Zahlt euer Verein (auch) per Lastschrift?'),
+      h('p', { class: 'hint' }, 'Dann lässt sich der Bereich »Lastschrift« einschalten: Mandate, Datei für das Online-Banking (SEPA), Vorabankündigung.'),
+      h('label', { class: 'check' }, sepaSchalter, ' Bereich »Lastschrift« anzeigen')));
+}
+
 // ------------------------------------------------------------------ SEPA-Lastschrift
 
 async function loadSepa() {
@@ -2170,7 +2269,7 @@ function adminSepa() {
 
 const KONTO_STATUS = {
   passt: ['ok', 'Nummer und Betrag passen'], teilbetrag: ['warn', 'Teil- oder Mehrzahlung'], vorschlag: ['neu', 'Vorschlag – bitte prüfen'],
-  spende: ['neu', 'Spende?'], bezahlt: ['', 'schon bezahlt'], doppelt: ['', 'schon übernommen'], offen: ['', 'nicht zugeordnet'],
+  vorauszahlung: ['ok', 'Vorauszahlung'], spende: ['neu', 'Spende?'], bezahlt: ['', 'schon bezahlt'], doppelt: ['', 'schon übernommen'], offen: ['', 'nicht zugeordnet'],
 };
 
 function kontoauszugEinlesen() {
@@ -2189,11 +2288,12 @@ function kontoauszugEinlesen() {
 function kontoauszugVorschau(v) {
   if (!v.buchungen.length) { toast(`Keine Eingänge in der Datei gefunden${v.ausgaben ? ` (${v.ausgaben} Abbuchungen übersprungen)` : ''}.`, 'err'); return false; }
   const optionen = (sel) => [h('option', { value: '' }, '– nicht zuordnen –'), h('option', { value: 'spende', selected: sel === 'spende' }, '→ als Spende erfassen'),
+    ...(v.vorauszahler || []).map((p) => h('option', { value: 'vz:' + p.id, selected: sel === 'vz:' + p.id }, `→ Vorauszahlung: ${p.gartennr ? 'Garten ' + p.gartennr + ' · ' : ''}${p.name} (${eur(p.soll)}/Monat)`)),
     ...v.offene.map((r) => h('option', { value: r.id, selected: r.id === sel }, `${r.nummer} · ${r.name} · offen ${eur(r.offen)}${r.jahr ? ` (${r.jahr})` : ''}`))];
   const zeilen = v.buchungen.map((b) => {
     const fest = b.status === 'doppelt' || b.status === 'bezahlt';
-    const wahl = h('select', { disabled: fest, class: 'konto-wahl' }, optionen(b.status === 'spende' ? 'spende' : b.rechnungId));
-    const an = h('input', { type: 'checkbox', disabled: fest, checked: b.status === 'passt' || b.status === 'teilbetrag', 'aria-label': 'übernehmen' });
+    const wahl = h('select', { disabled: fest, class: 'konto-wahl' }, optionen(b.status === 'spende' ? 'spende' : b.status === 'vorauszahlung' ? 'vz:' + b.paechterId : b.rechnungId));
+    const an = h('input', { type: 'checkbox', disabled: fest, checked: b.status === 'passt' || b.status === 'teilbetrag' || b.status === 'vorauszahlung', 'aria-label': 'übernehmen' });
     wahl.addEventListener('change', () => { an.checked = !!wahl.value; zaehlen(); });
     an.addEventListener('change', () => { if (an.checked && !wahl.value) { an.checked = false; toast('Bitte zuerst eine Rechnung auswählen.', 'err'); } zaehlen(); });
     const [cls, text] = KONTO_STATUS[b.status] || ['', b.status];
@@ -2211,7 +2311,7 @@ function kontoauszugVorschau(v) {
   zaehlen();
   const n = (st) => v.buchungen.filter((b) => b.status === st).length;
   const body = h('div', null,
-    h('p', { class: 'hint' }, `${v.buchungen.length} Eingänge gelesen${v.ausgaben ? `, ${v.ausgaben} Abbuchungen übersprungen` : ''}: ${n('passt')} passen genau, ${n('teilbetrag')} Teilzahlungen, ${n('vorschlag')} Vorschläge über den Namen, ${n('spende')} mögliche Spenden, ${n('offen')} nicht zugeordnet${n('doppelt') ? `, ${n('doppelt')} schon früher übernommen` : ''}. Übernommen wird nur, was angehakt ist. Die Datei selbst wird nicht gespeichert.`),
+    h('p', { class: 'hint' }, `${v.buchungen.length} Eingänge gelesen${v.ausgaben ? `, ${v.ausgaben} Abbuchungen übersprungen` : ''}: ${n('passt')} passen genau, ${n('teilbetrag')} Teilzahlungen, ${n('vorschlag')} Vorschläge über den Namen, ${n('vorauszahlung')} Vorauszahlungen, ${n('spende')} mögliche Spenden, ${n('offen')} nicht zugeordnet${n('doppelt') ? `, ${n('doppelt')} schon früher übernommen` : ''}. Übernommen wird nur, was angehakt ist. Die Datei selbst wird nicht gespeichert.`),
     h('div', { class: 'toolbar' }, h('div', { class: 'spacer' }), zaehlerEl),
     h('div', { class: 'tablewrap', style: 'max-height:420px;overflow:auto' }, h('table', { class: 'konto-tab' },
       h('thead', null, h('tr', null, ['', 'Datum', 'Von / Verwendungszweck', 'Betrag', 'Rechnung'].map((x) => h('th', null, x)))),
@@ -2219,13 +2319,16 @@ function kontoauszugVorschau(v) {
   return breiterDialog('Kontoauszug einlesen', body, [
     { label: 'Abbrechen', value: false },
     { label: 'Angehakte übernehmen', cls: 'primary', value: true, action: async () => {
-      const zahlungen = zeilen.filter((z) => z.an.checked && z.wahl.value).map((z) => (z.wahl.value === 'spende'
-        ? { spende: true, name: z.b.name, datum: z.b.datum, betrag: z.b.betrag, fingerprint: z.b.fingerprint }
-        : { rechnungId: z.wahl.value, datum: z.b.datum, betrag: z.b.betrag, fingerprint: z.b.fingerprint }));
+      const zahlungen = zeilen.filter((z) => z.an.checked && z.wahl.value).map((z) => {
+        const basis = { datum: z.b.datum, betrag: z.b.betrag, fingerprint: z.b.fingerprint };
+        if (z.wahl.value === 'spende') return { ...basis, spende: true, name: z.b.name };
+        if (z.wahl.value.startsWith('vz:')) return { ...basis, vorauszahlung: z.wahl.value.slice(3) };
+        return { ...basis, rechnungId: z.wahl.value };
+      });
       if (!zahlungen.length) { toast('Es ist nichts angehakt.', 'err'); return false; }
       try {
         const r = await api('POST', '/api/admin/kontoauszug/buchen', { zahlungen });
-        toast(`${r.gebucht} Zahlung(en) über ${eur(r.summe)} übernommen${r.spenden ? ` – davon ${r.spenden} als Spende; Anschrift unter »Spenden« ergänzen` : ''}`, 'ok');
+        toast(`${r.gebucht} Zahlung(en) über ${eur(r.summe)} übernommen${r.vorauszahlungen ? ` – davon ${r.vorauszahlungen} Vorauszahlung(en)` : ''}${r.spenden ? ` – davon ${r.spenden} als Spende; Anschrift unter »Spenden« ergänzen` : ''}`, 'ok');
       } catch (e) { handleErr(e); return false; }
     } }]);
 }
@@ -2236,7 +2339,7 @@ function viewAdmin() {
   const st = S.state;
   if (st.hasPassword && !st.loggedIn) return viewLogin();
   const t = S.adminTab;
-  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'maengel' ? adminMaengel() : t === 'spenden' ? adminSpenden() : t === 'sepa' ? adminSepa() : t === 'einstellungen' ? adminSettings()
+  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'maengel' ? adminMaengel() : t === 'spenden' ? adminSpenden() : t === 'sepa' ? adminSepa() : t === 'vorauszahlung' ? adminVorauszahlung() : t === 'einstellungen' ? adminSettings()
     : t === 'jahreswechsel' ? adminYear() : t === 'kassenbericht' ? adminKassenbericht(false) : t === 'berichte' ? adminBerichte()
       : t === 'jubilaeen' ? adminJubilaeen() : t === 'daten' ? adminData() : t === 'protokoll' ? adminProtokoll() : t === 'datenschutz' ? adminDatenschutz() : adminSecurity();
   const eintrag = navEintrag('admin', t);
@@ -2849,7 +2952,7 @@ function adminKassenbericht(pruefMode) {
     card('Kassenbestand', eur(k.kassenbestand), `Anfangsbestand ${eur(k.anfangsbestand)} + Zahlungen${k.spenden ? ' + Spenden' : ''} − Ausgaben${vorjahr ? vjDelta(k.kassenbestand, vorjahr.kassenbestand) : ''}`, k.kassenbestand >= 0 ? 'ok' : 'err'),
     card('Von Pächtern eingegangen', `${eur(k.einnahmenBezahlt)}`, `tatsächlich gezahlt, nach heutigem Stand${vorjahr ? vjDelta(k.einnahmenBezahlt, vorjahr.einnahmenBezahlt) : ''}`, 'ok'),
     k.guthabenAusgezahlt ? card('An Pächter ausgezahlt', eur(k.guthabenAusgezahlt), 'Guthaben') : null,
-    k.vorauszahlungen ? card('Vorauszahlungen', eur(k.vorauszahlungen), 'per Lastschrift eingezogen', 'ok') : null,
+    k.vorauszahlungen ? card('Vorauszahlungen', eur(k.vorauszahlungen), 'monatliche Raten der Pächter', 'ok') : null,
     k.spenden ? card('Spenden', eur(k.spenden), `an den Verein${vorjahr ? vjDelta(k.spenden, vorjahr.spenden || 0) : ''}`, 'ok') : null,
     card('Sonstige Ausgaben', eur(k.ausgabenSumme), `${k.ausgaben.length} Buchung(en)${vorjahr ? vjDelta(k.ausgabenSumme, vorjahr.ausgabenSumme) : ''}`, k.ausgabenSumme ? 'warn' : 'ok'));
 

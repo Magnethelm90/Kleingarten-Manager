@@ -212,6 +212,9 @@ type Data struct {
 	Sepa          SepaEinstellungen `json:"sepa"`
 	Mandate       []Mandat          `json:"mandate,omitempty"`
 	Lastschriften []LastschriftLauf `json:"lastschriften,omitempty"`
+	// Vorauszahlungen per Überweisung: Monatsbetrag je Pächter und eingegangene Zahlungen (siehe vorauszahlung.go)
+	VorauszahlungSoll map[string]float64 `json:"vorauszahlungSoll,omitempty"`
+	Vorauszahlungen   []Vorauszahlung    `json:"vorauszahlungen,omitempty"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).

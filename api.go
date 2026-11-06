@@ -520,6 +520,7 @@ type stateResp struct {
 	ReadOnly    bool   `json:"readOnly"`
 	// SperrHinweis: Die Daten wurden auf einem anderen Rechner geöffnet, dieses Fenster speichert nicht mehr.
 	SperrHinweis string              `json:"sperrHinweis,omitempty"`
+	SepaAktiv    bool                `json:"sepaAktiv"`
 	Settings     Settings            `json:"settings"`
 	Paechter     []Paechter          `json:"paechter"`
 	Ablesungen   map[string]Ablesung `json:"ablesungen"`
@@ -593,6 +594,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	res.TutorialGesehen = a.st.d.TutorialGesehen
 	res.ZweiteSicherung = a.st.zweiteSicherungLocked()
 	res.SperrHinweis = a.st.sperrHinweisLocked()
+	res.SepaAktiv = a.st.sepaAktivLocked()
 	res.Demo, res.Leer = a.st.d.Demo, a.st.datenbestandLeer()
 	res.Lageplan = a.st.d.Lageplan
 	if res.Lageplan == nil {
@@ -1171,6 +1173,9 @@ func (a *App) handleNextYear(w http.ResponseWriter, r *http.Request) {
 	}
 	d.Jahre[yearKey(next)] = nj
 	d.Settings.Jahr = next
+	if n := d.vorgemerkteBuchen(next); n > 0 {
+		a.st.audit("Jahreswechsel: %d vorgemerkte Vorauszahlung(en) für %d gebucht", n, next)
+	}
 	d.Settings.Rechnungsdatum = addYear(d.Settings.Rechnungsdatum)
 	d.Settings.Zahlungsziel = addYear(d.Settings.Zahlungsziel)
 	if wiederkehrend > 0 {
@@ -1759,6 +1764,12 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/sepa/formular/oeffnen", a.admin(a.pdfOeffnen(a.mandatsformularPDF)))
 	mux.HandleFunc("GET /api/admin/sepa/vorab", a.admin(a.pdfAnzeigen(a.vorabankuendigungPDF)))
 	mux.HandleFunc("POST /api/admin/sepa/vorab/oeffnen", a.admin(a.pdfOeffnen(a.vorabankuendigungPDF)))
+	mux.HandleFunc("GET /api/admin/vorauszahlungen", a.admin(a.handleVzAnsicht))
+	mux.HandleFunc("PUT /api/admin/vorauszahlungen/soll", a.admin(a.handleVzSoll))
+	mux.HandleFunc("POST /api/admin/vorauszahlungen", a.admin(a.handleVzNeu))
+	mux.HandleFunc("DELETE /api/admin/vorauszahlungen/{id}", a.admin(a.handleVzLoeschen))
+	mux.HandleFunc("GET /api/admin/vorauszahlungen/erinnerung", a.admin(a.pdfAnzeigen(a.vzErinnerungPDF)))
+	mux.HandleFunc("POST /api/admin/vorauszahlungen/erinnerung/oeffnen", a.admin(a.pdfOeffnen(a.vzErinnerungPDF)))
 	mux.HandleFunc("GET /api/admin/maengel", a.admin(a.handleMaengelListe))
 	mux.HandleFunc("POST /api/admin/maengel", a.admin(a.handleMangelSpeichern(true)))
 	mux.HandleFunc("PUT /api/admin/maengel/{id}", a.admin(a.handleMangelSpeichern(false)))

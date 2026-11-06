@@ -84,6 +84,13 @@ func TestSepaLastschrift(t *testing.T) {
 		return decode[stateResp](t, do(h, "GET", "/api/state", nil)).Ablesungen[pid].Abschlag
 	}
 	vorher := abschlag(p1.ID)
+	kasse := func() float64 {
+		app.st.mu.Lock()
+		defer app.st.mu.Unlock()
+		vw, _ := app.st.viewLocked(st.CurrentYear)
+		return app.st.kassenberichtLocked(vw).Vorauszahlungen
+	}
+	kasseVorher := kasse()
 	rec := do(h, "POST", "/api/admin/sepa/lauf", map[string]any{"art": "vorauszahlung", "faellig": faellig})
 	if rec.Code != 200 {
 		t.Fatalf("Lauf: %d %s", rec.Code, rec.Body.String())
@@ -101,12 +108,8 @@ func TestSepaLastschrift(t *testing.T) {
 		}
 	}
 	// Kassenbericht zählt die Vorauszahlungen
-	app.st.mu.Lock()
-	vw, _ := app.st.viewLocked(st.CurrentYear)
-	k := app.st.kassenberichtLocked(vw)
-	app.st.mu.Unlock()
-	if k.Vorauszahlungen != 55 {
-		t.Errorf("Kassenbericht: %v", k.Vorauszahlungen)
+	if got := round2(kasse() - kasseVorher); got != 55 {
+		t.Errorf("Kassenbericht: %v mehr statt 55", got)
 	}
 
 	// XML: wohlgeformt, richtige Summen, Mandat und Gläubiger-ID

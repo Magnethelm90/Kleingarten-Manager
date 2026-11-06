@@ -75,6 +75,9 @@ endgültigen Löschen der Person entfernt. Die Lastschrift-Läufe sind Buchungsb
 Aufbewahrungsfrist und verlieren dann Namen und IBAN. Die Dateien für das Online-Banking liegen im Ordner
 »Lastschriften« des Datenordners und können nach dem Hochladen gelöscht werden.
 
+**Vorauszahlungen:** Monatsbetrag und eingegangene Zahlungen je Pächter stehen in der Auskunft. Beim endgültigen
+Löschen der Person wird der Monatsbetrag gelöscht; die Zahlungen bleiben als Kassenbelege ohne Verknüpfung zur Person.
+
 **Kontoauszug:** Die CSV-Datei aus dem Online-Banking wird nur im Arbeitsspeicher gelesen und nicht gespeichert;
 sie enthält auch Buchungen Dritter. Übernommen werden nur die bestätigten Zahlungsvermerke an den Rechnungen. Damit
 derselbe Auszug nicht zweimal gebucht wird, bleibt von jeder übernommenen Buchung ein gekürzter Prüfwert (Hash) ohne

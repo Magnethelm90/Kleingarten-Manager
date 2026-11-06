@@ -140,6 +140,9 @@ func (d *Data) entfernePerson(id string) bool {
 	if d.sepaPersonEntfernen(id) {
 		changed = true
 	}
+	if d.vzPersonEntfernen(id) {
+		changed = true
+	}
 	einsatz := d.Einsatzstunden[:0]
 	for _, e := range d.Einsatzstunden {
 		if e.PaechterID == id {
@@ -338,6 +341,7 @@ type auskunft struct {
 	Nutzungen   []Nutzung           `json:"nutzungBeiBegehungen"`
 	Mandate     []Mandat            `json:"lastschriftmandate"`
 	Lastschrift []LastschriftPosten `json:"lastschriften"`
+	Vorauszahl  []Vorauszahlung     `json:"vorauszahlungen"`
 	Aufbewahrng string              `json:"aufbewahrung"`
 }
 
@@ -371,6 +375,7 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 		Nutzungen:   []Nutzung{},
 		Mandate:     []Mandat{},
 		Lastschrift: []LastschriftPosten{},
+		Vorauszahl:  []Vorauszahlung{},
 		Aufbewahrng: fmt.Sprintf("Rechnungen und Jahresunterlagen werden %d Jahre ab Ende des Ausstellungsjahres aufbewahrt "+
 			"(steuerrechtliche Pflicht), danach wird der Personenbezug entfernt.", aufbewahrungJahre),
 	}
@@ -438,6 +443,11 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 			if x.PaechterID == id {
 				a.Lastschrift = append(a.Lastschrift, x)
 			}
+		}
+	}
+	for _, v := range s.d.Vorauszahlungen {
+		if v.PaechterID == id {
+			a.Vorauszahl = append(a.Vorauszahl, v)
 		}
 	}
 	for _, e := range s.d.AuditLog {

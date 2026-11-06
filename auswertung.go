@@ -874,7 +874,7 @@ func kassenberichtRows(k kassenbericht, verein string) [][]xCell {
 		[]xCell{{"Kassenbestand", stHeader}, {"Betrag (€)", stHeader}},
 		[]xCell{{"Anfangsbestand", stNormal}, {k.Anfangsbestand, stEUR}},
 		[]xCell{{"+ Von Pächtern eingegangene Zahlungen", stNormal}, {k.EinnahmenBezahlt, stEUR}},
-		[]xCell{{"+ Vorauszahlungen per Lastschrift", stNormal}, {k.Vorauszahlungen, stEUR}},
+		[]xCell{{"+ Vorauszahlungen der Pächter", stNormal}, {k.Vorauszahlungen, stEUR}},
 		[]xCell{{"+ Spenden", stNormal}, {k.Spenden, stEUR}},
 		[]xCell{{"− An Pächter ausgezahlte Guthaben", stNormal}, {-k.GuthabenAusgezahlt, stEUR}},
 		[]xCell{{"− Sonstige Ausgaben", stNormal}, {-k.AusgabenSumme, stEUR}},

@@ -27,7 +27,8 @@ type kontoBuchung struct {
 	Betrag      float64 `json:"betrag"`
 	Fingerprint string  `json:"fingerprint"`
 	RechnungID  string  `json:"rechnungId,omitempty"` // Vorschlag
-	Status      string  `json:"status"`               // passt | teilbetrag | vorschlag | spende | bezahlt | doppelt | offen
+	PaechterID  string  `json:"paechterId,omitempty"` // Vorschlag: Vorauszahlung dieses Pächters
+	Status      string  `json:"status"`               // passt | teilbetrag | vorschlag | vorauszahlung | spende | bezahlt | doppelt | offen
 	Hinweis     string  `json:"hinweis,omitempty"`
 }
 
@@ -39,10 +40,18 @@ type offeneRechnung struct {
 	Offen  float64 `json:"offen"`
 }
 
+type vorauszahler struct {
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Gartennr string  `json:"gartennr"`
+	Soll     float64 `json:"soll"`
+}
+
 type kontoVorschau struct {
-	Buchungen []kontoBuchung   `json:"buchungen"`
-	Offene    []offeneRechnung `json:"offene"`
-	Ausgaben  int              `json:"ausgaben"` // Abbuchungen, die übersprungen wurden
+	Buchungen    []kontoBuchung   `json:"buchungen"`
+	Offene       []offeneRechnung `json:"offene"`
+	Vorauszahler []vorauszahler   `json:"vorauszahler"`
+	Ausgaben     int              `json:"ausgaben"` // Abbuchungen, die übersprungen wurden
 }
 
 const (
@@ -239,6 +248,7 @@ func (s *Store) zuordnenLocked(bs []kontoBuchung) []offeneRechnung {
 		return natLess(offen[i].Nummer, offen[j].Nummer)
 	})
 	vergeben := map[string]float64{} // in dieser Datei schon vorgeschlagene Beträge je Rechnung
+	vorauszahler := s.vorauszahlerLocked()
 	for i := range bs {
 		b := &bs[i]
 		if gesehen[b.Fingerprint] {
@@ -273,6 +283,14 @@ func (s *Store) zuordnenLocked(bs []kontoBuchung) []offeneRechnung {
 		case len(treffer) > 0:
 			b.Status, b.Hinweis = "bezahlt", "Rechnung "+treffer[0].Nummer+" ist schon als bezahlt vermerkt"
 		default:
+			// Vorauszahlung: Name und ein Vielfaches des Monatsbetrags; mit Stichwort (»Vorauszahlung«, »Abschlag«)
+			// hat das Vorrang vor einer Rechnung mit zufällig gleichem Betrag
+			vp, vzOk, stichwort := s.vzZuordnenLocked(text, b.Betrag, vorauszahler)
+			if vzOk && stichwort {
+				b.Status, b.PaechterID = "vorauszahlung", vp.ID
+				b.Hinweis = "Vorauszahlung " + vp.Name
+				continue
+			}
 			// ohne Nummer: Name des Pächters im Text und Betrag gleich dem offenen Betrag, eindeutig
 			var kandidat *Rechnung
 			mehrere := false
@@ -290,6 +308,9 @@ func (s *Store) zuordnenLocked(bs []kontoBuchung) []offeneRechnung {
 				b.RechnungID, b.Status = kandidat.ID, "vorschlag"
 				b.Hinweis = "über Name und Betrag gefunden – bitte prüfen"
 				vergeben[kandidat.ID] += b.Betrag
+			} else if vzOk {
+				b.Status, b.PaechterID = "vorauszahlung", vp.ID
+				b.Hinweis = "Vorauszahlung " + vp.Name
 			} else if strings.Contains(text, "SPENDE") {
 				b.Status, b.Hinweis = "spende", "»Spende« im Verwendungszweck – als Spende erfassen?"
 			} else {
@@ -328,11 +349,15 @@ func (a *App) handleKontoauszugVorschau(w http.ResponseWriter, r *http.Request) 
 	}
 	a.st.mu.Lock()
 	offene := a.st.zuordnenLocked(bs)
+	vz := []vorauszahler{}
+	for _, p := range a.st.vorauszahlerLocked() {
+		vz = append(vz, vorauszahler{p.ID, p.Name, p.Gartennr, a.st.d.VorauszahlungSoll[p.ID]})
+	}
 	a.st.mu.Unlock()
 	if bs == nil {
 		bs = []kontoBuchung{}
 	}
-	writeJSON(w, 200, kontoVorschau{Buchungen: bs, Offene: offene, Ausgaben: ausgaben})
+	writeJSON(w, 200, kontoVorschau{Buchungen: bs, Offene: offene, Vorauszahler: vz, Ausgaben: ausgaben})
 }
 
 // handleKontoauszugBuchen vermerkt die bestätigten Zahlungen. Erst wird alles geprüft, dann gebucht.
@@ -340,8 +365,9 @@ func (a *App) handleKontoauszugBuchen(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Zahlungen []struct {
 			RechnungID  string  `json:"rechnungId"`
-			Spende      bool    `json:"spende"` // statt einer Rechnung als Spende erfassen
-			Name        string  `json:"name"`   // Absender laut Bank (für Spenden)
+			Spende      bool    `json:"spende"`        // statt einer Rechnung als Spende erfassen
+			Vorauszahl  string  `json:"vorauszahlung"` // statt einer Rechnung als Vorauszahlung dieses Pächters
+			Name        string  `json:"name"`          // Absender laut Bank (für Spenden)
 			Datum       string  `json:"datum"`
 			Betrag      float64 `json:"betrag"`
 			Fingerprint string  `json:"fingerprint"`
@@ -367,7 +393,18 @@ func (a *App) handleKontoauszugBuchen(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, z := range in.Zahlungen {
 		x := rech[z.RechnungID]
-		if z.Spende {
+		if z.Vorauszahl != "" {
+			if _, ok := a.st.paechterAktivLocked(z.Vorauszahl); !ok {
+				writeErr(w, bad("Ein ausgewählter Pächter für die Vorauszahlung existiert nicht mehr – bitte den Auszug neu einlesen"))
+				return
+			}
+			if d, err := parseDate(z.Datum); err == nil {
+				if j := a.st.d.Jahre[yearKey(d.Year())]; j != nil && j.Abgeschlossen {
+					writeErr(w, bad(fmt.Sprintf("Das Abrechnungsjahr %d ist abgeschlossen – die Vorauszahlung vom %s lässt sich nicht mehr buchen", d.Year(), germanDate(z.Datum))))
+					return
+				}
+			}
+		} else if z.Spende {
 			x = nil
 		} else if x == nil || x.Status != statusGueltig || x.Bereinigt {
 			writeErr(w, bad("Eine ausgewählte Rechnung gibt es nicht mehr – bitte den Auszug neu einlesen"))
@@ -397,10 +434,18 @@ func (a *App) handleKontoauszugBuchen(w http.ResponseWriter, r *http.Request) {
 	}
 	a.st.snapshotBackup("vor-Kontoauszug")
 	summe := 0.0
-	spenden := 0
+	spenden, vorauszahlungen := 0, 0
 	for _, z := range in.Zahlungen {
 		summe += z.Betrag
 		a.st.d.KontoFingerprints = append(a.st.d.KontoFingerprints, z.Fingerprint)
+		if z.Vorauszahl != "" {
+			if _, err := a.st.neueVorauszahlungLocked(Vorauszahlung{PaechterID: z.Vorauszahl, Datum: z.Datum, Betrag: z.Betrag, Quelle: "kontoauszug"}); err != nil {
+				writeErr(w, err) // vorher geprüft; tritt praktisch nicht auf
+				return
+			}
+			vorauszahlungen++
+			continue
+		}
 		if z.Spende {
 			name := trim(strings.Join(strings.Fields(z.Name), " "), 100)
 			if name == "" {
@@ -423,10 +468,10 @@ func (a *App) handleKontoauszugBuchen(w http.ResponseWriter, r *http.Request) {
 	if n := len(a.st.d.KontoFingerprints); n > maxFingerprints {
 		a.st.d.KontoFingerprints = append([]string(nil), a.st.d.KontoFingerprints[n-maxFingerprints:]...)
 	}
-	a.st.audit("Kontoauszug: %d Zahlung(en) über %s übernommen, davon %d Spende(n)", len(in.Zahlungen), fmtEUR(summe), spenden)
+	a.st.audit("Kontoauszug: %d Zahlung(en) über %s übernommen, davon %d Spende(n) und %d Vorauszahlung(en)", len(in.Zahlungen), fmtEUR(summe), spenden, vorauszahlungen)
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"gebucht": len(in.Zahlungen), "summe": round2(summe), "spenden": spenden})
+	writeJSON(w, 200, map[string]any{"gebucht": len(in.Zahlungen), "summe": round2(summe), "spenden": spenden, "vorauszahlungen": vorauszahlungen})
 }

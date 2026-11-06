@@ -15,7 +15,7 @@ import (
 // datenbestandLeer meldet, ob noch nichts eingegeben wurde (keine Pächter, Rechnungen, Ausgaben,
 // kein abgeschlossenes Jahr). Der Aufrufer hält s.mu.
 func (s *Store) datenbestandLeer() bool {
-	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 || len(s.d.Einsatzstunden) > 0 || len(s.d.Spenden) > 0 {
+	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 || len(s.d.Einsatzstunden) > 0 || len(s.d.Spenden) > 0 || len(s.d.Vorauszahlungen) > 0 {
 		return false
 	}
 	for _, j := range s.d.Jahre {
@@ -174,6 +174,25 @@ func (s *Store) ladeBeispieldaten() {
 		s.d.Spenden = append(s.d.Spenden, Spende{ID: newID(), Datum: fmt.Sprintf("%d-05-10", jahr), Jahr: jahr, Betrag: 50, PaechterID: p.ID, Name: p.Name, Strasse: p.Strasse, PLZOrt: p.PLZOrt})
 	}
 	s.d.Spenden = append(s.d.Spenden, Spende{ID: newID(), Datum: fmt.Sprintf("%d-06-21", jahr), Jahr: jahr, Betrag: 120, Name: "Gartencenter Grünfink", Strasse: "Gewerbestraße 4", PLZOrt: set.Ort, Notiz: "für das Sommerfest"})
+	// Vorauszahlungen per Dauerauftrag: fünf Gärten zahlen monatlich, Garten 4 ist seit drei Monaten im Rückstand
+	s.d.VorauszahlungSoll = map[string]float64{}
+	for i, nr := range []string{"1", "2", "4", "6", "9"} {
+		p, ok := s.aktiverPaechterLocked(nr)
+		if !ok {
+			continue
+		}
+		soll := []float64{20, 15, 20, 15, 20}[i] // unter der Jahresrechnung, damit ein Restbetrag bleibt
+		s.d.VorauszahlungSoll[p.ID] = soll
+		monate := 12
+		if nr == "4" {
+			monate = 9
+		}
+		for m := 1; m <= monate; m++ {
+			v := Vorauszahlung{ID: newID(), PaechterID: p.ID, Jahr: jahr, Datum: fmt.Sprintf("%d-%02d-01", jahr, m), Betrag: soll, Quelle: "kontoauszug"}
+			s.d.Vorauszahlungen = append(s.d.Vorauszahlungen, v)
+			s.d.vorauszahlungBuchen(&s.d.Vorauszahlungen[len(s.d.Vorauszahlungen)-1], +1)
+		}
+	}
 	s.d.Vereinsinfo = Vereinsinfo{
 		Ansprechpartner: "Vorsitz: Erika Beispiel, Tel. 0123 4567\nKasse: Max Muster, kasse@example.org\nSprechstunde: samstags 10–12 Uhr im Vereinsheim",
 		Hinweise:        "Mittagsruhe 13–15 Uhr, sonntags keine lauten Arbeiten\nWasser wird im April angestellt und im Oktober abgestellt\nGrünschnitt bitte zum Kompostplatz am Tor, Müll nimmt jeder selbst mit",

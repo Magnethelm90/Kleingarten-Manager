@@ -85,7 +85,7 @@ func TestSpendenUndZuwendungsbestaetigung(t *testing.T) {
 	v, _ := app.st.viewLocked(st.CurrentYear)
 	k := app.st.kassenberichtLocked(v)
 	app.st.mu.Unlock()
-	if k.Spenden != 224.9+170 || round2(k.Kassenbestand-k.Anfangsbestand-k.EinnahmenBezahlt+k.GuthabenAusgezahlt+k.AusgabenSumme) != k.Spenden {
+	if k.Spenden != 224.9+170 || round2(k.Kassenbestand-k.Anfangsbestand-k.EinnahmenBezahlt-k.Vorauszahlungen+k.GuthabenAusgezahlt+k.AusgabenSumme) != k.Spenden {
 		t.Errorf("Kassenbericht: Spenden %v, Bestand %v", k.Spenden, k.Kassenbestand)
 	}
 

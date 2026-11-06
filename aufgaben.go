@@ -160,6 +160,21 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 		add("info", mehrzahl(offen, "Spende ohne Bestätigung", "Spenden ohne Bestätigung"), "Spender brauchen die Zuwendungsbestätigung für ihre Steuererklärung.", "admin:spenden", "Spenden")
 	}
 
+	// Vorauszahlungen per Überweisung: Rückstände im laufenden Jahr
+	if len(s.d.VorauszahlungSoll) > 0 {
+		rueck, summe := 0, 0.0
+		for _, z := range s.vzAnsichtLocked(s.d.Settings.Jahr, heute).Zeilen {
+			if z.Rueckstand > 0 {
+				rueck++
+				summe += z.Rueckstand
+			}
+		}
+		if rueck > 0 {
+			add("warn", mehrzahl(rueck, "Pächter mit Rückstand bei der Vorauszahlung", "Pächter mit Rückstand bei der Vorauszahlung"),
+				fmt.Sprintf("Zusammen %s – Kontoauszug einlesen oder eine Erinnerung schicken.", fmtEUR(round2(summe))), "admin:vorauszahlung", "Vorauszahlungen")
+		}
+	}
+
 	// Lastschrift: nächster Monatslauf und verfallene Mandate
 	vorauszahlung, verfallen := false, 0
 	for _, m := range s.d.Mandate {

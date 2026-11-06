@@ -20,6 +20,7 @@ import (
 // Buchung zurück. Der Verein braucht eine Gläubiger-Identifikationsnummer der Bundesbank.
 
 type SepaEinstellungen struct {
+	Aktiv           bool   `json:"aktiv"`           // Bereich »Lastschrift« anzeigen (nur Vereine, die Lastschrift nutzen)
 	GlaeubigerID    string `json:"glaeubigerId"`    // z. B. DE98ZZZ09999999999
 	Faelligkeitstag int    `json:"faelligkeitstag"` // Tag im Monat für Vorauszahlungen (1–28)
 }
@@ -758,9 +759,15 @@ func (a *App) handleLaufDatei(w http.ResponseWriter, r *http.Request) {
 
 // ------------------------------------------------------------------ Kasse, Datenschutz
 
-// vorauszahlungenLocked: per Lastschrift eingezogene Vorauszahlungen eines Abrechnungsjahres (ohne Rücklastschriften).
+// vorauszahlungenLocked: Vorauszahlungen eines Abrechnungsjahres – per Lastschrift eingezogen (ohne
+// Rücklastschriften) und per Überweisung eingegangen (auf den Abschlag gebucht).
 func (s *Store) vorauszahlungenLocked(jahr int) float64 {
 	sum := 0.0
+	for _, v := range s.d.Vorauszahlungen {
+		if v.Jahr == jahr && v.Gebucht {
+			sum += v.Betrag
+		}
+	}
 	for _, l := range s.d.Lastschriften {
 		if l.Art != "vorauszahlung" || l.Jahr != jahr {
 			continue
@@ -814,3 +821,6 @@ func (d *Data) sepaBereinigen(aktuell int) int {
 	}
 	return n
 }
+
+// sepaAktivLocked: Lastschrift ist eingeschaltet oder es gibt schon Mandate (dann bleibt der Bereich sichtbar).
+func (s *Store) sepaAktivLocked() bool { return s.d.Sepa.Aktiv || len(s.d.Mandate) > 0 }

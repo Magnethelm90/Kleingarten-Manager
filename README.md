@@ -111,7 +111,10 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Kassenbericht** mit Anfangs- und Endbestand, Vorjahresvergleich, Verlauf über die Jahre und Vergleich mit der
   Rechnung des Versorgers; sonstige Ausgaben mit Kategorie und Beleg-Fotos, wiederkehrende Ausgaben werden
   vorgeschlagen; als Excel-Datei
-- **SEPA-Lastschrift** für die monatliche Vorauszahlung und die Jahresrechnung: Mandate je Pächter (mit Formular zum
+- **Monatliche Vorauszahlungen per Überweisung:** Monatsbetrag je Pächter, Monatsübersicht (wer hat welchen Monat
+  bezahlt, wer ist im Rückstand), Daueraufträge werden beim Einlesen des Kontoauszugs erkannt, Erinnerung als PDF;
+  alles wird als Abschlag auf die Jahresrechnung gebucht
+- **SEPA-Lastschrift** (bei Bedarf einschaltbar) für die monatliche Vorauszahlung und die Jahresrechnung: Mandate je Pächter (mit Formular zum
   Unterschreiben), Datei für das Online-Banking (pain.008), Vorabankündigung mit allen Terminen, Rücklastschrift mit
   einem Klick; Vorauszahlungen werden auf der Jahresrechnung abgezogen und zählen in der Kasse
 - **Kontoauszug einlesen:** die CSV-Datei aus dem Online-Banking laden, das Programm ordnet die Eingänge über die

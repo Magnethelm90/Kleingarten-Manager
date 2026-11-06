@@ -707,3 +707,15 @@ td.wrap .hint { font-size: 12.5px; }
 .cockpit-ico.warn { background: var(--warn-bg); color: var(--warn); }
 .cockpit-ico.info, .cockpit-ico.ok { background: var(--ok-bg); color: var(--ok); }
 @media (max-width: 760px) { .cockpit-liste li { flex-wrap: wrap; } }
+
+/* Vorauszahlungen */
+.vz-tab .vz-zelle { text-align: center; padding-left: 2px; padding-right: 2px; }
+.vz-punkt { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: middle; border: 2px solid transparent; }
+.vz-ok { background: var(--ok); }
+.vz-teil { background: linear-gradient(90deg, var(--ok) 50%, var(--line) 50%); }
+.vz-offen { background: transparent; border-color: var(--err); }
+.vz-kommt { background: var(--line); }
+.vz-leer { background: transparent; }
+.vz-legende { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+.vz-legende .vz-punkt { margin-left: 10px; }
+.vz-tab .std-in { width: 5.5em; }
