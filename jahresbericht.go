@@ -245,6 +245,9 @@ func buildJahresbericht(d jahresberichtDaten) ([]byte, error) {
 	y += 6
 	zeile("Kassenbestand zu Jahresbeginn", fmtEUR(d.K.Anfangsbestand), vorEUR(func(k kassenbericht) float64 { return k.Anfangsbestand }), false)
 	zeile("+ Zahlungen der Pächter", fmtEUR(d.K.EinnahmenBezahlt), vorEUR(func(k kassenbericht) float64 { return k.EinnahmenBezahlt }), false)
+	if d.K.Vorauszahlungen != 0 || (vk != nil && vk.Vorauszahlungen != 0) {
+		zeile("+ Vorauszahlungen", fmtEUR(d.K.Vorauszahlungen), vorEUR(func(k kassenbericht) float64 { return k.Vorauszahlungen }), false)
+	}
 	if d.K.Spenden != 0 || (vk != nil && vk.Spenden != 0) {
 		zeile("+ Spenden", fmtEUR(d.K.Spenden), vorEUR(func(k kassenbericht) float64 { return k.Spenden }), false)
 	}

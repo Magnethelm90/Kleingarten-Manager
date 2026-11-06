@@ -160,6 +160,37 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 		add("info", mehrzahl(offen, "Spende ohne Bestätigung", "Spenden ohne Bestätigung"), "Spender brauchen die Zuwendungsbestätigung für ihre Steuererklärung.", "admin:spenden", "Spenden")
 	}
 
+	// Lastschrift: nächster Monatslauf und verfallene Mandate
+	vorauszahlung, verfallen := false, 0
+	for _, m := range s.d.Mandate {
+		if m.Widerrufen != "" {
+			continue
+		}
+		if m.verfallen(heute) {
+			verfallen++
+		} else if m.Monatsbetrag > 0 {
+			vorauszahlung = true
+		}
+	}
+	if verfallen > 0 {
+		add("warn", mehrzahl(verfallen, "Lastschriftmandat verfallen", "Lastschriftmandate verfallen"), "Nach 36 Monaten ohne Einzug gilt ein Mandat nicht mehr – neues Mandat unterschreiben lassen.", "admin:sepa", "Lastschrift")
+	}
+	if vorauszahlung {
+		tag := max(1, s.d.Sepa.Faelligkeitstag)
+		naechster := naechsterBankarbeitstag(time.Date(heute.Year(), heute.Month(), tag, 0, 0, 0, 0, time.UTC))
+		if tageBis(heute, naechster.Format("2006-01-02")) < 1 {
+			naechster = naechsterBankarbeitstag(time.Date(heute.Year(), heute.Month()+1, tag, 0, 0, 0, 0, time.UTC))
+		}
+		schon := false
+		for _, l := range s.d.Lastschriften {
+			schon = schon || (l.Art == "vorauszahlung" && strings.HasPrefix(l.Faellig, naechster.Format("2006-01")))
+		}
+		if n := tageBis(heute, naechster.Format("2006-01-02")); !schon && n <= 10 {
+			add("warn", fmt.Sprintf("Lastschrift für %s %d erstellen", monatsnamen[naechster.Month()-1], naechster.Year()),
+				fmt.Sprintf("Die Vorauszahlungen sind am %s fällig (%s) – Datei rechtzeitig ans Online-Banking geben.", naechster.Format("02.01.2006"), inTagen(n)), "admin:sepa", "Lastschrift")
+		}
+	}
+
 	// Warteliste
 	nachfragen := 0
 	for _, b := range s.d.Warteliste {

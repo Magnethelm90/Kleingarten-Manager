@@ -208,6 +208,10 @@ type Data struct {
 	Vereinsinfo Vereinsinfo `json:"vereinsinfo"`
 	// Nutzungen: geschätzte Flächenanteile bei Begehungen (Drittelregelung, siehe nutzung.go)
 	Nutzungen []Nutzung `json:"nutzungen,omitempty"`
+	// SEPA-Lastschrift: Einstellungen, Mandate und Läufe (siehe sepa.go)
+	Sepa          SepaEinstellungen `json:"sepa"`
+	Mandate       []Mandat          `json:"mandate,omitempty"`
+	Lastschriften []LastschriftLauf `json:"lastschriften,omitempty"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).

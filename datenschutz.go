@@ -137,6 +137,9 @@ func (d *Data) entfernePerson(id string) bool {
 	if d.nutzungPersonEntfernen(id) {
 		changed = true
 	}
+	if d.sepaPersonEntfernen(id) {
+		changed = true
+	}
 	einsatz := d.Einsatzstunden[:0]
 	for _, e := range d.Einsatzstunden {
 		if e.PaechterID == id {
@@ -207,6 +210,7 @@ func (d *Data) bereinigeAbgelaufene(aktuell int) (rechnungen int, jahre int, dat
 	}
 	// Spenden: Doppel der Zuwendungsbestätigungen und Kassenunterlagen
 	jahre += d.spendenBereinigen(aktuell)
+	jahre += d.sepaBereinigen(aktuell)
 	// Übergabeprotokolle zählen zu den Jahresunterlagen ihres Übergabejahres
 	for i := range d.Uebergaben {
 		if u := &d.Uebergaben[i]; u.fristAbgelaufen(aktuell) {
@@ -318,21 +322,23 @@ type auskunftRechnung struct {
 }
 
 type auskunft struct {
-	Erstellt    string             `json:"erstelltAm"`
-	Verantwort  string             `json:"verantwortlich"`
-	Hinweis     string             `json:"hinweis"`
-	Stammdaten  Paechter           `json:"stammdaten"`
-	Garten      []GartenEintrag    `json:"gartenhistorie"`
-	Jahre       []auskunftJahr     `json:"jahre"`
-	Rechnungen  []auskunftRechnung `json:"rechnungen"`
-	Protokoll   []AuditEntry       `json:"aenderungsprotokoll"`
-	Uebergaben  []Uebergabe        `json:"gartenuebergaben"`
-	Dokumente   []GartenDokument   `json:"dokumente"`
-	Maengel     []Mangel           `json:"maengelBeiBegehungen"`
-	Einsaetze   []EinsatzStunden   `json:"stundenBeiArbeitseinsaetzen"`
-	Spenden     []Spende           `json:"spenden"`
-	Nutzungen   []Nutzung          `json:"nutzungBeiBegehungen"`
-	Aufbewahrng string             `json:"aufbewahrung"`
+	Erstellt    string              `json:"erstelltAm"`
+	Verantwort  string              `json:"verantwortlich"`
+	Hinweis     string              `json:"hinweis"`
+	Stammdaten  Paechter            `json:"stammdaten"`
+	Garten      []GartenEintrag     `json:"gartenhistorie"`
+	Jahre       []auskunftJahr      `json:"jahre"`
+	Rechnungen  []auskunftRechnung  `json:"rechnungen"`
+	Protokoll   []AuditEntry        `json:"aenderungsprotokoll"`
+	Uebergaben  []Uebergabe         `json:"gartenuebergaben"`
+	Dokumente   []GartenDokument    `json:"dokumente"`
+	Maengel     []Mangel            `json:"maengelBeiBegehungen"`
+	Einsaetze   []EinsatzStunden    `json:"stundenBeiArbeitseinsaetzen"`
+	Spenden     []Spende            `json:"spenden"`
+	Nutzungen   []Nutzung           `json:"nutzungBeiBegehungen"`
+	Mandate     []Mandat            `json:"lastschriftmandate"`
+	Lastschrift []LastschriftPosten `json:"lastschriften"`
+	Aufbewahrng string              `json:"aufbewahrung"`
 }
 
 // auskunftLocked stellt alle zu einer Person gespeicherten Daten zusammen. Der Aufrufer hält s.mu.
@@ -352,17 +358,19 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 		Verantwort: s.d.Settings.VereinName,
 		Hinweis: "Auskunft nach Art. 15 DSGVO (zugleich Datenkopie nach Art. 20 in maschinenlesbarer Form): alle zu dieser Person " +
 			"im " + appName + " gespeicherten Daten.",
-		Stammdaten: *p,
-		Garten:     []GartenEintrag{},
-		Jahre:      []auskunftJahr{},
-		Rechnungen: []auskunftRechnung{},
-		Protokoll:  []AuditEntry{},
-		Uebergaben: []Uebergabe{},
-		Dokumente:  []GartenDokument{},
-		Maengel:    []Mangel{},
-		Einsaetze:  []EinsatzStunden{},
-		Spenden:    []Spende{},
-		Nutzungen:  []Nutzung{},
+		Stammdaten:  *p,
+		Garten:      []GartenEintrag{},
+		Jahre:       []auskunftJahr{},
+		Rechnungen:  []auskunftRechnung{},
+		Protokoll:   []AuditEntry{},
+		Uebergaben:  []Uebergabe{},
+		Dokumente:   []GartenDokument{},
+		Maengel:     []Mangel{},
+		Einsaetze:   []EinsatzStunden{},
+		Spenden:     []Spende{},
+		Nutzungen:   []Nutzung{},
+		Mandate:     []Mandat{},
+		Lastschrift: []LastschriftPosten{},
 		Aufbewahrng: fmt.Sprintf("Rechnungen und Jahresunterlagen werden %d Jahre ab Ende des Ausstellungsjahres aufbewahrt "+
 			"(steuerrechtliche Pflicht), danach wird der Personenbezug entfernt.", aufbewahrungJahre),
 	}
@@ -418,6 +426,18 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 	for _, n := range s.d.Nutzungen {
 		if n.PaechterID == id {
 			a.Nutzungen = append(a.Nutzungen, n)
+		}
+	}
+	for _, m := range s.d.Mandate {
+		if m.PaechterID == id {
+			a.Mandate = append(a.Mandate, m)
+		}
+	}
+	for _, l := range s.d.Lastschriften {
+		for _, x := range l.Posten {
+			if x.PaechterID == id {
+				a.Lastschrift = append(a.Lastschrift, x)
+			}
 		}
 	}
 	for _, e := range s.d.AuditLog {

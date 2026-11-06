@@ -275,6 +275,7 @@ const NAV = [
   { gruppe: 'Kasse & Berichte', items: [
     { admin: 'kassenbericht', label: 'Kassenbericht', ic: 'kasse' },
     { admin: 'spenden', label: 'Spenden', ic: 'stern' },
+    { admin: 'sepa', label: 'Lastschrift', ic: 'euro' },
     { admin: 'berichte', label: 'Berichte & Meldungen', ic: 'bericht' },
     { admin: 'jahreswechsel', label: 'Jahreswechsel', ic: 'fertig' }] },
   { gruppe: 'Einstellungen', items: [
@@ -296,6 +297,7 @@ function adminTabWaehlen(id) {
   if (id === 'warteliste') S.warteliste = null;
   if (id === 'maengel') { S.maengel = null; S.nutzung = null; }
   if (id === 'spenden') S.spenden = null;
+  if (id === 'sepa') { S.sepa = null; S.sepaVorschau = null; }
   if (id === 'paechter') S.uebergaben = null;
   if (id === 'berichte') S.meldung = null;
 }
@@ -1991,6 +1993,179 @@ function adminSpenden() {
     h('p', { class: 'hint', style: 'margin-top:14px' }, 'Gut zu wissen: Mitgliedsbeiträge an Kleingartenvereine sind steuerlich nicht abziehbar, deshalb werden hier nur Spenden bestätigt. Bis 300 € je Spende genügt dem Spender meist der Kontoauszug als Nachweis. Ein Doppel jeder Bestätigung muss der Verein aufbewahren. Im Zweifel bitte mit dem Steuerberater klären.'));
 }
 
+// ------------------------------------------------------------------ SEPA-Lastschrift
+
+async function loadSepa() {
+  if (S.sepaLoading) return;
+  S.sepaLoading = true;
+  try { S.sepa = await api('GET', '/api/admin/sepa'); } catch (e) { handleErr(e); S.sepa = { mandate: [], laeufe: [], einstellungen: {} }; }
+  S.sepaLoading = false;
+  render();
+}
+const isoTag = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const ibanKurz = (iban) => (iban && iban.length > 8 ? `${iban.slice(0, 4)} … ${iban.slice(-4)}` : iban || '');
+
+// Vorschlag fürs Fälligkeitsdatum: Vorauszahlung zum Fälligkeitstag des nächsten möglichen Monats, Rechnungen in einer Woche
+function sepaFaelligVorschlag(art, tag) {
+  const werktag = (d) => { while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1); return d; };
+  const frueh = new Date(); frueh.setDate(frueh.getDate() + 3);
+  if (art === 'rechnungen') { const d = new Date(); d.setDate(d.getDate() + 7); return isoTag(werktag(d)); }
+  let d = werktag(new Date(frueh.getFullYear(), frueh.getMonth(), tag || 1));
+  if (d < frueh) d = werktag(new Date(frueh.getFullYear(), frueh.getMonth() + 1, tag || 1));
+  return isoTag(d);
+}
+
+function mandatDialog(m) {
+  const st = S.state;
+  const isNew = !m || !m.id;
+  const cur = { paechterId: '', kontoinhaber: '', iban: '', bic: '', unterschrieben: todayIso(), monatsbetrag: 0, rechnungen: true, referenz: '', widerrufen: '', ...(m || {}) };
+  const genutzt = !!cur.zuletztGenutzt;
+  const f = {
+    paechter: h('select', { disabled: !isNew }, [h('option', { value: '' }, '– Pächter wählen –'),
+      ...st.paechter.filter((p) => !p.geloescht && !p.ausgeschiedenAm).map((p) => h('option', { value: p.id, selected: p.id === cur.paechterId }, `${p.gartennr ? 'Garten ' + p.gartennr + ' · ' : ''}${p.name}`))]),
+    inhaber: h('input', { type: 'text', value: cur.kontoinhaber, maxlength: 70, placeholder: 'leer = Name des Pächters' }),
+    iban: h('input', { type: 'text', value: cur.iban, maxlength: 42, placeholder: 'DE12 3456 …', autocomplete: 'off' }),
+    bic: h('input', { type: 'text', value: cur.bic || '', maxlength: 11, placeholder: 'bei deutschen Konten nicht nötig' }),
+    datum: h('input', { type: 'date', value: cur.unterschrieben, disabled: genutzt }),
+    betrag: h('input', { type: 'text', inputmode: 'decimal', value: cur.monatsbetrag ? numIn(cur.monatsbetrag) : '', placeholder: '0,00' }),
+    rechnungen: h('input', { type: 'checkbox', checked: !!cur.rechnungen }),
+    referenz: h('input', { type: 'text', value: cur.referenz, maxlength: 35, disabled: genutzt, placeholder: 'wird automatisch vergeben' }),
+    widerrufen: h('input', { type: 'date', value: cur.widerrufen || '' }),
+  };
+  const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  const body = h('div', { class: 'form' },
+    fld('Pächter *', f.paechter, null, true), fld('Kontoinhaber', f.inhaber), fld('IBAN *', f.iban), fld('BIC', f.bic),
+    fld('Unterschrieben am *', f.datum), fld('Monatliche Vorauszahlung (€)', f.betrag, '0 = keine Vorauszahlung'),
+    h('div', { class: 'field wide' }, h('label', { class: 'check' }, f.rechnungen, ' Auch den Restbetrag der Jahresrechnung einziehen')),
+    fld('Mandatsreferenz', f.referenz, genutzt ? 'schon genutzt – nicht mehr änderbar' : null),
+    isNew ? null : fld('Widerrufen am', f.widerrufen, 'leer = gültig'));
+  return modal(isNew ? 'Lastschriftmandat anlegen' : 'Lastschriftmandat bearbeiten', body, [
+    { label: 'Abbrechen', value: false },
+    { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+      const betrag = parseNum(f.betrag.value) ?? 0;
+      if (Number.isNaN(betrag) || betrag < 0) { toast('Bitte einen gültigen Monatsbetrag eintragen.', 'err'); return false; }
+      const daten = { ...cur, paechterId: f.paechter.value, kontoinhaber: f.inhaber.value, iban: f.iban.value, bic: f.bic.value, unterschrieben: f.datum.value,
+        monatsbetrag: betrag, rechnungen: f.rechnungen.checked, referenz: f.referenz.value, widerrufen: f.widerrufen.value };
+      try {
+        if (isNew) await api('POST', '/api/admin/sepa/mandate', daten); else await api('PUT', `/api/admin/sepa/mandate/${cur.id}`, daten);
+        toast('Gespeichert', 'ok');
+      } catch (e) { handleErr(e); return false; }
+    } }]);
+}
+
+const mandatsformularDrucken = (pid) => pdfDrucken({
+  url: `/api/admin/sepa/formular?paechter=${encodeURIComponent(pid)}`, oeffnenUrl: `/api/admin/sepa/formular/oeffnen?paechter=${encodeURIComponent(pid)}`,
+  titel: 'SEPA-Lastschriftmandat', meldung: () => 'Das Mandat wurde im PDF-Programm geöffnet – drucken und unterschreiben lassen.',
+});
+const vorabDrucken = (jahr) => pdfDrucken({
+  url: `/api/admin/sepa/vorab?jahr=${jahr}`, oeffnenUrl: `/api/admin/sepa/vorab/oeffnen?jahr=${jahr}`,
+  titel: `Vorabankündigung ${jahr}`, meldung: () => 'Die Vorabankündigungen wurden im PDF-Programm geöffnet – je Pächter eine Seite.',
+});
+
+async function laufDatei(l) {
+  if (inNativeWindow()) {
+    try { const r = await api('POST', `/api/admin/sepa/lauf/${l.id}/datei`); toast(`${r.datei} liegt im Ordner »Lastschriften« – im Online-Banking als SEPA-Sammellastschrift hochladen.`, 'ok'); } catch (e) { handleErr(e); }
+  } else location.href = `/api/admin/sepa/lauf/${l.id}/xml`;
+}
+
+async function laufDetails(l) {
+  const zeilen = l.posten.map((x) => h('tr', { class: x.zurueck ? 'vorbei' : '' },
+    h('td', null, x.name), h('td', { class: 'klein' }, x.referenz), h('td', { class: 'num' }, eur(x.betrag)),
+    h('td', null, x.zurueck ? h('span', { class: 'badge warn' }, `zurück ${deDate(x.zurueck)}`) : h('button', { class: 'btn small', onclick: async () => {
+      if (!(await confirmBox(`Lastschrift von ${x.name} über ${eur(x.betrag)} ist zurückgegangen? Die Buchung wird zurückgenommen${l.art === 'rechnungen' ? ' (Rechnung wieder offen)' : ' (Vorauszahlung nicht verrechnet)'}.`, 'Rücklastschrift buchen', true))) return;
+      try { await api('POST', `/api/admin/sepa/lauf/${l.id}/rueck`, { endToEnd: x.endToEnd }); toast('Rücklastschrift gebucht', 'ok'); S.sepa = null; await reload(); } catch (e) { handleErr(e); }
+    } }, 'Rücklastschrift'))));
+  await breiterDialog(`Lastschrift zum ${deDate(l.faellig)}`, h('div', { class: 'tablewrap', style: 'max-height:420px;overflow:auto' }, h('table', null,
+    h('thead', null, h('tr', null, ['Kontoinhaber', 'Mandat', 'Betrag', ''].map((x) => h('th', null, x)))), h('tbody', null, zeilen))),
+  [{ label: 'Schließen', cls: 'primary', value: true }]);
+}
+
+function adminSepa() {
+  if (S.sepa == null) { if (!S.sepaLoading) loadSepa(); return h('p', { class: 'hint' }, 'Wird geladen …'); }
+  const d = S.sepa, e = d.einstellungen || {};
+  const heute = new Date();
+  const glaeubiger = h('input', { type: 'text', value: e.glaeubigerId || '', maxlength: 35, placeholder: 'DE98ZZZ09999999999' });
+  const tagSel = h('select', null, Array.from({ length: 28 }, (_, i) => h('option', { value: i + 1, selected: (e.faelligkeitstag || 1) === i + 1 }, `${i + 1}.`)));
+  const einstSpeichern = async () => {
+    try { await api('PUT', '/api/admin/sepa/einstellungen', { glaeubigerId: glaeubiger.value, faelligkeitstag: Number(tagSel.value) }); toast('Gespeichert', 'ok'); S.sepa = null; render(); } catch (er) { handleErr(er); }
+  };
+  const art = h('select', null, [['vorauszahlung', 'Monatliche Vorauszahlung'], ['rechnungen', 'Jahresrechnungen (Restbetrag)']].map(([v, t]) => h('option', { value: v, selected: (S.sepaArt || 'vorauszahlung') === v }, t)));
+  const faellig = h('input', { type: 'date', value: S.sepaFaellig || sepaFaelligVorschlag(S.sepaArt || 'vorauszahlung', e.faelligkeitstag) });
+  art.addEventListener('change', () => { S.sepaArt = art.value; S.sepaFaellig = null; S.sepaVorschau = null; render(); });
+  faellig.addEventListener('change', () => { S.sepaFaellig = faellig.value; S.sepaVorschau = null; render(); });
+  const vorschau = async () => {
+    try { S.sepaVorschau = await api('GET', `/api/admin/sepa/vorschau?art=${art.value}&faellig=${faellig.value}`); render(); } catch (er) { handleErr(er); }
+  };
+  const erstellen = async () => {
+    const v = S.sepaVorschau;
+    if (!(await confirmBox(`${v.posten.length} Lastschrift(en) über ${eur(v.summe)} zum ${deDate(v.faellig)} erstellen? ${v.art === 'vorauszahlung' ? 'Die Beträge werden als Vorauszahlung auf die Jahresrechnung gebucht.' : 'Die Rechnungen werden als bezahlt vermerkt.'} Danach die Datei im Online-Banking hochladen.`, 'Erstellen'))) return;
+    try {
+      const l = await api('POST', '/api/admin/sepa/lauf', { art: v.art, faellig: v.faellig });
+      S.sepaVorschau = null; S.sepa = null; await reload();
+      await laufDatei(l);
+    } catch (er) { handleErr(er); }
+  };
+  const v = S.sepaVorschau;
+  const status = (m) => (m.widerrufen ? h('span', { class: 'badge' }, `widerrufen ${deDate(m.widerrufen)}`) : m.verfallen ? h('span', { class: 'badge err' }, 'verfallen') : h('span', { class: 'badge ok' }, 'gültig'));
+  const neuMandat = async () => { if (await mandatDialog(null)) { S.sepa = null; render(); } };
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Monatliche Vorauszahlungen und die Jahresrechnung per SEPA-Lastschrift einziehen. Das Programm erstellt die Datei für das Online-Banking und bucht gleich mit: Vorauszahlungen werden auf der Jahresrechnung abgezogen, eingezogene Rechnungen als bezahlt vermerkt.'),
+    d.hinweis ? h('div', { class: 'banner warn' }, d.hinweis) : null,
+    h('details', { class: 'card', open: !!d.hinweis },
+      h('summary', null, h('b', null, 'Einstellungen'), e.glaeubigerId ? h('span', { class: 'hint' }, ` · Gläubiger-ID ${e.glaeubigerId} · Vorauszahlung zum ${e.faelligkeitstag || 1}. des Monats`) : null),
+      h('div', { class: 'form', style: 'margin-top:10px' },
+        h('div', { class: 'field' }, h('label', null, 'Gläubiger-Identifikationsnummer'), glaeubiger, h('span', { class: 'fhint' }, 'beantragt der Verein kostenlos online bei der Deutschen Bundesbank')),
+        h('div', { class: 'field' }, h('label', null, 'Vorauszahlung fällig am'), tagSel, h('span', { class: 'fhint' }, 'Tag im Monat')),
+        h('div', { class: 'field' }, h('label', null, ' '), h('button', { class: 'btn primary', onclick: einstSpeichern }, 'Speichern')))),
+
+    h('h3', null, 'Lastschrift erstellen'),
+    h('div', { class: 'card' },
+      h('div', { class: 'toolbar' }, h('label', null, 'Art'), art, h('label', null, 'Fällig am'), faellig,
+        h('button', { class: 'btn', disabled: !!d.hinweis, onclick: vorschau }, 'Vorschau')),
+      v ? h('div', null,
+        v.hinweise.length ? h('div', { class: 'banner info' }, h('b', null, 'Nicht dabei: '), v.hinweise.join(' · ')) : null,
+        v.posten.length ? [
+          h('div', { class: 'tablewrap', style: 'max-height:300px;overflow:auto' }, h('table', null,
+            h('thead', null, h('tr', null, ['Kontoinhaber', 'IBAN', 'Verwendungszweck', 'Betrag'].map((x) => h('th', null, x)))),
+            h('tbody', null, v.posten.map((x) => h('tr', null, h('td', null, x.name), h('td', { class: 'klein' }, ibanKurz(x.iban)), h('td', { class: 'klein wrap' }, x.zweck), h('td', { class: 'num' }, eur(x.betrag))))))),
+          h('div', { class: 'toolbar', style: 'margin-top:10px' }, h('b', null, `${v.posten.length} Lastschrift(en) · ${eur(v.summe)}`), h('div', { class: 'spacer' }),
+            h('button', { class: 'btn primary', onclick: erstellen }, 'Lauf erstellen und Datei speichern'))]
+          : h('p', { class: 'hint' }, 'Nichts einzuziehen.')) : h('p', { class: 'hint' }, 'Fälligkeitsdatum wählen und »Vorschau« klicken. Die Bank braucht die Datei rechtzeitig vor dem Termin (meist einen Bankarbeitstag vorher). Pächter müssen die Termine vorher kennen – dafür gibt es die Vorabankündigung.')),
+
+    h('h3', null, `Mandate (${d.mandate.length})`),
+    h('div', { class: 'toolbar' },
+      h('button', { class: 'btn primary', onclick: neuMandat }, '+ Mandat erfassen'),
+      h('button', { class: 'btn', disabled: !!d.hinweis, title: 'Je Pächter mit Vorauszahlung eine Seite mit allen Abbuchungsterminen', onclick: () => vorabDrucken(heute.getFullYear()) }, `Vorabankündigung ${heute.getFullYear()}`),
+      heute.getMonth() >= 9 ? h('button', { class: 'btn', disabled: !!d.hinweis, onclick: () => vorabDrucken(heute.getFullYear() + 1) }, `Vorabankündigung ${heute.getFullYear() + 1}`) : null),
+    d.mandate.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['Garten', 'Kontoinhaber', 'Mandatsreferenz', 'IBAN', 'Monatlich', 'Jahresrechnung', 'Status', ''].map((x) => h('th', null, x)))),
+      h('tbody', null, d.mandate.map((m) => h('tr', null,
+        h('td', null, m.gartennr), h('td', null, m.kontoinhaber, m.name && m.name !== m.kontoinhaber ? h('div', { class: 'hint' }, m.name) : null),
+        h('td', { class: 'klein' }, m.referenz, h('div', { class: 'hint' }, `unterschrieben ${deDate(m.unterschrieben)}`)),
+        h('td', { class: 'klein' }, ibanKurz(m.iban)), h('td', { class: 'num' }, m.monatsbetrag ? eur(m.monatsbetrag) : '–'),
+        h('td', null, m.rechnungen ? 'ja' : 'nein'), h('td', null, status(m)),
+        h('td', { class: 'aktionen' },
+          h('button', { class: 'btn small', onclick: async () => { if (await mandatDialog(m)) { S.sepa = null; render(); } } }, 'Bearbeiten'), ' ',
+          mehrMenue([
+            { label: 'Mandatsformular drucken', aktion: () => mandatsformularDrucken(m.paechterId) },
+            m.zuletztGenutzt ? null : { label: 'Löschen', gefahr: true, aktion: async () => {
+              if (!(await confirmBox(`Mandat ${m.referenz} löschen?`, 'Löschen', true))) return;
+              try { await api('DELETE', `/api/admin/sepa/mandate/${m.id}`); S.sepa = null; render(); } catch (er) { handleErr(er); }
+            } }])))))))
+      : h('div', { class: 'card' }, leer('euro', 'Noch keine Mandate', 'Pächter, die per Lastschrift zahlen möchten, unterschreiben ein SEPA-Mandat. Das Formular druckst du nach dem Anlegen über »Mehr« oder vorab für jeden Pächter.', '+ Mandat erfassen', neuMandat)),
+
+    d.laeufe.length ? [h('h3', null, 'Bisherige Lastschriften'),
+      h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, ['Fällig', 'Art', 'Posten', 'Summe', ''].map((x) => h('th', null, x)))),
+        h('tbody', null, d.laeufe.map((l) => h('tr', null,
+          h('td', null, deDate(l.faellig)), h('td', null, l.art === 'vorauszahlung' ? 'Vorauszahlung' : 'Jahresrechnungen'),
+          h('td', null, String(l.posten.length), l.zurueckAnzahl ? h('span', { class: 'badge warn', style: 'margin-left:6px' }, `${l.zurueckAnzahl} zurück`) : null),
+          h('td', { class: 'num' }, eur(l.summe)),
+          h('td', { class: 'aktionen' }, h('button', { class: 'btn small', disabled: l.bereinigt, onclick: () => laufDatei(l) }, 'Datei'), ' ',
+            h('button', { class: 'btn small', disabled: l.bereinigt, onclick: () => laufDetails(l) }, 'Einzelposten')))))))] : null,
+    h('p', { class: 'hint', style: 'margin-top:14px' }, 'Gut zu wissen: Ein Mandat verfällt, wenn 36 Monate lang nicht damit eingezogen wurde. Zahlungspflichtige können eine Lastschrift innerhalb von acht Wochen zurückgeben – dann hier unter »Einzelposten« die Rücklastschrift buchen. Die Datei hat das Format pain.008 (SEPA-Basislastschrift), das deutsche Banken im Online-Banking annehmen.'));
+}
+
 // ------------------------------------------------------------------ Kontoauszug einlesen
 
 const KONTO_STATUS = {
@@ -2061,7 +2236,7 @@ function viewAdmin() {
   const st = S.state;
   if (st.hasPassword && !st.loggedIn) return viewLogin();
   const t = S.adminTab;
-  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'maengel' ? adminMaengel() : t === 'spenden' ? adminSpenden() : t === 'einstellungen' ? adminSettings()
+  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'maengel' ? adminMaengel() : t === 'spenden' ? adminSpenden() : t === 'sepa' ? adminSepa() : t === 'einstellungen' ? adminSettings()
     : t === 'jahreswechsel' ? adminYear() : t === 'kassenbericht' ? adminKassenbericht(false) : t === 'berichte' ? adminBerichte()
       : t === 'jubilaeen' ? adminJubilaeen() : t === 'daten' ? adminData() : t === 'protokoll' ? adminProtokoll() : t === 'datenschutz' ? adminDatenschutz() : adminSecurity();
   const eintrag = navEintrag('admin', t);
@@ -2674,6 +2849,7 @@ function adminKassenbericht(pruefMode) {
     card('Kassenbestand', eur(k.kassenbestand), `Anfangsbestand ${eur(k.anfangsbestand)} + Zahlungen${k.spenden ? ' + Spenden' : ''} − Ausgaben${vorjahr ? vjDelta(k.kassenbestand, vorjahr.kassenbestand) : ''}`, k.kassenbestand >= 0 ? 'ok' : 'err'),
     card('Von Pächtern eingegangen', `${eur(k.einnahmenBezahlt)}`, `tatsächlich gezahlt, nach heutigem Stand${vorjahr ? vjDelta(k.einnahmenBezahlt, vorjahr.einnahmenBezahlt) : ''}`, 'ok'),
     k.guthabenAusgezahlt ? card('An Pächter ausgezahlt', eur(k.guthabenAusgezahlt), 'Guthaben') : null,
+    k.vorauszahlungen ? card('Vorauszahlungen', eur(k.vorauszahlungen), 'per Lastschrift eingezogen', 'ok') : null,
     k.spenden ? card('Spenden', eur(k.spenden), `an den Verein${vorjahr ? vjDelta(k.spenden, vorjahr.spenden || 0) : ''}`, 'ok') : null,
     card('Sonstige Ausgaben', eur(k.ausgabenSumme), `${k.ausgaben.length} Buchung(en)${vorjahr ? vjDelta(k.ausgabenSumme, vorjahr.ausgabenSumme) : ''}`, k.ausgabenSumme ? 'warn' : 'ok'));
 

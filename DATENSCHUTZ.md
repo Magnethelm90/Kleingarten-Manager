@@ -69,6 +69,12 @@ entfernt; erledigte Mängel lassen sich jederzeit einzeln löschen. Sie sind nur
 weder im Jahresbericht noch in Aushängen auf. Der Aushang zu fehlenden Zählerständen nennt nur Gartennummern. Die
 Erinnerungs-E-Mail geht als Blindkopie (Bcc) raus, damit keine Adressen offengelegt werden.
 
+**Lastschrift (SEPA):** Für Mandate werden Kontoinhaber, IBAN, ggf. BIC, Mandatsreferenz und Unterschriftsdatum
+gespeichert (Rechtsgrundlage: Vertrag, Art. 6 Abs. 1 lit. b DSGVO). Mandate stehen in der Auskunft und werden beim
+endgültigen Löschen der Person entfernt. Die Lastschrift-Läufe sind Buchungsbelege: Sie bleiben bis zum Ende der
+Aufbewahrungsfrist und verlieren dann Namen und IBAN. Die Dateien für das Online-Banking liegen im Ordner
+»Lastschriften« des Datenordners und können nach dem Hochladen gelöscht werden.
+
 **Kontoauszug:** Die CSV-Datei aus dem Online-Banking wird nur im Arbeitsspeicher gelesen und nicht gespeichert;
 sie enthält auch Buchungen Dritter. Übernommen werden nur die bestätigten Zahlungsvermerke an den Rechnungen. Damit
 derselbe Auszug nicht zweimal gebucht wird, bleibt von jeder übernommenen Buchung ein gekürzter Prüfwert (Hash) ohne
@@ -127,7 +133,7 @@ Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 | Zweck | Verwaltung der Pachtverhältnisse, Abrechnung von Wasser, Strom, Pacht und Beiträgen, Zahlungsüberwachung, Kassenführung des Vereins |
 | Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Pacht-/Mitgliedschaftsvertrag), lit. c (steuerliche Aufbewahrungspflichten), lit. f (Vereinsverwaltung) |
 | Betroffene | Pächterinnen und Pächter, Mitglieder, Interessenten auf der Warteliste, Spenderinnen und Spender |
-| Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, bei Begehungen festgestellte Mängel, Spenden, interne Notiz |
+| Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, Bankverbindung und Lastschriftmandate, bei Begehungen festgestellte Mängel, Spenden, interne Notiz |
 | Empfänger | Vorstand/Kassenwart; Kassenprüfer (Lesezugriff auf den Kassenbericht); Steuerberatung, Bank bei Zahlungsvorgängen; keine Auftragsverarbeiter |
 | Drittlandübermittlung | keine |
 | Löschfristen | Stammdaten: nach Ende der Mitgliedschaft bzw. des Pachtverhältnisses; Rechnungen, Jahresunterlagen und Übergabeprotokolle: [10] Jahre ab Ende des Ausstellungs- bzw. Übergabejahres; Warteliste: sobald kein Interesse mehr besteht (Nachfrage spätestens alle 2 Jahre) |
