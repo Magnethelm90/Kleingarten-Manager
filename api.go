@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // appVersion wird beim Release-Build über -ldflags "-X main.appVersion=..." gesetzt.
@@ -1358,7 +1359,7 @@ func safeName(s string, max int) string {
 	var b strings.Builder
 	for _, r := range s {
 		switch {
-		case r < 0x20, strings.ContainsRune(`<>:"/\|?*`, r):
+		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), strings.ContainsRune(`<>:"/\|?*`, r):
 			b.WriteRune('_')
 		default:
 			b.WriteRune(r)

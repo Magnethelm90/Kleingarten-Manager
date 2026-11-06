@@ -109,3 +109,18 @@ func TestMaengelAblauf(t *testing.T) {
 		t.Error("Mängel dürfen nicht im öffentlichen Zustand stehen")
 	}
 }
+
+// Nach einem Pächterwechsel bleiben offene Mängel beim Garten: Begehungsliste und Aufforderung nennen sie beim
+// neuen Pächter gleichermaßen.
+func TestMaengelBleibenBeimGarten(t *testing.T) {
+	st, err := openStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.d.Paechter = []Paechter{{ID: "alt", Gartennr: "5", Name: "Alt", AusgeschiedenAm: "2026-05-01"}, {ID: "neu", Gartennr: "5", Name: "Neu"}}
+	st.d.Maengel = []Mangel{{ID: "m", Gartennr: "5", PaechterID: "alt", Datum: "2026-04-01", Beschreibung: "Hecke"}}
+	l := st.begehungLocked()
+	if len(l) != 1 || l[0].Name != "Neu" || len(l[0].Offen) != 1 {
+		t.Errorf("Begehungsliste: %+v", l)
+	}
+}

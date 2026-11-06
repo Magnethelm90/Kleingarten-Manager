@@ -73,7 +73,7 @@ func dataDir(flagDir string) string {
 	if err == nil {
 		dir := filepath.Dir(exe)
 		probe := filepath.Join(dir, ".schreibtest")
-		if werr := os.WriteFile(probe, []byte("x"), 0o644); werr == nil {
+		if werr := os.WriteFile(probe, []byte("x"), 0o600); werr == nil {
 			_ = os.Remove(probe)
 			return dir
 		}

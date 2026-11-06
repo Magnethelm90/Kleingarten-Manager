@@ -52,15 +52,29 @@ func TestVersammlungPDFs(t *testing.T) {
 	}
 }
 
-func TestDateiname(t *testing.T) {
-	for in, want := range map[string]string{"Jahreshauptversammlung 2027": "Jahreshauptversammlung_2027", "Größe/../x": "Groesse_x", "///": ""} {
-		got := dateiname(in)
-		if want == "" {
-			if got == "" || strings.ContainsAny(got, "/.") {
-				t.Errorf("%q → %q", in, got)
+// Eine lange Tagesordnung wird auf der nächsten Seite fortgesetzt statt abgeschnitten.
+func TestEinladungLangeTagesordnung(t *testing.T) {
+	var tops []string
+	for i := 0; i < 20; i++ {
+		tops = append(tops, strings.Repeat("Sehr langer Tagesordnungspunkt mit viel Text ", 3))
+	}
+	tr, err := cleanTermin(Termin{Datum: "2027-03-20", Titel: "JHV", Art: "Versammlung", Tops: strings.Join(tops, "\n"), Notiz: strings.Repeat("Hinweis ", 30)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pdf, err := buildEinladung(defaultSettings(), tr)
+	if err != nil || bytes.Count(pdf, []byte("/Type /Page\n")) < 2 {
+		t.Errorf("lange Tagesordnung: %v, Seiten: %d", err, bytes.Count(pdf, []byte("/Type /Page\n")))
+	}
+}
+
+func TestSafeNameUnsichtbareZeichen(t *testing.T) {
+	for _, in := range []string{"Einladung_‮fdp.exe", "a\x7fb", "x/../y", "Ga\"rten\r\n1"} {
+		got := safeName(in, 80)
+		for _, r := range got {
+			if r < 0x20 || r == 0x7f || r == '‮' || strings.ContainsRune(`/\"`, r) {
+				t.Errorf("%q → %q enthält %U", in, got, r)
 			}
-		} else if got != want {
-			t.Errorf("%q → %q, erwartet %q", in, got, want)
 		}
 	}
 }

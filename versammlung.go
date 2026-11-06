@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 )
 
 // Mitgliederversammlung: Einladung mit Tagesordnung und Anwesenheitsliste zum Unterschreiben, jeweils zu einem
@@ -112,8 +111,9 @@ func buildEinladung(s Settings, t Termin) ([]byte, error) {
 		pdf.SetTextColor(0, 0, 0)
 		y += 9
 		for i, p := range top {
-			if y > 255 {
-				break // zu lang für eine Seite; die Eingabe ist auf 20 Punkte begrenzt
+			if y > 270 {
+				pdf.AddPage()
+				y = 20
 			}
 			pdf.SetFont("lib", "B", 11)
 			pdf.SetXY(leftX, y)
@@ -125,7 +125,11 @@ func buildEinladung(s Settings, t Termin) ([]byte, error) {
 		}
 		y += 4
 	}
-	if t.Notiz != "" && y < 255 {
+	if t.Notiz != "" {
+		if y > 250 {
+			pdf.AddPage()
+			y = 20
+		}
 		pdf.SetFont("lib", "B", 11)
 		pdf.SetXY(leftX, y)
 		pdf.CellFormat(rightX-leftX, 6, "Hinweise", "", 0, "L", false, 0, "")
@@ -135,13 +139,14 @@ func buildEinladung(s Settings, t Termin) ([]byte, error) {
 		pdf.MultiCell(rightX-leftX, 5.6, t.Notiz, "", "L", false)
 		y = pdf.GetY() + 4
 	}
-	if y < 262 {
-		pdf.SetFont("lib", "", 11)
-		pdf.SetXY(leftX, 266)
-		pdf.CellFormat(rightX-leftX, 6, "Mit freundlichen Gartengrüßen", "", 0, "L", false, 0, "")
-		pdf.SetXY(leftX, 272)
-		pdf.CellFormat(rightX-leftX, 6, "Der Vorstand", "", 0, "L", false, 0, "")
+	if y > 260 {
+		pdf.AddPage()
 	}
+	pdf.SetFont("lib", "", 11)
+	pdf.SetXY(leftX, 266)
+	pdf.CellFormat(rightX-leftX, 6, "Mit freundlichen Gartengrüßen", "", 0, "L", false, 0, "")
+	pdf.SetXY(leftX, 272)
+	pdf.CellFormat(rightX-leftX, 6, "Der Vorstand", "", 0, "L", false, 0, "")
 	pdf.SetFont("lib", "", 7.5)
 	pdf.SetTextColor(110, 110, 110)
 	pdf.SetXY(leftX, 287)
@@ -250,7 +255,7 @@ func (a *App) einladungPDF(r *http.Request) ([]byte, string, error) {
 		return nil, "", notFound("Termin nicht gefunden")
 	}
 	pdf, err := buildEinladung(s, t)
-	return pdf, "Einladung_" + dateiname(t.Titel) + ".pdf", err
+	return pdf, safeName("Einladung_"+t.Titel, 80) + ".pdf", err
 }
 
 func (a *App) anwesenheitPDF(r *http.Request) ([]byte, string, error) {
@@ -262,36 +267,5 @@ func (a *App) anwesenheitPDF(r *http.Request) ([]byte, string, error) {
 	l := a.st.anwesenheitLocked()
 	a.st.mu.Unlock()
 	pdf, err := buildAnwesenheit(s, t, l)
-	return pdf, "Anwesenheitsliste_" + dateiname(t.Titel) + ".pdf", err
-}
-
-// dateiname macht aus einem Titel einen unbedenklichen Dateinamen (Buchstaben, Ziffern, Unterstrich).
-func dateiname(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		case r == 'ä' || r == 'Ä':
-			b.WriteString("ae")
-		case r == 'ö' || r == 'Ö':
-			b.WriteString("oe")
-		case r == 'ü' || r == 'Ü':
-			b.WriteString("ue")
-		case r == 'ß':
-			b.WriteString("ss")
-		default:
-			if !strings.HasSuffix(b.String(), "_") {
-				b.WriteByte('_')
-			}
-		}
-		if b.Len() >= 40 {
-			break
-		}
-	}
-	out := strings.Trim(b.String(), "_")
-	if out == "" {
-		out = time.Now().Format("2006-01-02")
-	}
-	return out
+	return pdf, safeName("Anwesenheitsliste_"+t.Titel, 80) + ".pdf", err
 }

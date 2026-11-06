@@ -54,7 +54,7 @@ func openStore(dir string) (*Store, error) {
 	}
 	// Schreibrechte prüfen
 	probe := filepath.Join(dir, ".schreibtest")
-	if err := os.WriteFile(probe, []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(probe, []byte("x"), 0o600); err != nil {
 		return nil, fmt.Errorf("Ordner %s ist nicht beschreibbar: %w", dir, err)
 	}
 	_ = os.Remove(probe)
@@ -362,7 +362,7 @@ func checkWritableDir(dir string) error {
 		return fmt.Errorf("Ordner %s kann nicht angelegt werden: %w", dir, err)
 	}
 	probe := filepath.Join(dir, ".schreibtest")
-	if err := os.WriteFile(probe, []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(probe, []byte("x"), 0o600); err != nil {
 		return fmt.Errorf("Ordner %s ist nicht beschreibbar: %w", dir, err)
 	}
 	_ = os.Remove(probe)

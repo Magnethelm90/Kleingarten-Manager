@@ -95,7 +95,8 @@ func FuzzEmailUndMailto(f *testing.F) {
 	f.Add("anna@example.org", "Betreff & Text?\nZeile")
 	f.Add("a@b.c\"&cc=x@y.de", "%0A")
 	f.Fuzz(func(t *testing.T, email, text string) {
-		if emailGueltig(email) && strings.ContainsAny(email, " \t\r\n\"'<>?&#%\\") {
+		// Apostroph ist erlaubt (z. B. o'neil@…): Der Link wird ohne Shell geöffnet und die Adresse zusätzlich kodiert
+		if emailGueltig(email) && strings.ContainsAny(email, " \t\r\n\"<>?&#%\\") {
 			t.Fatalf("gefährliche Adresse akzeptiert: %q", email)
 		}
 		if enc := mailtoEscape(text); strings.ContainsAny(enc, " \r\n&?#\"") {
@@ -159,6 +160,35 @@ func FuzzUebergabeprotokoll(f *testing.F) {
 		pdf, err := buildUebergabeprotokoll(defaultSettings(), u)
 		if err != nil || !bytes.HasPrefix(pdf, []byte("%PDF")) {
 			t.Fatalf("Protokoll: %v", err)
+		}
+	})
+}
+
+// Einladung, Mängel-Schreiben und Dateinamen dürfen mit beliebigen Eingaben weder abstürzen noch einen
+// Dateinamen mit Pfad- oder Steuerzeichen liefern.
+func FuzzVersammlungUndMaengel(f *testing.F) {
+	f.Add("Jahreshauptversammlung", "Begrüßung\nKassenbericht", "Bitte pünktlich", "Hecke zu hoch", "12")
+	f.Add("‮exe.fdp", strings.Repeat("x\n", 50), "", "\x00\r\n", "../5")
+	f.Fuzz(func(t *testing.T, titel, tops, notiz, beschreibung, garten string) {
+		s := defaultSettings()
+		if tr, err := cleanTermin(Termin{Datum: "2027-03-20", Von: "10:00", Titel: titel, Art: "Versammlung", Tops: tops, Notiz: notiz}); err == nil {
+			if _, err := buildEinladung(s, tr); err != nil {
+				t.Fatalf("Einladung: %v", err)
+			}
+			if _, err := buildAnwesenheit(s, tr, []anwesenheitZeile{{garten, "1", titel}}); err != nil {
+				t.Fatalf("Anwesenheitsliste: %v", err)
+			}
+		}
+		if m, err := cleanMangel(Mangel{Gartennr: garten, Datum: "2026-05-01", Beschreibung: beschreibung}); err == nil {
+			p := Paechter{Gartennr: m.Gartennr, Name: titel, Strasse: notiz}
+			if _, err := buildMaengelschreiben(s, p, []Mangel{m}, "2026-06-01"); err != nil {
+				t.Fatalf("Mängel-Schreiben: %v", err)
+			}
+		}
+		for _, r := range safeName(titel+garten, 80) {
+			if r < 0x20 || r == 0x7f || strings.ContainsRune(`<>:"/\|?*`, r) {
+				t.Fatalf("Dateiname mit %U", r)
+			}
 		}
 	})
 }

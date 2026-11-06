@@ -182,7 +182,7 @@ func (s *Store) begehungLocked() []begehungZeile {
 		}
 		z := begehungZeile{Garten: p.Gartennr, Name: p.Name}
 		for _, m := range s.d.Maengel {
-			if m.PaechterID == p.ID && m.ErledigtAm == "" {
+			if m.Gartennr == strings.TrimSpace(p.Gartennr) && m.ErledigtAm == "" {
 				z.Offen = append(z.Offen, m.Beschreibung)
 			}
 		}
@@ -388,5 +388,5 @@ func (a *App) maengelschreibenPDF(r *http.Request) ([]byte, string, error) {
 	}
 	sort.SliceStable(ms, func(i, j int) bool { return ms[i].Datum < ms[j].Datum })
 	pdf, err := buildMaengelschreiben(s, p, ms, frist)
-	return pdf, "Maengel_Garten_" + dateiname(nr) + ".pdf", err
+	return pdf, safeName("Maengel_Garten_"+nr, 80) + ".pdf", err
 }

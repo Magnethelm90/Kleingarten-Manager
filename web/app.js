@@ -3130,9 +3130,9 @@ const begehungslisteDrucken = () => pdfDrucken({
   url: '/api/admin/begehungsliste', oeffnenUrl: '/api/admin/begehungsliste/oeffnen',
   titel: 'Begehungsliste', meldung: () => 'Die Begehungsliste wurde im PDF-Programm geöffnet – dort drucken und zur Begehung mitnehmen.',
 });
-const maengelschreibenDrucken = (nr, frist) => pdfDrucken({
-  url: `/api/admin/maengelschreiben?gartennr=${encodeURIComponent(nr)}${frist ? '&frist=' + frist : ''}`,
-  oeffnenUrl: `/api/admin/maengelschreiben/oeffnen?gartennr=${encodeURIComponent(nr)}${frist ? '&frist=' + frist : ''}`,
+const maengelschreibenDrucken = (nr) => pdfDrucken({
+  url: `/api/admin/maengelschreiben?gartennr=${encodeURIComponent(nr)}`,
+  oeffnenUrl: `/api/admin/maengelschreiben/oeffnen?gartennr=${encodeURIComponent(nr)}`,
   titel: `Aufforderung Garten ${nr}`, meldung: () => 'Das Schreiben wurde im PDF-Programm geöffnet – dort drucken oder als PDF verschicken.',
 });
 
@@ -3240,7 +3240,7 @@ function terminDialog(t) {
     fld('Titel *', f.titel, null, true), fld('Datum *', f.datum), fld('Art', f.art),
     fld('Beginn', f.von, 'leer = ganztägig'), fld('Ende', f.bis), fld('Ort', f.ort),
     fld('Hinweis (für alle sichtbar – keine Namen oder persönlichen Angaben)', f.notiz, null, true),
-    fld('Tagesordnung für die Einladung (optional)', f.tops, 'Leer lassen: bei Versammlungen werden die üblichen Punkte eingesetzt.', true));
+    fld('Tagesordnung für die Einladung (optional)', f.tops, 'Leer lassen: bei Versammlungen werden die üblichen Punkte eingesetzt. Für alle sichtbar – keine Namen.', true));
   return modal(isNew ? 'Termin eintragen' : 'Termin bearbeiten', body, [
     { label: 'Abbrechen', value: false },
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
@@ -3572,14 +3572,14 @@ async function zaehlerErinnerungDialog(jahr) {
   const knoepfe = [{ label: 'Schließen', value: false }];
   if (d.fehlend.length) {
     knoepfe.push({ label: 'Aushang drucken', value: true, action: async () => {
-      pdfDrucken({ url: `/api/admin/zaehler-aushang?year=${jahr}&frist=${frist.value}`, oeffnenUrl: `/api/admin/zaehler-aushang/oeffnen?year=${jahr}&frist=${frist.value}`,
+      pdfDrucken({ url: `/api/admin/zaehler-aushang?year=${jahr}&frist=${encodeURIComponent(frist.value)}`, oeffnenUrl: `/api/admin/zaehler-aushang/oeffnen?year=${jahr}&frist=${encodeURIComponent(frist.value)}`,
         titel: 'Zählerstände fehlen', meldung: () => 'Der Aushang wurde im PDF-Programm geöffnet – dort drucken.' });
       return false;
     } });
     if (mitMail) {
       knoepfe.push({ label: 'E-Mail vorbereiten', cls: 'primary', value: true, action: async () => {
         try {
-          const r = await api('POST', `/api/admin/zaehler-mail?year=${jahr}&frist=${frist.value}`);
+          const r = await api('POST', `/api/admin/zaehler-mail?year=${jahr}&frist=${encodeURIComponent(frist.value)}`);
           toast(r.ohneMail ? `E-Mail an ${r.empfaenger} vorbereitet – ${r.ohneMail} ohne Adresse oder zu viele für einen Link.` : `E-Mail an ${r.empfaenger} vorbereitet.`, 'ok');
         } catch (e) { handleErr(e); }
         return false;
