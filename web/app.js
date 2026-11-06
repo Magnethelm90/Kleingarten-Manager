@@ -225,6 +225,7 @@ async function load() {
 }
 
 async function reload() {
+  S.aufgaben = null; // »Was steht an?« nach jeder Änderung neu bestimmen
   try { await load(); render(); } catch (e) { handleErr(e); }
 }
 
@@ -293,7 +294,7 @@ function adminTabWaehlen(id) {
   if (id === 'jubilaeen') S.jubilaeen = null;
   if (id === 'datenschutz') S.datenschutz = null;
   if (id === 'warteliste') S.warteliste = null;
-  if (id === 'maengel') S.maengel = null;
+  if (id === 'maengel') { S.maengel = null; S.nutzung = null; }
   if (id === 'spenden') S.spenden = null;
   if (id === 'paechter') S.uebergaben = null;
   if (id === 'berichte') S.meldung = null;
@@ -303,7 +304,7 @@ function seitenleiste(st) {
   const gesperrt = st.hasPassword && !st.loggedIn;
   const geh = async (x) => {
     if (x.admin) adminTabWaehlen(x.admin); else S.tab = x.tab;
-    if (x.tab === 'uebersicht') S.dashWarteliste = null;
+    if (x.tab === 'uebersicht') { S.dashWarteliste = null; S.aufgaben = null; }
     if ((S.tab === 'admin' || S.tab === 'uebersicht' || S.tab === 'termine') && S.year !== st.currentYear) S.year = st.currentYear;
     S.menueOffen = false;
     await reload();
@@ -355,6 +356,7 @@ function render() {
     h('div', { class: 'shell' },
     seitenleiste(st),
     h('main', null,
+      st.sperrHinweis ? h('div', { class: 'banner err' }, '🔒 ', st.sperrHinweis) : null,
       demoBanner(st),
       sicherungBanner(st),
       openRechnungenBanner(st),
@@ -717,6 +719,7 @@ function viewUebersicht() {
     beispieldatenKarte(st, istAdmin),
     jubilaeumBanner(st, istAdmin),
     st.demo ? null : zweiteSicherungBanner(st, istAdmin),
+    cockpitKarte(st, istAdmin),
     st.paechter.length ? jahresFortschritt(st, istAdmin) : null,
     h('div', { class: 'zwei-spalten' }, naechsteTermine(st), besichtigungenKarte(st, istAdmin)),
     h('div', { class: 'cards' }, cards),
@@ -1382,6 +1385,7 @@ async function freienGartenVergeben(nr) {
     wz: h('input', { type: 'text', maxlength: 40 }), sz: h('input', { type: 'text', maxlength: 40 }),
   };
   const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  let neuerPaechter = null;
   const ok = await modal(`Garten ${nr} vergeben`, h('div', { class: 'form' },
     fld('An', f.wer, 'Name, Anschrift und Kontakt kommen von der Warteliste; der Eintrag wird danach entfernt.', true),
     fld('Übergeben am', f.seit), fld('Mitgliedsnummer *', f.mitgliedsnr), fld('Gartengröße in m² *', f.groesse),
@@ -1390,13 +1394,14 @@ async function freienGartenVergeben(nr) {
     const g = parseNum(f.groesse.value);
     if (!g || Number.isNaN(g) || g <= 0) { toast('Bitte die Gartengröße eintragen.', 'err'); return false; }
     try {
-      await api('POST', `/api/admin/warteliste/${f.wer.value}/vergeben`, { gartennr: nr, seit: f.seit.value, mitgliedsnr: f.mitgliedsnr.value, gartengroesse: g, wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value });
+      neuerPaechter = await api('POST', `/api/admin/warteliste/${f.wer.value}/vergeben`, { gartennr: nr, seit: f.seit.value, mitgliedsnr: f.mitgliedsnr.value, gartengroesse: g, wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value });
     } catch (e) { handleErr(e); return false; }
   } }]);
   if (!ok) return;
-  toast(`Garten ${nr} vergeben`, 'ok');
   S.warteliste = null;
   await reload();
+  if (neuerPaechter && await modal(`Garten ${nr} vergeben`, h('p', null, `Garten ${nr} gehört jetzt ${neuerPaechter.name}. Möchtest du gleich die Willkommensmappe drucken?`),
+    [{ label: 'Später', value: false }, { label: 'Willkommensmappe', cls: 'primary', value: true }])) await willkommenDrucken(neuerPaechter);
 }
 
 async function lageplanDrucken(istAdmin) {
@@ -2190,6 +2195,7 @@ function adminPaechter() {
           p.gartennr ? [h('button', { class: 'btn small', title: `Gartenakte von Garten ${p.gartennr}: Dokumente, Wertermittlungen, Übergaben, Verlauf`, onclick: () => gartenakteDialog(p.gartennr.trim()) }, 'Akte'), ' '] : null,
           mehrMenue([
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Pächterwechsel …', title: 'Garten an einen neuen Pächter übergeben (Schlussrechnung, Übergabeprotokoll, neuer Pächter)', aktion: () => paechterwechselDialog(p) } : null,
+            p.gartennr && !p.ausgeschiedenAm ? { label: 'Willkommensmappe', title: 'PDF für neue Pächter: Garten, Zähler, Termine, Lageplan, Ansprechpartner', aktion: () => willkommenDrucken(p) } : null,
             { label: 'Auskunft (DSGVO)', title: 'Alle gespeicherten Daten dieser Person als Datei herunterladen (Art. 15 DSGVO)', aktion: () => { location.href = `/api/admin/paechter/${p.id}/auskunft`; } },
             { label: 'In den Papierkorb', gefahr: true, aktion: async () => {
               const ok = await confirmBox(`Pächter „${p.name}“ (${p.mitgliedsnr}) in den Papierkorb legen? Er verschwindet aus allen Ansichten, Zählerstände und Rechnungen bleiben aber erhalten und lassen sich im Papierkorb wiederherstellen.`, 'In den Papierkorb', true);
@@ -2797,6 +2803,13 @@ function kassenberichtVerlaufCard() {
 
 // ---- Import / Export / Sicherung
 
+async function vereinsakteErstellen() {
+  try {
+    const r = await api('POST', '/api/admin/vereinsakte');
+    toast(`Vereinsakte erstellt: ${r.datei} (${r.dateien} Dateien, ${groesseText(r.groesse)}). Der Ordner wurde geöffnet – Datei auf den USB-Stick kopieren.`, 'ok');
+  } catch (e) { handleErr(e); }
+}
+
 function adminData() {
   const st = S.state;
   const wrap = h('div');
@@ -2861,6 +2874,10 @@ function adminData() {
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'sicherungen' }).catch(handleErr) }, 'Sicherungsordner öffnen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'daten' }).catch(handleErr) }, 'Datenordner öffnen')),
       zweiteSicherungField()),
+    h('div', { class: 'card', style: 'margin-top:16px' },
+      h('h3', { style: 'margin-top:0' }, 'Amtsübergabe'),
+      h('p', { class: 'hint' }, 'Neuer Vorstand oder Kassenwart? Die Vereinsakte enthält den kompletten Datenordner (Daten, Rechnungen, Gartenakten, Belege) und ein PDF »Lies mich zuerst« mit Zahlen, Preisen, Terminen, Gemeinnützigkeit und dem, was gerade ansteht. Auf einen USB-Stick kopieren und persönlich übergeben – das Passwort steht nicht darin. Es wird immer nur die neueste Akte aufbewahrt.'),
+      h('button', { class: 'btn primary', onclick: vereinsakteErstellen }, 'Vereinsakte erstellen')),
     sicherungenCard());
   return wrap;
 }
@@ -3189,8 +3206,9 @@ async function paechterwechselDialog(alt, bewerber) {
     h('ul', null,
       h('li', null, 'Das Übergabeprotokoll zum Unterschreiben kannst du jetzt drucken (auch später in der Gartenakte oder unter »Pächter« → Gartenübergaben).'),
       h('li', null, `Die Schlussrechnung für ${u.altName} kannst du gleich ausstellen oder später zusammen mit den anderen Rechnungen.`))),
-  [{ label: 'Schließen', value: '' }, { label: 'Schlussrechnung ausstellen', value: 'rechnung' }, { label: 'Protokoll drucken', cls: 'primary', value: 'protokoll' }]);
+  [{ label: 'Schließen', value: '' }, { label: 'Willkommensmappe', value: 'willkommen' }, { label: 'Schlussrechnung ausstellen', value: 'rechnung' }, { label: 'Protokoll drucken', cls: 'primary', value: 'protokoll' }]);
   if (weiter === 'protokoll') await protokollDrucken(u);
+  if (weiter === 'willkommen') await willkommenDrucken({ id: u.neuId, name: u.neuName });
   if (weiter === 'rechnung') { try { await issue([u.altId]); } catch (e) { handleErr(e); } }
   return true;
 }
@@ -3375,6 +3393,64 @@ function mangelDialog(m, gartennr) {
     } }]);
 }
 
+async function loadNutzung() {
+  if (S.nutzungLoading) return;
+  S.nutzungLoading = true;
+  try { S.nutzung = await api('GET', '/api/admin/nutzung'); } catch (e) { handleErr(e); S.nutzung = []; }
+  S.nutzungLoading = false;
+  render();
+}
+
+function nutzungDialog(nr, letzte) {
+  const zahl = (v) => h('input', { type: 'text', inputmode: 'decimal', value: v == null ? '' : String(v), style: 'width:5em' });
+  const f = { datum: h('input', { type: 'date', value: todayIso() }), anbau: zahl(letzte ? letzte.anbau : ''), erholung: zahl(letzte ? letzte.erholung : ''),
+    bebauung: zahl(letzte ? letzte.bebauung : ''), notiz: h('input', { type: 'text', maxlength: 200, placeholder: 'z. B. Rasen statt Beete hinter der Laube' }) };
+  const summe = h('b', null);
+  const rechnen = () => {
+    const w = [f.anbau, f.erholung, f.bebauung].map((x) => parseNum(x.value) || 0);
+    const s = w.reduce((a, b) => a + b, 0);
+    summe.textContent = `Summe ${nfFlex.format(s)} %${w[0] < 100 / 3 ? ' · Anbau unter einem Drittel' : ''}`;
+    summe.className = w[0] < 100 / 3 || Math.abs(s - 100) > 10 ? 'warn-text' : '';
+  };
+  [f.anbau, f.erholung, f.bebauung].forEach((x) => x.addEventListener('input', rechnen));
+  rechnen();
+  const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  return modal(`Nutzung Garten ${nr} schätzen`, h('div', null,
+    h('p', { class: 'hint' }, 'Grob geschätzte Anteile der Gartenfläche in Prozent. In der Regel soll mindestens ein Drittel dem Anbau von Obst und Gemüse dienen.'),
+    h('div', { class: 'form' }, fld('Begehung am', f.datum, null, true),
+      fld('Anbau %', f.anbau, 'Obst, Gemüse, Kräuter, Beeren'), fld('Erholung %', f.erholung, 'Rasen, Zierpflanzen, Sitzplatz'), fld('Bebauung %', f.bebauung, 'Laube, Wege, befestigte Flächen'),
+      fld('Notiz', f.notiz, null, true)), h('p', null, summe)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    try {
+      await api('POST', '/api/admin/nutzung', { gartennr: nr, datum: f.datum.value, anbau: parseNum(f.anbau.value) ?? 0, erholung: parseNum(f.erholung.value) ?? 0,
+        bebauung: parseNum(f.bebauung.value) ?? 0, notiz: f.notiz.value });
+      toast('Gespeichert', 'ok');
+    } catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+function nutzungKarte() {
+  if (S.nutzung == null) { if (!S.nutzungLoading) loadNutzung(); return null; }
+  const l = S.nutzung;
+  const geschaetzt = l.filter((z) => z.letzte), unter = l.filter((z) => z.unterDrittel);
+  const balken = (n) => h('div', { class: 'nutzung-balken', title: `Anbau ${n.anbau} % · Erholung ${n.erholung} % · Bebauung ${n.bebauung} %` },
+    h('span', { class: 'n-anbau', style: `width:${n.anbau}%` }), h('span', { class: 'n-erholung', style: `width:${n.erholung}%` }), h('span', { class: 'n-bebauung', style: `width:${n.bebauung}%` }),
+    h('i', { class: 'n-drittel' }));
+  const schaetzen = async (z) => { if (await nutzungDialog(z.gartennr, z.letzte)) { S.nutzung = null; render(); } };
+  return h('details', { class: 'card', style: 'margin-top:12px', open: unter.length > 0 },
+    h('summary', null, h('b', null, 'Kleingärtnerische Nutzung (Drittelregelung)'),
+      h('span', { class: 'hint' }, ` · ${geschaetzt.length} von ${l.length} Gärten geschätzt`), unter.length ? h('span', { class: 'badge warn', style: 'margin-left:8px' }, `${unter.length} unter einem Drittel Anbau`) : null),
+    h('p', { class: 'hint', style: 'margin-top:10px' }, 'Bei der Begehung grob schätzen, wie sich die Fläche aufteilt. Die Linie im Balken markiert ein Drittel. Das ist eine Gesprächsgrundlage, keine Vermessung – maßgeblich sind Satzung, Gartenordnung und die Vorgaben eures Verbands.'),
+    h('div', { class: 'nutzung-legende hint' }, h('span', { class: 'n-anbau' }), ' Anbau ', h('span', { class: 'n-erholung' }), ' Erholung ', h('span', { class: 'n-bebauung' }), ' Bebauung'),
+    h('div', { class: 'tablewrap' }, h('table', null,
+      h('thead', null, h('tr', null, ['Garten', 'Pächter', 'Aufteilung', 'Anbau', 'Geschätzt', ''].map((x) => h('th', null, x)))),
+      h('tbody', null, l.map((z) => h('tr', null, h('td', null, z.gartennr), h('td', null, z.name),
+        h('td', { style: 'min-width:180px' }, z.letzte ? balken(z.letzte) : h('span', { class: 'hint' }, 'noch nicht geschätzt')),
+        h('td', { class: 'num' }, z.letzte ? [`${z.letzte.anbau} %`, z.unterDrittel ? h('span', { class: 'badge warn', style: 'margin-left:6px' }, 'unter ⅓') : null] : '–'),
+        h('td', { class: 'klein' }, z.letzte ? deDate(z.letzte.datum) : ''),
+        h('td', null, h('button', { class: 'btn small', onclick: () => schaetzen(z) }, 'Schätzen'))))))));
+}
+
 function adminMaengel() {
   if (S.maengel == null) {
     if (!S.maengelLoading) loadMaengel();
@@ -3419,6 +3495,7 @@ function adminMaengel() {
           h('button', { class: 'btn small primary', onclick: () => maengelschreibenDrucken(nr) }, 'Aufforderung schreiben'))),
       h('ul', { class: 'mangel-liste' }, l.map(zeile))))
       : h('div', { class: 'card' }, leer('fertig', 'Keine offenen Mängel', 'Bei der nächsten Begehung gefundene Mängel trägst du hier ein. Die Begehungsliste zum Ausdrucken liegt oben bereit.', '+ Mangel eintragen', () => neu(''))),
+    nutzungKarte(),
     erledigt.length ? h('details', { class: 'card', style: 'margin-top:12px' }, h('summary', null, `Erledigt (${erledigt.length})`),
       h('ul', { class: 'mangel-liste' }, erledigt.map((m) => h('li', { class: 'mangel erledigt' }, h('div', { class: 'mangel-text' },
         h('b', null, `Garten ${m.gartennr} · ${m.art}`), h('div', null, m.beschreibung), h('div', { class: 'hint' }, `erledigt ${deDate(m.erledigtAm)}`)),
@@ -3708,12 +3785,36 @@ async function gartenakteDialog(nr) {
   };
   zeichnen();
   await breiterDialog(`Gartenakte – Garten ${nr}`, inhalt, [
+    { label: 'Exposé', value: false, action: () => { exposeDrucken(nr); return false; } },
     p_wechselKnopf(ak, nr),
     { label: 'Schließen', cls: 'primary', value: true }].filter(Boolean));
   await reload();
 }
 
 // Knopf »Pächterwechsel« in der Akte, wenn der Garten einen Pächter hat
+const willkommenDrucken = (p) => pdfDrucken({
+  url: `/api/admin/paechter/${p.id}/willkommen`, oeffnenUrl: `/api/admin/paechter/${p.id}/willkommen/oeffnen`,
+  titel: `Willkommensmappe ${p.name}`, meldung: () => 'Die Willkommensmappe wurde im PDF-Programm geöffnet – dort drucken oder per E-Mail schicken.',
+});
+const exposeDrucken = (nr) => pdfDrucken({
+  url: `/api/admin/expose?gartennr=${encodeURIComponent(nr)}`, oeffnenUrl: `/api/admin/expose/oeffnen?gartennr=${encodeURIComponent(nr)}`,
+  titel: `Garten ${nr}`, meldung: () => 'Das Exposé wurde im PDF-Programm geöffnet – für Interessenten drucken oder verschicken.',
+});
+
+// Texte für Willkommensmappe und Exposé: Ansprechpartner und Hinweise
+async function vereinsinfoDialog() {
+  let v;
+  try { v = await api('GET', '/api/admin/vereinsinfo'); } catch (e) { handleErr(e); return; }
+  const ap = h('textarea', { rows: 4, style: 'width:100%', placeholder: 'z. B.\nVorsitz: Name, Telefon\nKasse: Name, E-Mail\nSprechstunde: samstags 10–12 Uhr' }, v.ansprechpartner || '');
+  const hw = h('textarea', { rows: 6, style: 'width:100%', placeholder: 'Ein Hinweis pro Zeile, z. B.\nMittagsruhe 13–15 Uhr\nWasser wird im April angestellt' }, v.hinweise || '');
+  await modal('Texte für Willkommensmappe und Exposé', h('div', { class: 'form' },
+    h('div', { class: 'field wide' }, h('label', null, 'Ansprechpartner'), ap, h('span', { class: 'fhint' }, 'Erscheint in Willkommensmappe und Exposé – nur angeben, wer damit einverstanden ist.')),
+    h('div', { class: 'field wide' }, h('label', null, 'Bitte beachten (Willkommensmappe)'), hw, h('span', { class: 'fhint' }, 'Kurz das Wichtigste aus der Gartenordnung, ein Punkt pro Zeile.'))),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    try { await api('PUT', '/api/admin/vereinsinfo', { ansprechpartner: ap.value, hinweise: hw.value }); toast('Gespeichert', 'ok'); } catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
 function p_wechselKnopf(ak, nr) {
   const p = ak.paechter && S.state.paechter.find((x) => x.id === ak.paechter.id && !x.ausgeschiedenAm);
   if (!p) return null;
@@ -3908,6 +4009,10 @@ function adminBerichte() {
         h('button', { class: 'btn', onclick: () => lageplanDrucken(true) }, 'Drucken')),
       kachel('zaehler', `Fehlende Zählerstände ${st.currentYear}`, 'Wer hat noch keinen Stand gemeldet? Mit Aushang ohne Namen und E-Mail-Erinnerung.',
         h('button', { class: 'btn', onclick: () => zaehlerErinnerungDialog(st.currentYear) }, 'Prüfen')),
+      kachel('personen', 'Willkommensmappe & Exposé', 'Texte für die Mappe neuer Pächter und den Steckbrief freier Gärten: Ansprechpartner und das Wichtigste aus der Gartenordnung.',
+        h('button', { class: 'btn', onclick: vereinsinfoDialog }, 'Texte bearbeiten')),
+      kachel('daten', 'Amtsübergabe', 'Vereinsakte für den neuen Vorstand: alle Daten und Dateien plus »Lies mich zuerst« mit Zahlen, Regeln und offenen Punkten.',
+        h('button', { class: 'btn', onclick: vereinsakteErstellen }, 'Erstellen')),
       kachel('warnung', 'Begehungsliste', 'Vordruck für den Rundgang durch die Anlage, mit den noch offenen Mängeln je Garten.',
         h('button', { class: 'btn', onclick: begehungslisteDrucken }, 'Drucken')),
       kachel('kalender', `Vereinstermine ${new Date().getFullYear()}`, 'Jahresplaner als Aushang für den Schaukasten.',
@@ -3921,6 +4026,42 @@ function adminBerichte() {
         h('table', { class: 'meldung' }, h('tbody', null, g.z.map((z) => h('tr', null, h('td', null, z.angabe), h('td', { class: 'num' }, h('b', null, fmt(z)))))))))),
     m ? h('p', { class: 'hint', style: 'margin-top:12px' }, 'Neu vergebene Gärten zählen nur Vergaben über Pächterwechsel oder Warteliste, nicht das erstmalige Eintragen langjähriger Pächter. Das Formular eures Verbands kann andere Angaben verlangen – die Excel-Datei lässt sich frei ergänzen.') : null);
 }
+
+// ------------------------------------------------------------------ Übersicht: Was steht an?
+
+async function loadAufgaben() {
+  if (S.aufgabenLoading) return;
+  S.aufgabenLoading = true;
+  try { S.aufgaben = await api('GET', '/api/admin/aufgaben'); } catch (e) { S.aufgaben = []; }
+  S.aufgabenLoading = false;
+  render();
+}
+
+const AUFGABE_ICON = { err: 'warnung', warn: 'uhr', info: 'bericht' };
+
+function cockpitKarte(st, istAdmin) {
+  if (!istAdmin || st.leer) return null;
+  if (S.aufgaben == null) { if (!S.aufgabenLoading) loadAufgaben(); return null; }
+  const geh = (ziel) => {
+    const [art, wohin] = ziel.split(':');
+    if (art === 'admin') adminTabWaehlen(wohin); else S.tab = wohin;
+    render();
+  };
+  if (!S.aufgaben.length) {
+    return h('div', { class: 'card cockpit cockpit-leer' }, h('span', { class: 'cockpit-ico ok' }, icon('fertig', 20)),
+      h('div', null, h('b', null, 'Gerade steht nichts an'), h('div', { class: 'hint' }, 'Termine, Fristen, Zahlungen und Spenden sind im grünen Bereich.')));
+  }
+  const alle = S.aufgabenAlle || S.aufgaben.length <= 5;
+  const l = alle ? S.aufgaben : S.aufgaben.slice(0, 5);
+  return h('div', { class: 'card cockpit' },
+    h('div', { class: 'fs-kopf' }, h('b', null, 'Was steht an?'), h('span', { class: 'hint' }, mehrzahlText(S.aufgaben.length, 'Punkt', 'Punkte'))),
+    h('ul', { class: 'cockpit-liste' }, l.map((a) => h('li', { class: 'cockpit-' + a.stufe },
+      h('span', { class: 'cockpit-ico ' + a.stufe }, icon(AUFGABE_ICON[a.stufe] || 'fertig', 18)),
+      h('div', { class: 'cockpit-text' }, h('b', null, a.titel), a.text ? h('div', { class: 'hint' }, a.text) : null),
+      h('button', { class: 'btn small', onclick: () => geh(a.ziel) }, a.knopf + ' →')))),
+    alle ? null : h('button', { class: 'btn small', style: 'margin-top:6px', onclick: () => { S.aufgabenAlle = true; render(); } }, `Alle ${S.aufgaben.length} anzeigen`));
+}
+const mehrzahlText = (n, eins, viele) => `${n} ${n === 1 ? eins : viele}`;
 
 // ------------------------------------------------------------------ Übersicht: Besichtigungen
 

@@ -155,18 +155,7 @@ func buildLageplan(s Settings, gs []lageGarten, mitNamen bool) ([]byte, error) {
 	if len(gs) == 0 {
 		return nil, bad("Es gibt noch keine Gärten mit Gartennummer")
 	}
-	const (
-		links, rechts = 12.0, 285.0
-		oben, unten   = 30.0, 192.0
-	)
-	minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
-	for _, g := range gs {
-		minX, minY = math.Min(minX, g.X), math.Min(minY, g.Y)
-		maxX, maxY = math.Max(maxX, g.X+lpBreite), math.Max(maxY, g.Y+lpHoehe)
-	}
-	// ein Bildpunkt im Programm = faktor mm, höchstens so groß, dass eine Kachel 40 mm breit wird
-	faktor := math.Min(math.Min((rechts-links)/(maxX-minX), (unten-oben)/(maxY-minY)), 40.0/lpBreite)
-	versatzX := links + ((rechts-links)-(maxX-minX)*faktor)/2
+	const links, rechts = 12.0, 285.0
 	pdf := fpdf.New("L", "mm", "A4", "")
 	pdf.AddUTF8FontFromBytes("lib", "", fontRegular)
 	pdf.AddUTF8FontFromBytes("lib", "B", fontBold)
@@ -176,7 +165,6 @@ func buildLageplan(s Settings, gs []lageGarten, mitNamen bool) ([]byte, error) {
 	pdf.SetCreator(appName, true)
 	pdf.AddPage()
 	mr, mg, mb := markenfarbe(s.Farbe)
-	fr, fg, fb := aufgehellt(mr, mg, mb, 0.88)
 	pdf.SetFont("lib", "B", 16)
 	pdf.SetTextColor(mr, mg, mb)
 	pdf.SetXY(links, 11)
@@ -185,39 +173,7 @@ func buildLageplan(s Settings, gs []lageGarten, mitNamen bool) ([]byte, error) {
 	pdf.Rect(links, 21, rechts-links, 0.8, "F")
 	pdf.SetTextColor(0, 0, 0)
 
-	frei := 0
-	for _, g := range gs {
-		x := versatzX + (g.X-minX)*faktor
-		y := oben + (g.Y-minY)*faktor
-		w, h := lpBreite*faktor, lpHoehe*faktor
-		pdf.SetLineWidth(0.35)
-		if g.Frei {
-			frei++
-			pdf.SetDrawColor(mr, mg, mb)
-			pdf.SetDashPattern([]float64{1.6, 1.2}, 0)
-			pdf.SetFillColor(255, 255, 255)
-			pdf.RoundedRect(x, y, w, h, 1.5, "1234", "FD")
-			pdf.SetDashPattern([]float64{}, 0)
-		} else {
-			pdf.SetDrawColor(mr, mg, mb)
-			pdf.SetFillColor(fr, fg, fb)
-			pdf.RoundedRect(x, y, w, h, 1.5, "1234", "FD")
-		}
-		groesse := math.Max(7, math.Min(16, h*0.42/0.3528*0.6))
-		pdf.SetTextColor(mr, mg, mb)
-		pdf.SetXY(x, y+h*0.12)
-		pdf.CellFormat(w, h*0.42, passendKleinStil(pdf, "B", g.Nr, w-2, groesse, 6), "", 0, "C", false, 0, "")
-		pdf.SetTextColor(60, 60, 60)
-		unten := g.Name
-		if g.Frei {
-			unten = "frei"
-		}
-		if unten != "" {
-			pdf.SetXY(x+1, y+h*0.56)
-			pdf.CellFormat(w-2, h*0.3, passendKlein(pdf, unten, w-3, math.Max(6, groesse*0.55), 5), "", 0, "C", false, 0, "")
-		}
-		pdf.SetTextColor(0, 0, 0)
-	}
+	frei, _ := zeichneLageplan(pdf, s, gs, links, 30, rechts, 192, "")
 	pdf.SetFont("lib", "", 8)
 	pdf.SetTextColor(100, 100, 100)
 	hinweis := fmt.Sprintf("%d Gärten", len(gs))
@@ -234,6 +190,70 @@ func buildLageplan(s Settings, gs []lageGarten, mitNamen bool) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// zeichneLageplan zeichnet die Gärten maßstäblich in das Rechteck (links, oben)–(rechts, unten). Ist markiert
+// gesetzt, wird dieser Garten kräftig hervorgehoben (Willkommensmappe, Exposé). Liefert die Zahl freier Gärten
+// und die tatsächlich belegte Höhe.
+func zeichneLageplan(pdf *fpdf.Fpdf, s Settings, gs []lageGarten, links, oben, rechts, unten float64, markiert string) (int, float64) {
+	if len(gs) == 0 {
+		return 0, 0
+	}
+	minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+	for _, g := range gs {
+		minX, minY = math.Min(minX, g.X), math.Min(minY, g.Y)
+		maxX, maxY = math.Max(maxX, g.X+lpBreite), math.Max(maxY, g.Y+lpHoehe)
+	}
+	// ein Bildpunkt im Programm = faktor mm, höchstens so groß, dass eine Kachel 40 mm breit wird
+	faktor := math.Min(math.Min((rechts-links)/(maxX-minX), (unten-oben)/(maxY-minY)), 40.0/lpBreite)
+	versatzX := links + ((rechts-links)-(maxX-minX)*faktor)/2
+	mr, mg, mb := markenfarbe(s.Farbe)
+	fr, fg, fb := aufgehellt(mr, mg, mb, 0.88)
+	frei := 0
+	for _, g := range gs {
+		x := versatzX + (g.X-minX)*faktor
+		y := oben + (g.Y-minY)*faktor
+		w, h := lpBreite*faktor, lpHoehe*faktor
+		pdf.SetLineWidth(0.35)
+		hervor := markiert != "" && g.Nr == markiert
+		switch {
+		case hervor:
+			pdf.SetDrawColor(mr, mg, mb)
+			pdf.SetFillColor(mr, mg, mb)
+			pdf.SetLineWidth(0.8)
+			pdf.RoundedRect(x, y, w, h, 1.5, "1234", "FD")
+		case g.Frei:
+			frei++
+			pdf.SetDrawColor(mr, mg, mb)
+			pdf.SetDashPattern([]float64{1.6, 1.2}, 0)
+			pdf.SetFillColor(255, 255, 255)
+			pdf.RoundedRect(x, y, w, h, 1.5, "1234", "FD")
+			pdf.SetDashPattern([]float64{}, 0)
+		default:
+			pdf.SetDrawColor(mr, mg, mb)
+			pdf.SetFillColor(fr, fg, fb)
+			pdf.RoundedRect(x, y, w, h, 1.5, "1234", "FD")
+		}
+		groesse := math.Max(5, math.Min(16, h*0.42/0.3528*0.6))
+		pdf.SetTextColor(mr, mg, mb)
+		if hervor {
+			pdf.SetTextColor(255, 255, 255)
+		}
+		pdf.SetXY(x, y+h*0.12)
+		pdf.CellFormat(w, h*0.42, passendKleinStil(pdf, "B", g.Nr, w-1, groesse, 4), "", 0, "C", false, 0, "")
+		pdf.SetTextColor(60, 60, 60)
+		unten := g.Name
+		if g.Frei && !hervor {
+			unten = "frei"
+		}
+		if unten != "" && h > 6 {
+			pdf.SetXY(x+1, y+h*0.56)
+			pdf.CellFormat(w-2, h*0.3, passendKlein(pdf, unten, w-3, math.Max(5, groesse*0.55), 4), "", 0, "C", false, 0, "")
+		}
+		pdf.SetTextColor(0, 0, 0)
+	}
+	pdf.SetLineWidth(0.2)
+	return frei, (maxY - minY) * faktor
 }
 
 // lageplanPDF: Namen nur auf Wunsch und nur für den Admin (der Aushang ist sonst ohne Personenbezug).

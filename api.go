@@ -511,19 +511,21 @@ func (a *App) handlePassword(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- Zustand
 
 type stateResp struct {
-	Autor       string              `json:"autor"`
-	Version     string              `json:"version"`
-	DataDir     string              `json:"dataDir"`
-	CurrentYear int                 `json:"currentYear"`
-	Years       []int               `json:"years"`
-	Year        int                 `json:"year"`
-	ReadOnly    bool                `json:"readOnly"`
-	Settings    Settings            `json:"settings"`
-	Paechter    []Paechter          `json:"paechter"`
-	Ablesungen  map[string]Ablesung `json:"ablesungen"`
-	Results     map[string]Result   `json:"results"`
-	HasPassword bool                `json:"hasPassword"`
-	LoggedIn    bool                `json:"loggedIn"`
+	Autor       string `json:"autor"`
+	Version     string `json:"version"`
+	DataDir     string `json:"dataDir"`
+	CurrentYear int    `json:"currentYear"`
+	Years       []int  `json:"years"`
+	Year        int    `json:"year"`
+	ReadOnly    bool   `json:"readOnly"`
+	// SperrHinweis: Die Daten wurden auf einem anderen Rechner geöffnet, dieses Fenster speichert nicht mehr.
+	SperrHinweis string              `json:"sperrHinweis,omitempty"`
+	Settings     Settings            `json:"settings"`
+	Paechter     []Paechter          `json:"paechter"`
+	Ablesungen   map[string]Ablesung `json:"ablesungen"`
+	Results      map[string]Result   `json:"results"`
+	HasPassword  bool                `json:"hasPassword"`
+	LoggedIn     bool                `json:"loggedIn"`
 	// Kassenprüfer-Zugang: eigenes, optionales Passwort mit Lesezugriff auf den
 	// Kassenbericht, getrennt vom Admin-Passwort.
 	HasPruefPassword bool                   `json:"hasPruefPassword"`
@@ -590,6 +592,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	res.SicherungFehler = a.st.pruefeSicherung()
 	res.TutorialGesehen = a.st.d.TutorialGesehen
 	res.ZweiteSicherung = a.st.zweiteSicherungLocked()
+	res.SperrHinweis = a.st.sperrHinweisLocked()
 	res.Demo, res.Leer = a.st.d.Demo, a.st.datenbestandLeer()
 	res.Lageplan = a.st.d.Lageplan
 	if res.Lageplan == nil {
@@ -967,7 +970,8 @@ func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, err)
 			return
 		}
-		a.st.leereDruckOrdner() // abgeleitete Druckdateien (z. B. Sammel-PDF) enthalten den Namen noch
+		a.st.leereDruckOrdner()     // abgeleitete Druckdateien (z. B. Sammel-PDF) enthalten den Namen noch
+		a.st.entferneVereinsakten() // ebenso ältere Vereinsakten (Momentaufnahmen des ganzen Datenordners)
 		sicherungen := a.st.bereinigeSicherungen(func(d *Data) bool { return d.entfernePerson(id) })
 		writeJSON(w, 200, map[string]int{"sicherungenBereinigt": sicherungen})
 		return
@@ -1620,6 +1624,7 @@ func (a *App) handleQuit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]bool{"ok": true})
 	go func() {
 		time.Sleep(300 * time.Millisecond)
+		a.st.sperreFreigeben()
 		os.Exit(0)
 	}()
 }
@@ -1729,6 +1734,17 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/spenden/bestaetigen", a.admin(a.handleSpendenBestaetigen))
 	mux.HandleFunc("GET /api/admin/zuwendungsbestaetigung", a.admin(a.pdfAnzeigen(a.zuwendungsbestaetigungPDF)))
 	mux.HandleFunc("POST /api/admin/zuwendungsbestaetigung/oeffnen", a.admin(a.pdfOeffnen(a.zuwendungsbestaetigungPDF)))
+	mux.HandleFunc("GET /api/admin/vereinsinfo", a.admin(a.handleVereinsinfo))
+	mux.HandleFunc("PUT /api/admin/vereinsinfo", a.admin(a.handleVereinsinfo))
+	mux.HandleFunc("GET /api/admin/paechter/{id}/willkommen", a.admin(a.pdfAnzeigen(a.willkommenPDF)))
+	mux.HandleFunc("POST /api/admin/paechter/{id}/willkommen/oeffnen", a.admin(a.pdfOeffnen(a.willkommenPDF)))
+	mux.HandleFunc("GET /api/admin/expose", a.admin(a.pdfAnzeigen(a.exposePDF)))
+	mux.HandleFunc("POST /api/admin/expose/oeffnen", a.admin(a.pdfOeffnen(a.exposePDF)))
+	mux.HandleFunc("GET /api/admin/nutzung", a.admin(a.handleNutzungListe))
+	mux.HandleFunc("POST /api/admin/nutzung", a.admin(a.handleNutzungSpeichern))
+	mux.HandleFunc("DELETE /api/admin/nutzung/{id}", a.admin(a.handleNutzungLoeschen))
+	mux.HandleFunc("GET /api/admin/aufgaben", a.admin(a.handleAufgaben))
+	mux.HandleFunc("POST /api/admin/vereinsakte", a.admin(a.handleVereinsakte))
 	mux.HandleFunc("GET /api/admin/maengel", a.admin(a.handleMaengelListe))
 	mux.HandleFunc("POST /api/admin/maengel", a.admin(a.handleMangelSpeichern(true)))
 	mux.HandleFunc("PUT /api/admin/maengel/{id}", a.admin(a.handleMangelSpeichern(false)))

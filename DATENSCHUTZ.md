@@ -79,6 +79,16 @@ gespeichert. Für bestätigte Spenden muss der Verein ein Doppel aufbewahren; si
 eines Pächters erhalten und verlieren ihren Personenbezug erst nach Ablauf der Aufbewahrungsfrist. Unbestätigte Spenden
 verlieren beim Löschen der Person Name und Anschrift, der Betrag bleibt für die Kasse.
 
+**Vereinsakte (Amtsübergabe):** Die ZIP-Datei ist eine vollständige Kopie des Datenordners mit allen
+Personendaten. Sie gehört nur in die Hände des neuen Vorstands und sollte nach der Übergabe gelöscht werden. Das
+Programm behält im Datenordner nur die neueste Akte und löscht alle, sobald eine Person endgültig gelöscht wird.
+
+**Begehungen:** Geschätzte Flächenanteile (Drittelregelung) gehören zum Pächter, der den Garten damals hatte; sie
+stehen in der Auskunft und werden mit der Person gelöscht.
+
+**Willkommensmappe und Exposé:** Die dort eingetragenen Ansprechpartner erscheinen auf Papieren, die weitergegeben
+werden – nur mit Einverständnis der genannten Personen. Das Exposé enthält keine Daten des bisherigen Pächters.
+
 **Arbeitseinsätze:** Wer bei welchem Einsatz wie viele Stunden geleistet hat, steht nur in der Verwaltung (nicht im
 öffentlichen Jahresplaner), ist Teil der Auskunft und wird beim endgültigen Löschen der Person entfernt.
 

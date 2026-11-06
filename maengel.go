@@ -172,15 +172,26 @@ func (a *App) handleMangelLoeschen(w http.ResponseWriter, r *http.Request) {
 type begehungZeile struct {
 	Garten, Name string
 	Offen        []string
+	Anbau        string // letzte Schätzung als Hinweis, z. B. »zuletzt 25«
 }
 
 func (s *Store) begehungLocked() []begehungZeile {
+	letzteNutzung := map[string]*Nutzung{}
+	for i := range s.d.Nutzungen {
+		n := &s.d.Nutzungen[i]
+		if v := letzteNutzung[n.Gartennr]; v == nil || n.Datum >= v.Datum {
+			letzteNutzung[n.Gartennr] = n
+		}
+	}
 	var l []begehungZeile
 	for _, p := range s.d.Paechter {
 		if p.Geloescht || p.AusgeschiedenAm != "" {
 			continue
 		}
 		z := begehungZeile{Garten: p.Gartennr, Name: p.Name}
+		if l := letzteNutzung[strings.TrimSpace(p.Gartennr)]; l != nil {
+			z.Anbau = "zuletzt " + fmtFlex(l.Anbau)
+		}
 		for _, m := range s.d.Maengel {
 			if m.Gartennr == strings.TrimSpace(p.Gartennr) && m.ErledigtAm == "" {
 				z.Offen = append(z.Offen, m.Beschreibung)
@@ -208,7 +219,7 @@ func buildBegehungsliste(s Settings, l []begehungZeile) ([]byte, error) {
 	cols := []struct {
 		titel string
 		w     float64
-	}{{"Garten", 15}, {"Pächter", 46}, {"noch offen aus früheren Begehungen", 78}, {"in Ordnung", 20}, {"Mangel festgestellt (Art, Beschreibung)", 118}}
+	}{{"Garten", 15}, {"Pächter", 46}, {"noch offen aus früheren Begehungen", 78}, {"in Ordnung", 20}, {"Anbau ca. %", 20}, {"Mangel festgestellt (Art, Beschreibung)", 98}}
 	var y float64
 	seite := func() {
 		pdf.AddPage()
@@ -245,7 +256,7 @@ func buildBegehungsliste(s Settings, l []begehungZeile) ([]byte, error) {
 		}
 		offen := trim(strings.Join(z.Offen, "; "), 140)
 		x := left
-		for i, txt := range []string{z.Garten, z.Name, "", "", ""} {
+		for i, txt := range []string{z.Garten, z.Name, "", "", "", ""} {
 			pdf.SetFont("lib", "", 9.5)
 			pdf.SetXY(x, y)
 			pdf.CellFormat(cols[i].w, rowH, passendKlein(pdf, txt, cols[i].w-2, 9.5, 6.5), "1", 0, "L", false, 0, "")
@@ -255,6 +266,13 @@ func buildBegehungsliste(s Settings, l []begehungZeile) ([]byte, error) {
 			pdf.SetFont("lib", "", 8)
 			pdf.SetXY(left+cols[0].w+cols[1].w+1, y+1)
 			pdf.MultiCell(cols[2].w-2, 3.5, offen, "", "L", false)
+		}
+		if z.Anbau != "" { // letzte Schätzung klein als Hinweis, darunter ist Platz für die neue
+			pdf.SetFont("lib", "", 6.5)
+			pdf.SetTextColor(110, 110, 110)
+			pdf.SetXY(left+cols[0].w+cols[1].w+cols[2].w+cols[3].w+1, y+0.8)
+			pdf.CellFormat(cols[4].w-2, 3, z.Anbau+" %", "", 0, "L", false, 0, "")
+			pdf.SetTextColor(0, 0, 0)
 		}
 		// Kästchen »in Ordnung«
 		pdf.SetDrawColor(120, 120, 120)

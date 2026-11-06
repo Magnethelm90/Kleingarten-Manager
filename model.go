@@ -204,6 +204,10 @@ type Data struct {
 	// Spenden und Angaben zur Gemeinnützigkeit für Zuwendungsbestätigungen (siehe spenden.go)
 	Spenden           []Spende          `json:"spenden,omitempty"`
 	Gemeinnuetzigkeit Gemeinnuetzigkeit `json:"gemeinnuetzigkeit"`
+	// Vereinsinfo: Ansprechpartner und Hinweise für Willkommensmappe, Exposé und Amtsübergabe
+	Vereinsinfo Vereinsinfo `json:"vereinsinfo"`
+	// Nutzungen: geschätzte Flächenanteile bei Begehungen (Drittelregelung, siehe nutzung.go)
+	Nutzungen []Nutzung `json:"nutzungen,omitempty"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).

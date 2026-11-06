@@ -174,6 +174,10 @@ func (s *Store) ladeBeispieldaten() {
 		s.d.Spenden = append(s.d.Spenden, Spende{ID: newID(), Datum: fmt.Sprintf("%d-05-10", jahr), Jahr: jahr, Betrag: 50, PaechterID: p.ID, Name: p.Name, Strasse: p.Strasse, PLZOrt: p.PLZOrt})
 	}
 	s.d.Spenden = append(s.d.Spenden, Spende{ID: newID(), Datum: fmt.Sprintf("%d-06-21", jahr), Jahr: jahr, Betrag: 120, Name: "Gartencenter Grünfink", Strasse: "Gewerbestraße 4", PLZOrt: set.Ort, Notiz: "für das Sommerfest"})
+	s.d.Vereinsinfo = Vereinsinfo{
+		Ansprechpartner: "Vorsitz: Erika Beispiel, Tel. 0123 4567\nKasse: Max Muster, kasse@example.org\nSprechstunde: samstags 10–12 Uhr im Vereinsheim",
+		Hinweise:        "Mittagsruhe 13–15 Uhr, sonntags keine lauten Arbeiten\nWasser wird im April angestellt und im Oktober abgestellt\nGrünschnitt bitte zum Kompostplatz am Tor, Müll nimmt jeder selbst mit",
+	}
 	s.d.Demo = true
 	s.audit("Beispieldaten geladen")
 }

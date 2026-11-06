@@ -53,6 +53,18 @@ Benutzerkonto und keine Übertragung ins Internet.
 
 ## Was das Programm kann
 
+### Für den Vorstand
+
+- **Was steht an?** Die Übersicht sagt von selbst, was zu tun ist: Ablesung oder Versammlung vorbereiten, Stunden nach
+  dem Arbeitseinsatz eintragen, überfällige Zahlungen, abgelaufene Mängelfristen, Spenden ohne Bestätigung,
+  ein bald ablaufender Bescheid zur Gemeinnützigkeit, Warteliste nachfragen
+- **Amtsübergabe:** Die Vereinsakte enthält alle Daten und Dateien plus ein »Lies mich zuerst« mit Zahlen, Preisen,
+  Terminen und offenen Punkten – auf einen USB-Stick kopieren und der neue Vorstand kann sofort weitermachen
+- **Mehrere Vorstände ohne Cloud:** Liegt der Datenordner auf einem USB-Stick oder Netzlaufwerk, erkennt das Programm,
+  wenn er gerade an einem anderen Rechner geöffnet ist, und verhindert, dass Änderungen überschrieben werden
+- **Willkommensmappe** für neue Pächter (Garten, Zähler, Termine, Lageplan mit markiertem Garten, Ansprechpartner) und
+  **Exposé** für freie Gärten (Foto, Größe, Ablöse, laufende Kosten, Lage) für Interessenten der Warteliste
+
 ### Abrechnung
 
 - **Zählerstände** in der Schnelleingabe: Nummer eintippen, Name und Vorjahresstände erscheinen von selbst, nur die
@@ -85,7 +97,8 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Warteliste** in der Reihenfolge der Anmeldung, mit Besichtigungsterminen und Erinnerung, lange nicht bestätigte
   Einträge nachzufragen
 - **Mängel und Gartenbegehung:** Begehungsliste zum Ausdrucken, Mängel je Garten mit Frist erfassen und dem Pächter
-  eine schriftliche Aufforderung als PDF schreiben
+  eine schriftliche Aufforderung als PDF schreiben; dazu die **Drittelregelung**: Flächenanteile schätzen und sehen,
+  welche Gärten unter einem Drittel Anbau liegen
 - **Vereinstermine:** Jahresplaner für Arbeitseinsätze, Versammlungen und Feste, als Aushang und als Kalenderdatei
   fürs Handy, mit einem Klick ins nächste Jahr übernommen; für Versammlungen gibt es die **Einladung mit
   Tagesordnung** und die **Anwesenheitsliste** zum Unterschreiben
