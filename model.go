@@ -85,6 +85,10 @@ type Paechter struct {
 	UmlageAbweichend *float64 `json:"umlageAbweichend"`
 	WasserzaehlerNr  string   `json:"wasserzaehlerNr"`
 	StromzaehlerNr   string   `json:"stromzaehlerNr"`
+	// Eichjahr der Zähler (0 = unbekannt), für die Eichfristen (siehe eichung.go). Wird nur über die
+	// Eichfristen-Liste oder automatisch beim Zählerwechsel gesetzt.
+	WasserEichjahr int `json:"wasserEichjahr,omitempty"`
+	StromEichjahr  int `json:"stromEichjahr,omitempty"`
 	// Notiz: interner Vermerk, erscheint nirgends auf der Rechnung.
 	Notiz string `json:"notiz,omitempty"`
 
@@ -230,6 +234,12 @@ type Data struct {
 	// Kündigungen mit Fahrplan bis zur Übergabe (siehe kuendigung.go)
 	KuendigungsRegel KuendigungsRegel `json:"kuendigungsRegel"`
 	Kuendigungen     []Kuendigung     `json:"kuendigungen,omitempty"`
+	// Eichfristen der Zähler (siehe eichung.go), Kassenprüfungen je Jahr (siehe pruefung.go),
+	// Ämter des Vereins (siehe aemter.go) und die Pachtobergrenze nach § 5 BKleingG (siehe pachtgrenze.go)
+	Eichfristen      Eichfristen               `json:"eichfristen"`
+	Kassenpruefungen map[string]Kassenpruefung `json:"kassenpruefungen,omitempty"`
+	Aemter           []Amt                     `json:"aemter,omitempty"`
+	Pachtgrenze      Pachtgrenze               `json:"pachtgrenze"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).

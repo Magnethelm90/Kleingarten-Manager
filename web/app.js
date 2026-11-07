@@ -282,7 +282,7 @@ const NAV = [
     { admin: 'maengel', label: 'Mängel', ic: 'warnung' },
     { admin: 'rundschreiben', label: 'Rundschreiben', ic: 'brief' },
     { admin: 'inventar', label: 'Schlüssel & Geräte', ic: 'schluessel' },
-    { admin: 'verwaltung', label: 'Beschlüsse & Verträge', ic: 'akte' }] },
+    { admin: 'verwaltung', label: 'Beschlüsse, Verträge, Ämter', ic: 'akte' }] },
   { gruppe: 'Kasse & Berichte', items: [
     { admin: 'kassenbericht', label: 'Kassenbericht', ic: 'kasse' },
     { admin: 'haushalt', label: 'Haushaltsplan', ic: 'waage' },
@@ -315,6 +315,8 @@ function adminTabWaehlen(id) {
   if (id === 'kuendigungen') S.kuend = null;
   if (id === 'verwaltung') S.verw = null;
   if (id === 'haushalt') S.haushalt = null;
+  if (id === 'einstellungen') S.pachtgrenze = null;
+  if (id === 'kassenbericht') S.pruefung = null;
   if (id === 'sepa') { S.sepa = null; S.sepaVorschau = null; }
   if (id === 'vorauszahlung') S.vz = null;
   if (id === 'paechter') S.uebergaben = null;
@@ -1145,8 +1147,46 @@ function viewEingabe() {
         h('button', { class: S.eingabeMode === 'tabelle' ? 'active' : '', onclick: () => { S.eingabeMode = 'tabelle'; render(); } }, 'Tabelle (alle Pächter)')),
       h('div', { class: 'spacer' }),
       h('button', { class: 'btn', disabled: !st.paechter.length, title: 'Liste aller Gärten mit Zählernummern und Vorjahresständen zum Ausdrucken, mit leeren Feldern für den Ablese-Rundgang',
-        onclick: () => ablesebogenDrucken(st.year) }, 'Ablesebogen drucken')),
+        onclick: () => ablesebogenDrucken(st.year) }, 'Ablesebogen drucken'),
+      !st.hasPassword || st.loggedIn ? h('button', { class: 'btn', disabled: !st.paechter.length, title: 'Wann müssen die Zähler nach dem Eichgesetz getauscht werden?', onclick: eichungDialog }, 'Eichfristen') : null),
     S.eingabeMode === 'schnell' ? viewSchnell() : viewTabelle());
+}
+
+// Eichfristen: Eichjahr je Zähler pflegen, Status sehen, Tauschliste drucken.
+async function eichungDialog() {
+  let d;
+  try { d = await api('GET', '/api/admin/eichung'); } catch (e) { handleErr(e); return; }
+  const STATUS = { abgelaufen: ['err', 'abgelaufen'], faellig: ['warn', 'dieses Jahr tauschen'], bald: ['neu', 'nächstes Jahr'], unbekannt: ['', 'Eichjahr fehlt'], ok: ['ok', 'gültig'] };
+  const box = h('div');
+  const zeichne = () => {
+    const fw = h('input', { type: 'number', min: 1, max: 30, value: d.fristen.wasser, style: 'width:70px' });
+    const fs = h('input', { type: 'number', min: 1, max: 30, value: d.fristen.strom, style: 'width:70px' });
+    const fristen = async () => {
+      try { d = await api('PUT', '/api/admin/eichung/fristen', { wasser: Number(fw.value), strom: Number(fs.value) }); zeichne(); } catch (e) { handleErr(e); }
+    };
+    fw.addEventListener('change', fristen); fs.addEventListener('change', fristen);
+    const tauschen = d.zeilen.filter((z) => ['abgelaufen', 'faellig', 'bald'].includes(z.status)).length;
+    box.replaceChildren(
+      h('p', { class: 'hint' }, 'Nach dem Mess- und Eichgesetz dürfen Zähler nur begrenzt messen: Kaltwasserzähler 6 Jahre, elektronische Stromzähler 8 Jahre (Ferraris-Zähler 16). Die Frist endet mit Ablauf des Jahres. Trag das Eichjahr ein (steht meist auf dem Zähler oder der Plombe) – beim Zählerwechsel setzt das Programm es selbst.'),
+      h('div', { class: 'toolbar' }, h('label', null, 'Eichfrist Wasser ', fw, ' Jahre'), h('label', null, 'Strom ', fs, ' Jahre'), h('div', { class: 'spacer' }),
+        h('button', { class: 'btn', disabled: !tauschen, onclick: () => pdfDrucken({ url: '/api/admin/eichung/tauschliste', oeffnenUrl: '/api/admin/eichung/tauschliste/oeffnen', titel: 'Tauschliste', meldung: () => 'Die Tauschliste wurde im PDF-Programm geöffnet.' }) },
+          `Tauschliste drucken${tauschen ? ` (${tauschen})` : ''}`)),
+      h('div', { class: 'tablewrap', style: 'max-height:55vh' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, ['Garten', 'Pächter', 'Zähler', 'Eichjahr', 'Gültig bis', ''].map((t) => h('th', null, t)))),
+        h('tbody', null, d.zeilen.map((z) => {
+          const inp = h('input', { type: 'number', min: 1950, max: d.jahr + 1, value: z.eichjahr || '', placeholder: '–', style: 'width:80px' });
+          inp.addEventListener('change', async () => {
+            try { d = await api('PUT', `/api/admin/eichung/${z.paechterId}`, { art: z.art, eichjahr: Number(inp.value || 0) }); zeichne(); }
+            catch (e) { handleErr(e); inp.value = z.eichjahr || ''; }
+          });
+          const [cls, txt] = STATUS[z.status] || ['', z.status];
+          return h('tr', null, h('td', null, z.gartennr), h('td', null, z.name), h('td', null, (z.art === 'wasser' ? 'Wasser ' : 'Strom ') + z.nr),
+            h('td', null, inp), h('td', null, z.gueltigBis ? `31.12.${z.gueltigBis}` : ''), h('td', null, h('span', { class: 'badge ' + cls }, txt)));
+        })))));
+  };
+  zeichne();
+  await breiterDialog('Eichfristen der Zähler', box, [{ label: 'Schließen', cls: 'primary', value: true }]);
+  S.aufgaben = null;
 }
 
 // Schnelleingabe: Nummer eintippen, Name/Adresse/Größe/Zählernummern kommen aus den Stammdaten.
@@ -2129,7 +2169,9 @@ function jahreSeit(iso) {
   if (!schonGehabt) jahre--;
   return Math.max(0, jahre);
 }
-const todayIso = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+// isoInTagen: heutiges Datum (Ortszeit) plus n Tage als JJJJ-MM-TT.
+const isoInTagen = (n) => { const d = new Date(); d.setDate(d.getDate() + n); const p = (x) => String(x).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+const todayIso = () => isoInTagen(0);
 const payTotal = (e) => Math.abs(e.gesamt);
 const payPaid = (e) => (e.bezahltAm ? (e.bezahltBetrag != null ? e.bezahltBetrag : payTotal(e)) : 0);
 const payOpen = (e) => Math.round((payTotal(e) - payPaid(e)) * 100) / 100;
@@ -2687,7 +2729,7 @@ async function geraetDialog(g) {
 function inventarGeraete() {
   const l = S.inventar.geraete;
   const heute = todayIso();
-  const in30 = (() => { const d = new Date(); d.setDate(d.getDate() + 30); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
+  const in30 = isoInTagen(30);
   const nachher = async (p) => { if (await p) invNeuLaden(); };
   const wert = l.reduce((a, g) => a + (g.wert || 0), 0);
   return h('div', null,
@@ -2854,20 +2896,87 @@ async function loadVerwaltung() {
   if (S.verwLoading) return;
   S.verwLoading = true;
   try {
-    const [b, v] = await Promise.all([api('GET', '/api/admin/beschluesse'), api('GET', '/api/admin/vertraege')]);
-    S.verw = { beschluesse: b, vertraege: v.vertraege, arten: v.arten, jaehrlich: v.jaehrlich };
-  } catch (e) { handleErr(e); S.verw = { beschluesse: [], vertraege: [], arten: [], jaehrlich: 0 }; }
+    const [b, v, am] = await Promise.all([api('GET', '/api/admin/beschluesse'), api('GET', '/api/admin/vertraege'), api('GET', '/api/admin/aemter')]);
+    S.verw = { beschluesse: b, vertraege: v.vertraege, arten: v.arten, jaehrlich: v.jaehrlich, aemter: am };
+  } catch (e) { handleErr(e); S.verw = { beschluesse: [], vertraege: [], arten: [], jaehrlich: 0, aemter: { aemter: [], punkte: [], vorschlaege: [] } }; }
   S.verwLoading = false;
   render();
 }
 
 function adminVerwaltung() {
   if (S.verw == null) { loadVerwaltung(); return h('p', { class: 'hint' }, 'Wird geladen …'); }
-  const vt = S.verwSeite === 'vertraege';
+  const seite = ['vertraege', 'aemter'].includes(S.verwSeite) ? S.verwSeite : 'beschluesse';
+  const knopf = (id, text) => h('button', { class: seite === id ? 'active' : '', onclick: () => { S.verwSeite = id; render(); } }, text);
   return h('div', null, h('div', { class: 'subtabs' },
-    h('button', { class: vt ? '' : 'active', onclick: () => { S.verwSeite = 'beschluesse'; render(); } }, `Beschlussbuch (${S.verw.beschluesse.length})`),
-    h('button', { class: vt ? 'active' : '', onclick: () => { S.verwSeite = 'vertraege'; render(); } }, `Verträge & Versicherungen (${S.verw.vertraege.length})`)),
-  vt ? verwaltungVertraege() : verwaltungBeschluesse());
+    knopf('beschluesse', `Beschlussbuch (${S.verw.beschluesse.length})`),
+    knopf('vertraege', `Verträge & Versicherungen (${S.verw.vertraege.length})`),
+    knopf('aemter', `Ämter (${S.verw.aemter.aemter.filter((x) => !x.ehemalig).length})`)),
+  seite === 'vertraege' ? verwaltungVertraege() : seite === 'aemter' ? verwaltungAemter() : verwaltungBeschluesse());
+}
+
+// ---- Ämter und Amtswechsel
+
+async function amtDialog(x, wechsel) {
+  const d = S.verw.aemter;
+  const liste = h('datalist', { id: 'amt-vorschlaege' }, d.vorschlaege.map((v) => h('option', { value: v })));
+  const f = {
+    amt: h('input', { type: 'text', maxlength: 60, list: 'amt-vorschlaege', value: x && !wechsel ? x.amt : (x ? x.amt : ''), disabled: !!wechsel, placeholder: 'z. B. Kassenwart/in' }),
+    name: h('input', { type: 'text', maxlength: 100, value: x && !wechsel ? x.name : '' }),
+    seit: h('input', { type: 'date', value: x && !wechsel ? x.seit || '' : wechsel ? todayIso() : '' }),
+    bis: h('input', { type: 'date', value: x && !wechsel ? x.bis || '' : '' }),
+    notiz: h('input', { type: 'text', maxlength: 500, value: x && !wechsel ? x.notiz || '' : '' }),
+  };
+  const fld = (label, el, hint) => h('div', { class: 'field' }, h('label', null, label), el, hint ? h('span', { class: 'fhint' }, hint) : null);
+  const titel = wechsel ? `Amtswechsel: ${x.amt}` : x ? `${x.amt} bearbeiten` : 'Amt eintragen';
+  return modal(titel, h('div', null,
+    wechsel ? h('p', { class: 'hint' }, `${x.name} gibt das Amt ab. Die bisherige Amtszeit endet am Tag der Wahl, danach führt eine Checkliste durch die Übergabe.`) : null,
+    h('div', { class: 'form' }, liste, fld('Amt *', f.amt), fld(wechsel ? 'Neu gewählt *' : 'Name *', f.name),
+      fld(wechsel ? 'Tag der Wahl *' : 'Im Amt seit', f.seit), fld('Amtszeit bis', f.bis, 'leer = unbefristet'), fld('Notiz', f.notiz))),
+  [{ label: 'Abbrechen', value: false }, { label: wechsel ? 'Wechsel eintragen' : 'Speichern', cls: 'primary', value: true, action: async () => {
+    const body = { id: x && !wechsel ? x.id : '', amt: f.amt.value, name: f.name.value, seit: f.seit.value, bis: f.bis.value, notiz: f.notiz.value };
+    try { S.verw.aemter = await api('POST', wechsel ? `/api/admin/aemter/${x.id}/wechsel` : '/api/admin/aemter', body); }
+    catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+function verwaltungAemter() {
+  const d = S.verw.aemter;
+  const heute = todayIso();
+  const aktiv = d.aemter.filter((x) => !x.ehemalig);
+  const frueher = d.aemter.filter((x) => x.ehemalig);
+  const nachher = async (p) => { if (await p) render(); };
+  const bald = (bis) => { if (!bis) return null; const t = Math.round((new Date(bis) - new Date(heute)) / 86400000);
+    return t < 0 ? h('span', { class: 'badge err' }, 'abgelaufen') : t <= 120 ? h('span', { class: 'badge warn' }, 'Wahl vorbereiten') : null; };
+  const checkliste = (x) => {
+    if (!x.checkliste) return null;
+    const offen = d.punkte.filter((p) => !x.checkliste[p.key]).length;
+    return h('details', { class: 'amt-check', open: offen > 0 }, h('summary', null, offen ? `Übergabe: ${offen} von ${d.punkte.length} Punkten offen` : 'Übergabe abgeschlossen ✓'),
+      h('ul', { class: 'haken-liste' }, d.punkte.map((p) => h('li', null, h('label', null,
+        h('input', { type: 'checkbox', checked: !!x.checkliste[p.key], onchange: async (e) => {
+          try { S.verw.aemter = await api('PUT', `/api/admin/aemter/${x.id}/checkliste`, { key: p.key, erledigt: e.target.checked }); render(); }
+          catch (err) { handleErr(err); e.target.checked = !e.target.checked; }
+        } }), ' ', p.text, x.checkliste[p.key] ? h('span', { class: 'hint' }, ` · ${deDate(x.checkliste[p.key])}`) : null)))));
+  };
+  const loeschen = (x) => ({ label: 'Löschen', gefahr: true, aktion: async () => {
+    if (!(await confirmBox(`Eintrag »${x.amt}: ${x.name}« löschen?`, 'Löschen', true))) return;
+    try { S.verw.aemter = await api('DELETE', `/api/admin/aemter/${x.id}`); render(); } catch (e) { handleErr(e); }
+  } });
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Wer hat welches Amt bis wann? Rund vier Monate vor Ende einer Amtszeit erinnert das Cockpit an die Wahl. Beim Amtswechsel hilft eine Checkliste, nichts zu vergessen – von der Bankvollmacht bis zum Vereinsregister.'),
+    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(amtDialog(null)) }, '+ Amt')),
+    aktiv.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['Amt', 'Name', 'Seit', 'Amtszeit bis', ''].map((t) => h('th', null, t)))),
+      h('tbody', null, aktiv.map((x) => h('tr', null,
+        h('td', { class: 'wrap' }, h('b', null, x.amt), x.notiz ? h('div', { class: 'hint' }, x.notiz) : null),
+        h('td', { class: 'wrap' }, x.name, checkliste(x)),
+        h('td', null, x.seit ? deDate(x.seit) : ''),
+        h('td', null, x.bis ? deDate(x.bis) : h('span', { class: 'hint' }, 'unbefristet'), ' ', bald(x.bis)),
+        h('td', { class: 'aktionen' }, h('button', { class: 'btn small', onclick: () => nachher(amtDialog(x, true)) }, 'Amtswechsel'), ' ',
+          mehrMenue([{ label: 'Bearbeiten', aktion: () => nachher(amtDialog(x)) }, loeschen(x)])))))))
+      : h('div', { class: 'card' }, leer('personen', 'Noch keine Ämter eingetragen', 'Vorsitz, Kasse, Schriftführung, Kassenprüfung … mit Amtszeit – dann denkt das Programm an die nächste Wahl.', '+ Amt', () => nachher(amtDialog(null)))),
+    frueher.length ? h('details', { class: 'card', style: 'margin-top:12px' }, h('summary', null, `Frühere Amtsinhaber (${frueher.length})`),
+      h('table', { class: 'data' }, h('tbody', null, frueher.map((x) => h('tr', null, h('td', null, x.amt), h('td', null, x.name),
+        h('td', null, `${x.seit ? deDate(x.seit) : '?'} – ${x.bis ? deDate(x.bis) : '?'}`), h('td', { class: 'aktionen' }, mehrMenue([loeschen(x)]))))))) : null);
 }
 
 async function beschlussDialog(b) {
@@ -2955,7 +3064,7 @@ async function vertragDialog(v) {
 function verwaltungVertraege() {
   const l = S.verw.vertraege;
   const heute = todayIso();
-  const in60 = (() => { const d = new Date(); d.setDate(d.getDate() + 60); return d.toISOString().slice(0, 10); })();
+  const in60 = isoInTagen(60);
   const nachher = async (p) => { if (await p) { S.verw = null; render(); } };
   return h('div', null,
     h('p', { class: 'hint' }, 'Versicherungen, Versorger, Zwischenpacht und andere Verträge mit Laufzeit und Kündigungsfrist. Rund zwei Monate vor dem letzten Kündigungstag erinnert das Cockpit – Zeit genug, Angebote zu vergleichen.'),
@@ -3760,7 +3869,47 @@ function adminSettings() {
   return h('div', null,
     aussehenKarte(st),
     h('p', { class: 'hint' }, `Diese Werte gelten für das laufende Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
-    h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'))));
+    h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'))),
+    pachtgrenzeKarte());
+}
+
+// Pachtobergrenze nach § 5 BKleingG: höchstens das Vierfache der ortsüblichen Pacht im Erwerbsobstbau.
+function pachtgrenzeKarte() {
+  if (S.pachtgrenze == null) {
+    if (!S.pachtgrenzeLaedt) {
+      S.pachtgrenzeLaedt = true;
+      api('GET', '/api/admin/pachtgrenze').then((d) => { S.pachtgrenze = d; }).catch(() => { S.pachtgrenze = false; }).finally(() => { S.pachtgrenzeLaedt = false; render(); });
+    }
+    return null;
+  }
+  const d = S.pachtgrenze;
+  if (!d) return null;
+  const wert = h('input', { type: 'text', inputmode: 'decimal', value: d.erwerbsobstbauJeQm ? numIn(d.erwerbsobstbauJeQm) : '', placeholder: 'z. B. 0,03', autocomplete: 'off' });
+  const quelle = h('input', { type: 'text', maxlength: 120, value: d.quelle || '', placeholder: 'z. B. Gutachterausschuss 2025' });
+  const speichern = async () => {
+    const v = wert.value.trim() === '' ? 0 : parseNum(wert.value);
+    if (v === null || Number.isNaN(v) || v < 0) { toast('Bitte eine Zahl ab 0 eintragen.', 'err'); return; }
+    try { S.pachtgrenze = await api('PUT', '/api/admin/pachtgrenze', { erwerbsobstbauJeQm: v, quelle: quelle.value }); S.aufgaben = null; toast('Gespeichert', 'ok'); render(); } catch (e) { handleErr(e); }
+  };
+  const fmt4 = (x) => new Intl.NumberFormat('de-DE', { maximumFractionDigits: 4 }).format(x);
+  let ergebnis = h('p', { class: 'hint' }, 'Trag die ortsübliche Pacht ein – das Programm rechnet die Höchstgrenze aus und vergleicht sie mit eurem Pachtsatz.');
+  if (d.hoechst != null) {
+    const pct = Math.min(100, d.auslastung);
+    ergebnis = h('div', { class: 'pg-ergebnis' },
+      h('div', { class: 'pg-zahlen' }, h('span', null, 'Euer Pachtsatz ', h('b', null, fmt4(d.pachtJeQm) + ' €/m²')), h('span', null, 'Höchstpacht ', h('b', null, fmt4(d.hoechst) + ' €/m²'))),
+      h('div', { class: 'balken' + (d.ueber ? ' err' : '') }, h('div', { style: `width:${pct}%` })),
+      h('p', { class: d.ueber ? 'warn-text' : 'hint' }, d.ueber
+        ? `Der Pachtsatz liegt ${nfFlex.format(Math.round((d.auslastung - 100) * 10) / 10)} % über der gesetzlichen Höchstgrenze. Bitte mit dem Verband klären.`
+        : `Ihr nutzt ${nfFlex.format(d.auslastung)} % der zulässigen Pacht – bis zur Grenze sind noch ${fmt4(Math.round((d.hoechst - d.pachtJeQm) * 10000) / 10000)} €/m² Luft.`));
+  }
+  return h('div', { class: 'card', style: 'margin-top:14px' },
+    h('div', { class: 'section-title', style: 'margin-top:0' }, 'Pachtobergrenze (§ 5 Bundeskleingartengesetz)'),
+    h('p', { class: 'hint' }, 'Die Pacht darf höchstens das Vierfache der ortsüblichen Pacht im erwerbsmäßigen Obst- und Gemüseanbau betragen. Den Wert nennt der Gutachterausschuss der Gemeinde oder der Verband. Gemeinschaftsflächen dürfen anteilig mit umgelegt werden.'),
+    h('div', { class: 'form' },
+      h('div', { class: 'field' }, h('label', null, 'Ortsübliche Pacht Erwerbsobstbau'), h('div', { class: 'inputunit' }, wert, h('span', null, '€/m²'))),
+      h('div', { class: 'field' }, h('label', null, 'Quelle'), quelle)),
+    h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: speichern }, 'Übernehmen')),
+    ergebnis);
 }
 
 // ---- Aussehen: Vereinsfarbe und Logo (Programm und Rechnung)
@@ -3982,6 +4131,86 @@ function anfangsbestandHinweis(k, pruefMode) {
     } }, `Anfangsbestand auf ${eur(vj)} setzen`));
 }
 
+// ---- Kassenprüfung: Status-Karte im Kassenbericht und geführter Dialog
+
+function pruefungKarte() {
+  const jahr = S.kasseYear;
+  if (!S.pruefung || S.pruefung.jahr !== jahr) {
+    if (!S.pruefungLaedt) {
+      S.pruefungLaedt = true;
+      api('GET', `/api/admin/kassenpruefung?year=${jahr}`).then((d) => { S.pruefung = d; }).catch(() => { S.pruefung = { jahr, fehler: true }; })
+        .finally(() => { S.pruefungLaedt = false; render(); });
+    }
+    return null;
+  }
+  const d = S.pruefung;
+  if (d.fehler) return null;
+  const erledigt = d.punkte.filter((p) => d.pruefung.punkte[p.key]).length;
+  const status = d.pruefung.ergebnis === 'ohne' ? ['ok', 'ohne Beanstandungen abgeschlossen'] : d.pruefung.ergebnis === 'mit' ? ['warn', 'mit Beanstandungen abgeschlossen']
+    : erledigt ? ['neu', `${erledigt} von ${d.punkte.length} Punkten geprüft`] : ['', 'noch nicht begonnen'];
+  return h('div', { class: 'card pruef-karte' },
+    h('div', null, h('b', null, `Kassenprüfung ${jahr}`), ' ', h('span', { class: 'badge ' + status[0] }, status[1]),
+      h('div', { class: 'hint' }, 'Geführte Prüfung: Kontostand abgleichen, Belege und Stichprobe prüfen – am Ende steht der Bericht für die Mitgliederversammlung.')),
+    h('div', { class: 'spacer' }),
+    h('button', { class: 'btn primary', onclick: pruefungDialog }, erledigt || d.pruefung.ergebnis ? 'Prüfung fortsetzen' : 'Prüfung beginnen'),
+    h('button', { class: 'btn', onclick: () => pdfDrucken({ url: `/api/admin/kassenpruefung/bericht?year=${jahr}`, oeffnenUrl: `/api/admin/kassenpruefung/bericht/oeffnen?year=${jahr}`, titel: 'Prüfbericht', meldung: () => 'Der Prüfbericht wurde im PDF-Programm geöffnet.' }) }, 'Prüfbericht'));
+}
+
+async function pruefungDialog() {
+  let d = S.pruefung;
+  const p = d.pruefung;
+  const f = {
+    datum: h('input', { type: 'date', value: p.datum || todayIso() }),
+    pruefer: h('input', { type: 'text', maxlength: 200, value: p.pruefer || '', placeholder: 'z. B. Uwe Brandt, Karin Vogel' }),
+    konto: h('input', { type: 'text', inputmode: 'decimal', value: p.kontostand != null ? numIn(p.kontostand) : '', placeholder: 'laut Kontoauszug' }),
+    bar: h('input', { type: 'text', inputmode: 'decimal', value: p.barkasse != null ? numIn(p.barkasse) : '', placeholder: 'falls vorhanden' }),
+    fest: h('textarea', { rows: 3, maxlength: 3000, class: 'rs-eingabe', placeholder: 'z. B. Beleg für die Reparatur vom 12.05. fehlt, wird nachgereicht.' }),
+    ergebnis: h('select', null, [['', 'Prüfung noch offen'], ['ohne', 'Ohne Beanstandungen'], ['mit', 'Mit Beanstandungen']].map(([v, t]) => h('option', { value: v, selected: (p.ergebnis || '') === v }, t))),
+    entl: h('input', { type: 'checkbox', checked: !!p.entlastung }),
+  };
+  f.fest.value = p.feststellungen || '';
+  const haken = Object.fromEntries(d.punkte.map((x) => [x.key, h('input', { type: 'checkbox', checked: !!p.punkte[x.key] })]));
+  const punkte = h('ul', { class: 'haken-liste pruef-punkte' });
+  const stich = h('div');
+  const zeichne = () => {
+    punkte.replaceChildren(...d.punkte.map((x) => h('li', null, h('label', null, haken[x.key], ' ', h('b', null, x.text)),
+      h('div', { class: 'hint' + (x.warnung ? ' warn-text' : '') }, x.hinweis))));
+    stich.replaceChildren(
+      h('div', { class: 'toolbar' }, h('b', null, 'Stichprobe'), h('div', { class: 'spacer' }),
+        h('button', { class: 'btn small', disabled: !d.ausgaben, onclick: async () => {
+          try { d = await api('POST', `/api/admin/kassenpruefung/stichprobe?year=${d.jahr}`); S.pruefung = d; zeichne(); } catch (e) { handleErr(e); }
+        } }, d.stichprobe.length ? 'Neu ziehen' : 'Stichprobe ziehen')),
+      d.stichprobe.length ? h('table', { class: 'data' }, h('tbody', null, d.stichprobe.map((x) => h('tr', null, h('td', null, deDate(x.datum)), h('td', null, x.beschreibung), h('td', { class: 'r' }, eur(x.betrag)),
+        h('td', null, x.belege && x.belege.length ? h('a', { href: `/api/admin/beleg/${x.id}?year=${d.jahr}&idx=0`, target: '_blank' }, 'Beleg ansehen') : h('span', { class: 'badge warn' }, 'kein Beleg')),
+        h('td', null, h('label', null, h('input', { type: 'checkbox', checked: x.geprueft, onchange: async (e) => {
+          try { await api('PUT', `/api/admin/ausgaben/${x.id}/geprueft?year=${d.jahr}`, { geprueft: e.target.checked }); d = await api('GET', `/api/admin/kassenpruefung?year=${d.jahr}`); S.pruefung = d; S.kasse = null; zeichne(); }
+          catch (err) { handleErr(err); }
+        } }), ' geprüft')))))) : h('p', { class: 'hint' }, 'Das Programm wählt die drei größten Ausgaben und zufällig weitere aus (etwa jede zehnte, mindestens fünf). Diese vergleicht ihr mit den Belegen.'));
+  };
+  zeichne();
+  const fld = (label, el) => h('div', { class: 'field' }, h('label', null, label), el);
+  const speichern = async () => {
+    const zahl = (el) => (el.value.trim() === '' ? null : parseNum(el.value));
+    const konto = zahl(f.konto); const bar = zahl(f.bar);
+    if (Number.isNaN(konto) || Number.isNaN(bar)) { toast('Bitte Kontostand und Barkasse als Zahl eintragen.', 'err'); return false; }
+    try {
+      S.pruefung = await api('PUT', `/api/admin/kassenpruefung?year=${d.jahr}`, { datum: f.datum.value, pruefer: f.pruefer.value, kontostand: konto, barkasse: bar,
+        punkte: Object.fromEntries(Object.entries(haken).map(([k, el]) => [k, el.checked])), feststellungen: f.fest.value, ergebnis: f.ergebnis.value, entlastung: f.entl.checked });
+    } catch (e) { handleErr(e); return false; }
+    return true;
+  };
+  const ok = await breiterDialog(`Kassenprüfung ${d.jahr}`, h('div', null,
+    h('div', { class: 'form' }, fld('Tag der Prüfung', f.datum), fld('Kassenprüfer', f.pruefer), fld('Kontostand 31.12. in €', f.konto), fld('Barkasse in €', f.bar)),
+    h('p', { class: 'hint' }, `Kassenbestand laut Programm: ${eur(d.kassenbestand)}. Nach dem Speichern zeigt das Programm die Differenz.`),
+    h('h4', null, 'Prüfpunkte'), punkte, stich,
+    h('h4', null, 'Ergebnis'),
+    h('div', { class: 'form' }, h('div', { class: 'field wide' }, h('label', null, 'Feststellungen'), f.fest), fld('Ergebnis', f.ergebnis),
+      h('div', { class: 'field' }, h('label', null, ' '), h('label', null, f.entl, ' Entlastung des Vorstands empfehlen')))),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: speichern }]);
+  if (ok) { S.aufgaben = null; toast('Kassenprüfung gespeichert', 'ok'); }
+  render();
+}
+
 function adminKassenbericht(pruefMode) {
   const st = S.state;
   if (S.kasseYear == null) S.kasseYear = st.currentYear;
@@ -4093,6 +4322,7 @@ function adminKassenbericht(pruefMode) {
         pruefMode ? null : h('button', { class: 'btn small primary', onclick: saveAnfang }, 'Speichern'),
         pruefMode ? null : h('span', { class: 'hint' }, 'wird beim Jahreswechsel automatisch aus dem Kassenbestand des Vorjahres übernommen, ist hier aber jederzeit änderbar'))),
     cards,
+    pruefungKarte(),
     h('h3', null, 'Sonstige Ausgaben der Vereinskasse'),
     h('div', { class: 'card' },
       h('div', { class: 'toolbar' },
@@ -4738,13 +4968,12 @@ const maengelschreibenDrucken = (nr) => pdfDrucken({
 function mangelDialog(m, gartennr) {
   const isNew = !m || !m.id;
   const cur = { gartennr: gartennr || '', datum: todayIso(), art: 'Pflege und Unkraut', beschreibung: '', frist: '', erledigtAm: '', ...(m || {}) };
-  const frist14 = () => { const d = new Date(); d.setDate(d.getDate() + 14); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const f = {
     gartennr: h('input', { type: 'text', value: cur.gartennr, maxlength: 20, style: 'width:6em', placeholder: 'z. B. 12' }),
     datum: h('input', { type: 'date', value: cur.datum }),
     art: h('select', null, MANGEL_ARTEN.map((a) => h('option', { value: a, selected: a === cur.art }, a))),
     beschreibung: h('textarea', { rows: 3, maxlength: 300, style: 'width:100%', placeholder: 'Was ist zu beseitigen? z. B. Hecke zur Wegseite höher als 1,25 m, bitte zurückschneiden' }, cur.beschreibung),
-    frist: h('input', { type: 'date', value: cur.frist || (isNew ? frist14() : '') }),
+    frist: h('input', { type: 'date', value: cur.frist || (isNew ? isoInTagen(14) : '') }),
     erledigt: h('input', { type: 'date', value: cur.erledigtAm }),
   };
   const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
@@ -4821,6 +5050,65 @@ function nutzungKarte() {
         h('td', null, h('button', { class: 'btn small', onclick: () => schaetzen(z) }, 'Schätzen'))))))));
 }
 
+// Begehung durchführen: Garten für Garten Mängel ankreuzen und die Nutzung schätzen, gespeichert wird beim Weitergehen.
+async function begehungDurchfuehren() {
+  let nutzung;
+  try { nutzung = await api('GET', '/api/admin/nutzung'); } catch (e) { handleErr(e); return; }
+  if (!nutzung.length) { toast('Es gibt noch keine Gärten mit Pächtern.', 'err'); return; }
+  const offen = (S.maengel || []).filter((m) => !m.erledigtAm);
+  let i = 0, gespeichert = 0;
+  const datum = todayIso();
+  const frist = isoInTagen(14);
+  const box = h('div');
+  const zeichne = () => {
+    const z = nutzung[i];
+    const alt = offen.filter((m) => m.gartennr === z.gartennr);
+    const arten = MANGEL_ARTEN.map((a) => ({ art: a, cb: h('input', { type: 'checkbox' }), text: h('input', { type: 'text', maxlength: 300, placeholder: 'Was ist zu tun?', style: 'display:none;width:100%' }) }));
+    arten.forEach((a) => a.cb.addEventListener('change', () => { a.text.style.display = a.cb.checked ? '' : 'none'; if (a.cb.checked) a.text.focus(); }));
+    const zahl = (v) => h('input', { type: 'text', inputmode: 'decimal', value: v == null ? '' : String(v), style: 'width:5em' });
+    const l = z.letzte;
+    const nf = { anbau: zahl(l ? l.anbau : ''), erholung: zahl(l ? l.erholung : ''), bebauung: zahl(l ? l.bebauung : '') };
+    const speichern = async () => {
+      try {
+        for (const a of arten.filter((x) => x.cb.checked)) {
+          await api('POST', '/api/admin/maengel', { gartennr: z.gartennr, datum, art: a.art, beschreibung: a.text.value.trim() || a.art, frist, erledigtAm: '' });
+          gespeichert++;
+        }
+        const w = Object.fromEntries(Object.entries(nf).map(([k, el]) => [k, el.value.trim() === '' ? null : parseNum(el.value)]));
+        if (Object.values(w).some((v) => Number.isNaN(v))) { toast('Bitte die Nutzung in Prozent als Zahl eintragen.', 'err'); return false; }
+        const geaendert = !l ? Object.values(w).some((v) => v != null) : ['anbau', 'erholung', 'bebauung'].some((k) => (w[k] ?? 0) !== l[k]);
+        if (geaendert) await api('POST', '/api/admin/nutzung', { gartennr: z.gartennr, datum, anbau: w.anbau ?? 0, erholung: w.erholung ?? 0, bebauung: w.bebauung ?? 0, notiz: '' });
+      } catch (e) { handleErr(e); return false; }
+      return true;
+    };
+    const gehe = async (schritt, sichern) => {
+      if (sichern && !(await speichern())) return;
+      i = Math.min(nutzung.length - 1, Math.max(0, i + schritt));
+      zeichne();
+    };
+    const letzter = i === nutzung.length - 1;
+    box.replaceChildren(
+      h('div', { class: 'begehung-kopf' }, h('span', { class: 'big' }, `Garten ${z.gartennr}`), h('span', null, z.name), h('span', { class: 'hint' }, `${i + 1} von ${nutzung.length}`)),
+      alt.length ? h('div', { class: 'banner warn', style: 'margin-top:8px' }, 'Noch offen: ', alt.map((m) => `${m.art} – ${m.beschreibung}${m.frist ? ` (Frist ${deDate(m.frist)})` : ''}`).join(' · ')) : null,
+      h('h4', null, 'Neue Mängel'),
+      h('div', { class: 'begehung-maengel' }, arten.map((a) => h('div', null, h('label', null, a.cb, ' ', a.art), a.text))),
+      h('h4', null, 'Nutzung in % (Drittelregelung)'),
+      h('div', { class: 'toolbar' }, h('label', null, 'Anbau ', nf.anbau), h('label', null, 'Erholung ', nf.erholung), h('label', null, 'Bebauung ', nf.bebauung),
+        l ? h('span', { class: 'hint' }, `zuletzt ${deDate(l.datum)}`) : null),
+      h('div', { class: 'toolbar', style: 'margin-top:14px' },
+        h('button', { class: 'btn', disabled: i === 0, onclick: () => gehe(-1, false) }, '← Zurück'),
+        h('div', { class: 'spacer' }),
+        h('button', { class: 'btn primary', onclick: async () => { if (letzter) { if (await speichern()) { box.replaceChildren(h('p', null, h('b', null, 'Begehung abgeschlossen.'), ` ${gespeichert} Mängel eingetragen.`)); } } else gehe(1, true); } },
+          letzter ? 'Speichern und abschließen' : 'Speichern und weiter →')),
+      h('p', { class: 'hint' }, `Neue Mängel bekommen die Frist ${deDate(frist)}. Ohne Häkchen und ohne Änderung wird nichts gespeichert.`));
+  };
+  zeichne();
+  await breiterDialog(`Begehung am ${deDate(datum)}`, box, [{ label: 'Beenden', value: true }]);
+  if (gespeichert) toast(`${gespeichert} Mängel eingetragen`, 'ok');
+  S.maengel = null; S.nutzung = null; S.aufgaben = null;
+  render();
+}
+
 function adminMaengel() {
   if (S.maengel == null) {
     if (!S.maengelLoading) loadMaengel();
@@ -4856,6 +5144,7 @@ function adminMaengel() {
     h('div', { class: 'toolbar' },
       h('button', { class: 'btn primary', onclick: () => neu('') }, '+ Mangel eintragen'),
       h('button', { class: 'btn', onclick: begehungslisteDrucken }, 'Begehungsliste drucken'),
+      h('button', { class: 'btn', onclick: begehungDurchfuehren, title: 'Garten für Garten durchgehen und Mängel und Nutzung gleich eintragen, z. B. mit dem Laptop beim Rundgang' }, 'Begehung durchführen'),
       h('div', { class: 'spacer' }),
       h('span', { class: 'stat' }, `${offen.length} offen · ${erledigt.length} erledigt`)),
     garten.length ? garten.map(([nr, l]) => h('div', { class: 'card mangel-garten' },
@@ -5417,7 +5706,9 @@ function cockpitKarte(st, istAdmin) {
     if (art === 'admin') adminTabWaehlen(wohin); else S.tab = wohin;
     if (wohin === 'inventar') S.invSeite = unter || 'schluessel';
     if (wohin === 'verwaltung') S.verwSeite = unter || 'beschluesse';
+    if (wohin === 'kassenbericht') S.kasseNurOhneBeleg = unter === 'ohnebeleg';
     render();
+    if (unter === 'eichung') eichungDialog();
   };
   if (!S.aufgaben.length) {
     return h('div', { class: 'card cockpit cockpit-leer' }, h('span', { class: 'cockpit-ico ok' }, icon('fertig', 20)),

@@ -686,9 +686,15 @@ func (a *App) handleAblesung(w http.ResponseWriter, r *http.Request) {
 	}
 	// Bei einem Zählerwechsel wandert die neue Nummer automatisch in die Stammdaten.
 	if in.WasserWechsel != nil && in.WasserWechsel.NeueNr != "" {
+		if pa.WasserzaehlerNr != in.WasserWechsel.NeueNr {
+			pa.WasserEichjahr = time.Now().Year() // neuer Zähler: frisch geeicht
+		}
 		pa.WasserzaehlerNr = in.WasserWechsel.NeueNr
 	}
 	if in.StromWechsel != nil && in.StromWechsel.NeueNr != "" {
+		if pa.StromzaehlerNr != in.StromWechsel.NeueNr {
+			pa.StromEichjahr = time.Now().Year()
+		}
 		pa.StromzaehlerNr = in.StromWechsel.NeueNr
 	}
 	j := a.st.ensureYear(year)
@@ -767,6 +773,12 @@ func cleanPaechter(p Paechter) (Paechter, error) {
 	p.WasserzaehlerNr = trim(p.WasserzaehlerNr, 40)
 	p.StromzaehlerNr = trim(p.StromzaehlerNr, 40)
 	p.Notiz = trim(p.Notiz, 300)
+	if j := time.Now().Year() + 1; p.WasserEichjahr < 1950 || p.WasserEichjahr > j {
+		p.WasserEichjahr = 0
+	}
+	if j := time.Now().Year() + 1; p.StromEichjahr < 1950 || p.StromEichjahr > j {
+		p.StromEichjahr = 0
+	}
 	if p.Mitgliedsnr == "" {
 		return p, bad("Bitte eine Mitgliedsnummer eintragen")
 	}
@@ -849,6 +861,7 @@ func (a *App) handlePaechterUpdate(w http.ResponseWriter, r *http.Request) {
 			alt := a.st.d.Paechter[i]
 			in.ID = id
 			in.AusgeschiedenAm = alt.AusgeschiedenAm // wird nur über den Pächterwechsel gesetzt
+			in.WasserEichjahr, in.StromEichjahr = alt.WasserEichjahr, alt.StromEichjahr
 			a.st.d.Paechter[i] = in
 			a.st.gartenWechsel(id, alt.Gartennr, in.Gartennr, in.Mitgliedsnr, in.Name)
 			if alt.Gartengroesse != in.Gartengroesse {
@@ -1704,6 +1717,23 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/admin/beschluesse/{id}", a.admin(a.handleBeschlussLoeschen))
 	mux.HandleFunc("GET /api/admin/beschlussbuch", a.admin(a.pdfAnzeigen(a.beschlussbuchPDF)))
 	mux.HandleFunc("POST /api/admin/beschlussbuch/oeffnen", a.admin(a.pdfOeffnen(a.beschlussbuchPDF)))
+	mux.HandleFunc("GET /api/admin/eichung", a.admin(a.handleEichung))
+	mux.HandleFunc("PUT /api/admin/eichung/fristen", a.admin(a.handleEichfristen))
+	mux.HandleFunc("PUT /api/admin/eichung/{id}", a.admin(a.handleEichjahr))
+	mux.HandleFunc("GET /api/admin/eichung/tauschliste", a.admin(a.pdfAnzeigen(a.tauschlistePDF)))
+	mux.HandleFunc("POST /api/admin/eichung/tauschliste/oeffnen", a.admin(a.pdfOeffnen(a.tauschlistePDF)))
+	mux.HandleFunc("GET /api/admin/kassenpruefung", a.adminOrPruef(a.handlePruefung))
+	mux.HandleFunc("PUT /api/admin/kassenpruefung", a.adminOrPruef(a.handlePruefungSpeichern))
+	mux.HandleFunc("POST /api/admin/kassenpruefung/stichprobe", a.adminOrPruef(a.handleStichprobe))
+	mux.HandleFunc("GET /api/admin/kassenpruefung/bericht", a.adminOrPruef(a.pdfAnzeigen(a.pruefberichtPDF)))
+	mux.HandleFunc("POST /api/admin/kassenpruefung/bericht/oeffnen", a.adminOrPruef(a.pdfOeffnen(a.pruefberichtPDF)))
+	mux.HandleFunc("GET /api/admin/aemter", a.admin(a.handleAemter))
+	mux.HandleFunc("POST /api/admin/aemter", a.admin(a.handleAmtSpeichern))
+	mux.HandleFunc("DELETE /api/admin/aemter/{id}", a.admin(a.handleAmtLoeschen))
+	mux.HandleFunc("POST /api/admin/aemter/{id}/wechsel", a.admin(a.handleAmtWechsel))
+	mux.HandleFunc("PUT /api/admin/aemter/{id}/checkliste", a.admin(a.handleAmtCheckliste))
+	mux.HandleFunc("GET /api/admin/pachtgrenze", a.admin(a.handlePachtgrenze))
+	mux.HandleFunc("PUT /api/admin/pachtgrenze", a.admin(a.handlePachtgrenze))
 	mux.HandleFunc("GET /api/admin/vertraege", a.admin(a.handleVertraege))
 	mux.HandleFunc("POST /api/admin/vertraege", a.admin(a.handleVertragSpeichern))
 	mux.HandleFunc("DELETE /api/admin/vertraege/{id}", a.admin(a.handleVertragLoeschen))

@@ -17,7 +17,7 @@ import (
 func (s *Store) datenbestandLeer() bool {
 	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 || len(s.d.Einsatzstunden) > 0 || len(s.d.Spenden) > 0 || len(s.d.Vorauszahlungen) > 0 ||
 		len(s.d.Rundschreiben) > 0 || len(s.d.Schluessel) > 0 || len(s.d.Geraete) > 0 ||
-		len(s.d.Kuendigungen) > 0 || len(s.d.Beschluesse) > 0 || len(s.d.Vertraege) > 0 || len(s.d.Haushalt) > 0 || s.d.LageKarte.Bild != "" || len(s.d.LageKarte.Objekte) > 0 {
+		len(s.d.Kuendigungen) > 0 || len(s.d.Beschluesse) > 0 || len(s.d.Vertraege) > 0 || len(s.d.Haushalt) > 0 || len(s.d.Aemter) > 0 || len(s.d.Kassenpruefungen) > 0 || s.d.Pachtgrenze.ErwerbsobstbauJeQm > 0 || s.d.LageKarte.Bild != "" || len(s.d.LageKarte.Objekte) > 0 {
 		return false
 	}
 	for _, j := range s.d.Jahre {
@@ -79,6 +79,8 @@ func (s *Store) ladeBeispieldaten() {
 			ID: id, Mitgliedsnr: fmt.Sprintf("%d-%02d", i+1, (heute.Year()-x.jahreDabei)%100), Gartennr: fmt.Sprint(i + 1), Anrede: x.anrede, Name: x.name,
 			Strasse: x.strasse, PLZOrt: set.Ort, Versand: versand, Gartengroesse: x.groesse,
 			WasserzaehlerNr: fmt.Sprintf("W-%04d", 1001+i), StromzaehlerNr: fmt.Sprintf("S-%04d", 2001+i),
+			// Eichjahre gestaffelt: zwei Wasserzähler müssen dieses Jahr getauscht werden
+			WasserEichjahr: heute.Year() - 6 + i%6, StromEichjahr: heute.Year() - 2 - i%5,
 		}
 		if !x.post {
 			p.Email = fmt.Sprintf("garten%d@example.org", i+1)
@@ -241,6 +243,14 @@ func (s *Store) ladeBeispieldaten() {
 		{ID: newID(), Art: "Strom", Bezeichnung: "Stromliefervertrag Anlage", Partner: "Stadtwerke Musterstadt", Beginn: vorTagen(-640), Ende: heute.AddDate(0, 3, 20).Format("2006-01-02"), FristMonate: 3, Verlaengert: 12, Kosten: 38, Turnus: "monatlich"},
 		{ID: newID(), Art: "Pacht (Zwischenpacht)", Bezeichnung: "Zwischenpachtvertrag mit dem Verband", Partner: "Verband der Gartenfreunde", Beginn: "1998-04-01"},
 	}
+	s.d.Aemter = []Amt{
+		{ID: newID(), Amt: "Vorsitz", Name: "Helga Sommer", Seit: fmt.Sprintf("%d-03-14", jahr-2), Bis: heute.AddDate(0, 3, 0).Format("2006-01-02")},
+		{ID: newID(), Amt: "Kassenwart/in", Name: "Jens Köhler", Seit: fmt.Sprintf("%d-03-14", jahr-6), Bis: fmt.Sprintf("%d-03-14", jahr-2), Ehemalig: true},
+		{ID: newID(), Amt: "Kassenwart/in", Name: "Petra Lindner", Seit: fmt.Sprintf("%d-03-14", jahr-2), Bis: fmt.Sprintf("%d-03-14", jahr+2),
+			Checkliste: map[string]string{"protokoll": fmt.Sprintf("%d-03-14", jahr-2), "bank": fmt.Sprintf("%d-03-20", jahr-2), "schluessel": fmt.Sprintf("%d-03-14", jahr-2), "zugaenge": fmt.Sprintf("%d-03-14", jahr-2), "unterlagen": fmt.Sprintf("%d-04-02", jahr-2), "verband": fmt.Sprintf("%d-04-02", jahr-2), "register": fmt.Sprintf("%d-05-10", jahr-2)}},
+		{ID: newID(), Amt: "Kassenprüfer/in", Name: "Uwe Brandt", Seit: fmt.Sprintf("%d-03-14", jahr-1), Bis: fmt.Sprintf("%d-03-14", jahr+3)},
+	}
+	s.d.Pachtgrenze = Pachtgrenze{ErwerbsobstbauJeQm: 0.035, Quelle: "Gutachterausschuss (Beispielwert)"}
 	s.d.Haushalt = map[string]Haushaltsplan{fmt.Sprint(jahr): {
 		Einnahmen: map[string]float64{"Pacht": 220, "Mitgliedsbeiträge und Umlage": 1050, "Wasser und Strom": 1600, "Spenden": 100},
 		Ausgaben:  map[string]float64{"Instandhaltung": 300, "Anschaffung": 200, "Verwaltung": 60, "Versicherung & Gebühren": 250},
