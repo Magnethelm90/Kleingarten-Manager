@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kleingarten-Manager – das Vereinsbüro für Kleingartenvereine</title>
+<meta name="description" content="Kostenloses Programm für Kleingartenvereine: Zählerstände, Jahresrechnungen mit QR-Code, Zahlungen, Kasse, Lageplan, Kündigungen und mehr. Für Windows und macOS, ohne Cloud und ohne Anmeldung.">
+<meta property="og:title" content="Kleingarten-Manager">
+<meta property="og:description" content="Das Vereinsbüro für euren Kleingartenverein – kostenlos, ohne Cloud, ohne Anmeldung.">
+<meta property="og:image" content="bilder/garten.webp">
+<link rel="icon" href="bilder/laube.webp">
+<style>
+  :root {
+    --gruen: #2f6f3e; --gruen-dunkel: #1f4d2b; --gruen-hell: #e8f2e3; --gruen-zart: #f4f9f1; --linie: #dfe8da;
+    --text: #1d2a20; --grau: #5b6a5e; --karte: #ffffff; --grund: #fbfdf9; --schatten: 0 10px 30px rgba(20, 45, 25, .08);
+    --rund: 18px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --gruen: #6fbf7f; --gruen-dunkel: #a6dcb0; --gruen-hell: #1d2f22; --gruen-zart: #16231a; --linie: #2a3b2e;
+      --text: #e8f0e9; --grau: #a7b6aa; --karte: #18231b; --grund: #111a13; --schatten: 0 10px 30px rgba(0, 0, 0, .35); }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); background: var(--grund); }
+  a { color: var(--gruen); }
+  img { max-width: 100%; height: auto; display: block; }
+  .breit { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
+
+  header.kopf { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(10px); background: color-mix(in srgb, var(--grund) 82%, transparent); border-bottom: 1px solid var(--linie); }
+  header.kopf .breit { display: flex; align-items: center; gap: 18px; height: 62px; }
+  .marke { display: flex; align-items: center; gap: 10px; font-weight: 750; text-decoration: none; color: var(--text); }
+  .marke img { width: 34px; height: 34px; object-fit: contain; }
+  nav.links { margin-left: auto; display: flex; gap: 20px; }
+  nav.links a { color: var(--grau); text-decoration: none; font-weight: 550; font-size: 15px; }
+  nav.links a:hover { color: var(--text); }
+  @media (max-width: 760px) { nav.links { display: none; } }
+
+  .knopf { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 12px; font-weight: 650; text-decoration: none;
+    background: var(--gruen); color: #fff; box-shadow: 0 8px 20px rgba(47, 111, 62, .28); transition: transform .15s, box-shadow .15s; }
+  .knopf:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(47, 111, 62, .32); }
+  .knopf.zart { background: var(--karte); color: var(--text); box-shadow: inset 0 0 0 1px var(--linie); }
+  @media (prefers-color-scheme: dark) { .knopf { color: #0f1a12; } }
+  .klein { padding: 9px 16px; font-size: 14px; }
+
+  .held { padding: 56px 0 30px; background: radial-gradient(ellipse at 75% 40%, var(--gruen-hell), transparent 60%); }
+  .held .breit { display: grid; grid-template-columns: 1fr 1.05fr; gap: 30px; align-items: center; }
+  .marke-klein { display: inline-block; font-size: 13px; font-weight: 650; color: var(--gruen); background: var(--gruen-hell); padding: 5px 12px; border-radius: 99px; }
+  h1 { font-size: clamp(34px, 5vw, 54px); line-height: 1.08; letter-spacing: -1px; margin: 16px 0 16px; }
+  h1 em { font-style: normal; color: var(--gruen); }
+  .held p.unter { font-size: 18.5px; color: var(--grau); max-width: 520px; margin: 0 0 26px; }
+  .held .aktionen { display: flex; gap: 12px; flex-wrap: wrap; }
+  .held .fakten { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 22px; color: var(--grau); font-size: 14.5px; }
+  .held .fakten span::before { content: "✓ "; color: var(--gruen); font-weight: 800; }
+  .held-bild img { filter: drop-shadow(0 28px 40px rgba(30, 60, 30, .22)); animation: schweben 7s ease-in-out infinite; }
+  @keyframes schweben { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  @media (max-width: 860px) { .held .breit { grid-template-columns: 1fr; } .held-bild { order: -1; max-width: 520px; margin: 0 auto; } }
+
+  section { padding: 70px 0; }
+  .titel { text-align: center; max-width: 720px; margin: 0 auto 38px; }
+  .titel h2 { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -.5px; margin: 0 0 10px; line-height: 1.15; }
+  .titel p { color: var(--grau); margin: 0; font-size: 17px; }
+
+  .fenster { border-radius: 16px; overflow: hidden; background: var(--karte); box-shadow: 0 30px 70px rgba(20, 45, 25, .18); border: 1px solid var(--linie); }
+  .fenster .leiste { height: 34px; display: flex; align-items: center; gap: 7px; padding: 0 14px; background: var(--gruen-zart); border-bottom: 1px solid var(--linie); }
+  .fenster .leiste i { width: 11px; height: 11px; border-radius: 50%; background: #e6e9e3; }
+  .fenster .leiste i:nth-child(1) { background: #f2836b; } .fenster .leiste i:nth-child(2) { background: #f4c45a; } .fenster .leiste i:nth-child(3) { background: #7fc27f; }
+
+  .schritte { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .schritt { background: var(--karte); border: 1px solid var(--linie); border-radius: var(--rund); padding: 22px; box-shadow: var(--schatten); }
+  .schritt img { height: 150px; width: 100%; object-fit: contain; margin-bottom: 10px; filter: drop-shadow(0 12px 16px rgba(30, 60, 30, .16)); }
+  .schritt b { display: block; font-size: 19px; margin-bottom: 6px; }
+  .schritt span.nr { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--gruen); color: #fff; font-weight: 750; font-size: 14px; margin-right: 8px; }
+  .schritt p { color: var(--grau); margin: 0; }
+  @media (max-width: 860px) { .schritte { grid-template-columns: 1fr; } }
+
+  .gitter { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .merkmal { background: var(--karte); border: 1px solid var(--linie); border-radius: 16px; padding: 20px 20px 18px; transition: transform .2s, box-shadow .2s; }
+  .merkmal:hover { transform: translateY(-2px); box-shadow: var(--schatten); }
+  .merkmal .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--gruen-hell); color: var(--gruen); margin-bottom: 12px; }
+  .merkmal .ico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .merkmal b { display: block; margin-bottom: 4px; }
+  .merkmal p { margin: 0; color: var(--grau); font-size: 15px; }
+  @media (max-width: 960px) { .gitter { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 620px) { .gitter { grid-template-columns: 1fr; } }
+
+  .reiter { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 18px; }
+  .reiter button { border: 1px solid var(--linie); background: var(--karte); color: var(--grau); padding: 8px 15px; border-radius: 99px; font: inherit; font-weight: 600; font-size: 14.5px; cursor: pointer; }
+  .reiter button.an { background: var(--gruen); color: #fff; border-color: var(--gruen); }
+  .galerie { position: relative; }
+  .galerie img { width: 100%; transition: opacity .35s; }
+  .galerie figcaption { text-align: center; color: var(--grau); margin-top: 12px; font-size: 15px; }
+
+  .vertrauen { background: var(--gruen-zart); border-top: 1px solid var(--linie); border-bottom: 1px solid var(--linie); }
+  .vertrauen .breit { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+  .vertrauen ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+  .vertrauen li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; }
+  .vertrauen li::before { content: "✓"; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--gruen); color: #fff; font-weight: 800; font-size: 14px; }
+  .vertrauen li span { color: var(--grau); }
+  @media (max-width: 860px) { .vertrauen .breit { grid-template-columns: 1fr; } }
+
+  details { background: var(--karte); border: 1px solid var(--linie); border-radius: 14px; padding: 14px 18px; margin-bottom: 10px; }
+  summary { cursor: pointer; font-weight: 650; }
+  details p { color: var(--grau); margin: 10px 0 2px; }
+  .faq { max-width: 780px; margin: 0 auto; }
+
+  .schluss { text-align: center; }
+  .schluss img { width: 170px; margin: 0 auto 10px; filter: drop-shadow(0 16px 20px rgba(30, 60, 30, .2)); }
+  footer { border-top: 1px solid var(--linie); padding: 26px 0 40px; color: var(--grau); font-size: 14px; }
+  footer .breit { display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; }
+
+  /* sanftes Erscheinen beim Scrollen */
+  .erscheint { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s cubic-bezier(.2, .7, .2, 1); }
+  .erscheint.sichtbar { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .erscheint { opacity: 1; transform: none; transition: none; }
+    .held-bild img { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="kopf">
+  <div class="breit">
+    <a class="marke" href="#"><img src="bilder/laube.webp" alt="">Kleingarten-Manager</a>
+    <nav class="links"><a href="#so-gehts">So geht's</a><a href="#funktionen">Funktionen</a><a href="#ansehen">Ansehen</a><a href="#fragen">Fragen</a></nav>
+    <a class="knopf klein" href="https://github.com/Magnethelm90/Kleingarten-Manager/releases/latest">Download</a>
+  </div>
+</header>
+
+<main>
+<div class="held">
+  <div class="breit">
+    <div>
+      <span class="marke-klein">Kostenlos · Windows und macOS</span>
+      <h1>Das Vereinsbüro für euren <em>Kleingartenverein</em>.</h1>
+      <p class="unter">Pächter einmal anlegen, jedes Jahr nur noch die Zählerstände eintragen – die Rechnungen kommen fertig heraus. Dazu Kasse, Lageplan, Kündigungen und alles, was ein Vorstand sonst in Ordnern sucht.</p>
+      <div class="aktionen">
+        <a class="knopf" href="https://github.com/Magnethelm90/Kleingarten-Manager/releases/latest">⬇ Kostenlos herunterladen</a>
+        <a class="knopf zart" href="#ansehen">Ansehen</a>
+      </div>
+      <div class="fakten"><span>ohne Anmeldung</span><span>ohne Cloud</span><span>ohne Installation</span></div>
+    </div>
+    <div class="held-bild"><img src="bilder/garten.webp" width="1200" height="830" alt="Kleingarten mit Laube, Beeten, Obstbaum und Zaun"></div>
+  </div>
+</div>
+
+<section id="so-gehts">
+  <div class="breit">
+    <div class="titel erscheint"><h2>In drei Schritten zur Jahresabrechnung</h2><p>Was früher ein Wochenende mit Excel war, ist jetzt ein Nachmittag.</p></div>
+    <div class="schritte">
+      <div class="schritt erscheint"><img src="bilder/laube.webp" alt=""><b><span class="nr">1</span>Einmal einrichten</b><p>Verein, Preise und Pächter eintragen – oder die Pächterliste aus Excel übernehmen. Das bleibt für alle Folgejahre.</p></div>
+      <div class="schritt erscheint"><img src="bilder/beet.webp" alt=""><b><span class="nr">2</span>Zählerstände eintragen</b><p>Gartennummer tippen, Wasser und Strom eingeben. Vorjahresstände kennt das Programm, gerechnet wird automatisch.</p></div>
+      <div class="schritt erscheint"><img src="bilder/kanne.webp" alt=""><b><span class="nr">3</span>Rechnungen verschicken</b><p>Alle Rechnungen mit einem Klick als PDF, mit QR-Code zum Bezahlen – per Post oder vorbereitet für die E-Mail.</p></div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:10px">
+  <div class="breit erscheint">
+    <div class="titel"><h2>Die ganze Anlage auf einen Blick</h2><p>Der Lageplan zeigt jeden Garten an seinem Platz – auf Wunsch als 3D-Modell zum Drehen. Die Farbe verrät den Abrechnungsstand.</p></div>
+    <div class="fenster"><div class="leiste"><i></i><i></i><i></i></div><img src="bilder/lageplan-3d-animation.webp" width="760" height="373" alt="Der Lageplan als 3D-Modell" loading="lazy" style="width:100%"></div>
+  </div>
+</section>
+
+<section id="funktionen">
+  <div class="breit">
+    <div class="titel erscheint"><h2>Alles, was ein Vorstand braucht</h2><p>Gemacht mit Vorständen und Kassenwarten – für die Arbeit, die wirklich anfällt.</p></div>
+    <div class="gitter">
+      <div class="merkmal erscheint"><div class="ico"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M9.5 12h6M9.5 16h6"/></svg></div><b>Rechnungen mit QR-Code</b><p>PDF je Pächter mit GiroCode für die Banking-App, Postversand in einer Datei, E-Mail vorbereitet.</p></div>
+      <div class="merkmal erscheint"><div class="ico"><svg viewBox="0 0 24 24"><path d="M17 6.5A6.5 6.5 0 1 0 17 17.5"/><path d="M5 10.5h8M5 13.5h8"/></svg></div><b>Zahlungen & Kontoauszug</b><p>Bezahlt abhaken oder die CSV aus dem Online-Banking einlesen – das Programm ordnet zu. Mahnungen auf Knopfdruck.</p></div>
+      <div class="merkmal erscheint"><div class="ico"><svg viewBox="0 0 24 24"><path d="M4 7h16v12H4z"/><path d="M4 11h16M8 15h3"/></svg></div><b>Kasse & Haushaltsplan</b><p>Kassenbericht mit Belegen, Kassenprüfer-Zugang, Haushaltsplan mit Plan und Ist, Jahresbericht für die Versammlung.</p></div>
+      <div class="merkmal erscheint"><div class="ico"><svg viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg></div><b>Lageplan</b><p>Gärten wie auf dem Gelände, mit Parzellen-Umrissen, Leitungen und Einrichtungen – als Aushang oder in 3D.</p></div>
+      <div class="merkmal erscheint"><div class="ico"><svg viewBox="0 0 24 24"><path d="M5 21V4h9v17"/><path d="M14 4l5 2v15"/><path d="M3 21h18"/></svg></div><b>Pächterwechsel & Kündigung</b><p>Frist prüfen, Bestätigung drucken, Wertermittlung, Schlussrechnung und Übergabeprotokoll – Schritt für Schritt.</p></div>
+      <div class="merkmal erscheint"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/><path d="M8 12.5l2.7 2.7L16 9.8"/></svg></div><b>Was steht an?</b><p>Die Übersicht meldet von selbst: Ablesung, Versammlung, offene Zahlungen, Kündigungstermine, Wasserschwund.</p></div>
+      <div class="merkmal erscheint"><div class="ico"><svg viewBox="0 0 24 24"><path d="M3 6h18v12H3z"/><path d="M3 7l9 6 9-6"/></svg></div><b>Rundschreiben</b><p>An alle oder ausgewählte Pächter – per E-Mail (Bcc) und als Serienbrief für alle ohne E-Mail.</p></div>
+      <div class="merkmal erscheint"><div class="ico"><svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10V19H3z"/><path d="M3 11h18"/></svg></div><b>Gartenakte & Verträge</b><p>Dokumente je Garten, Pachtvertrag zum Unterschreiben, Beschlussbuch, Vereinsverträge mit Kündigungsfristen.</p></div>
+      <div class="merkmal erscheint"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div><b>Sicher & datenschutzfreundlich</b><p>Automatische Sicherungen, Passwortschutz, DSGVO-Auskunft und Löschfristen – alles auf dem eigenen Rechner.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="ansehen" style="padding-top:20px">
+  <div class="breit erscheint">
+    <div class="titel"><h2>So sieht es aus</h2><p>Klar, ruhig und gut lesbar – auch für alle, die nicht jeden Tag am Computer sitzen.</p></div>
+    <div class="reiter" role="tablist"></div>
+    <figure class="galerie fenster" style="margin:0"><div class="leiste"><i></i><i></i><i></i></div><img id="galerie-bild" src="bilder/uebersicht.png" width="1280" height="800" alt=""></figure>
+    <figcaption class="galerie" id="galerie-text" style="text-align:center;color:var(--grau);margin-top:12px"></figcaption>
+  </div>
+</section>
+
+<section class="vertrauen">
+  <div class="breit">
+    <div class="erscheint">
+      <h2 style="font-size:clamp(26px,3.4vw,34px);letter-spacing:-.5px;margin:0 0 12px">Eure Daten bleiben im Verein.</h2>
+      <p style="color:var(--grau);font-size:17px;margin:0">Der Kleingarten-Manager läuft auf eurem Rechner. Es gibt kein Konto, keine Cloud und keine Übertragung von Mitgliederdaten – nur auf Knopfdruck fragt er bei GitHub, ob es eine neue Version gibt.</p>
+    </div>
+    <ul class="erscheint">
+      <li><div><b>Keine Anmeldung, kein Abo</b><br><span>Herunterladen, doppelklicken, loslegen.</span></div></li>
+      <li><div><b>Automatische Sicherungen</b><br><span>Bei jeder Änderung, vor heiklen Schritten und vor jedem Jahreswechsel – mit Wiederherstellen per Klick.</span></div></li>
+      <li><div><b>DSGVO-Hilfen eingebaut</b><br><span>Auskunft je Person, endgültiges Löschen auch aus Sicherungen, Bereinigung nach Aufbewahrungsfrist.</span></div></li>
+      <li><div><b>Amtsübergabe leicht gemacht</b><br><span>Die Vereinsakte packt alles für den Nachfolger in eine Datei – mit Lies-mich-zuerst.</span></div></li>
+    </ul>
+  </div>
+</section>
+
+<section id="fragen">
+  <div class="breit">
+    <div class="titel erscheint"><h2>Häufige Fragen</h2></div>
+    <div class="faq erscheint">
+      <details><summary>Was kostet das Programm?</summary><p>Nichts. Der Kleingarten-Manager ist kostenlos, ohne Abo und ohne versteckte Kosten.</p></details>
+      <details><summary>Läuft es auf meinem Rechner?</summary><p>Auf Windows 10 und 11 als einzelne .exe-Datei ohne Installation, auf macOS als App für den Programme-Ordner.</p></details>
+      <details><summary>Können mehrere Vorstandsmitglieder damit arbeiten?</summary><p>Ja – liegt der Datenordner auf einem USB-Stick oder Netzlaufwerk, sorgt eine Sperre dafür, dass nie zwei Rechner gleichzeitig ändern.</p></details>
+      <details><summary>Kann ich es erst ausprobieren?</summary><p>Ja. Auf Knopfdruck lädt das Programm einen erfundenen Beispielverein, den du mit einem Klick wieder entfernst.</p></details>
+      <details><summary>Wie kommen unsere bisherigen Daten hinein?</summary><p>Die Pächterliste lässt sich aus Excel oder einer CSV-Datei übernehmen. Zählerstände des Vorjahres werden dabei mitgenommen.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="schluss">
+  <div class="breit erscheint">
+    <img src="bilder/sonne.webp" alt="">
+    <h2 style="font-size:clamp(26px,3.4vw,36px);letter-spacing:-.5px;margin:0 0 10px">Bereit für die nächste Abrechnung?</h2>
+    <p style="color:var(--grau);margin:0 0 22px">Kostenlos für Windows und macOS.</p>
+    <a class="knopf" href="https://github.com/Magnethelm90/Kleingarten-Manager/releases/latest">⬇ Kleingarten-Manager herunterladen</a>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="breit">
+    <span>Kleingarten-Manager · <a href="https://github.com/Magnethelm90/Kleingarten-Manager">Quellcode auf GitHub</a></span>
+    <span>Alle Namen und Zahlen in den Bildern sind erfunden.</span>
+  </div>
+</footer>
+
+<script>
+  // Bildergalerie mit Reitern
+  const BILDER = [
+    ['uebersicht', 'Übersicht', 'Begrüßung, Jahresfortschritt und was gerade ansteht'],
+    ['zaehlerstaende', 'Zählerstände', 'Nummer eintippen, nur die neuen Stände eingeben'],
+    ['rechnungen', 'Rechnungen', 'Prüfen und mit einem Klick für alle ausstellen'],
+    ['zahlungen', 'Zahlungen', 'Bezahlt abhaken, offene Posten und Mahnungen'],
+    ['kuendigungen', 'Kündigungen', 'Frist prüfen und Schritt für Schritt bis zur Übergabe'],
+    ['haushalt', 'Haushaltsplan', 'Plan und Ist je Posten auf einen Blick'],
+    ['lageplan-3d', 'Lageplan 3D', 'Die Anlage als Modell zum Drehen und Zoomen'],
+    ['einfuehrung', 'Einführung', 'Beim ersten Start: fünf Bilder, dann ein kurzer Rundgang'],
+  ];
+  const reiter = document.querySelector('.reiter'), bild = document.getElementById('galerie-bild'), text = document.getElementById('galerie-text');
+  BILDER.forEach(([datei, name, beschreibung], i) => {
+    const b = document.createElement('button');
+    b.textContent = name; b.setAttribute('role', 'tab');
+    b.addEventListener('click', () => {
+      reiter.querySelectorAll('button').forEach((x) => x.classList.toggle('an', x === b));
+      bild.style.opacity = '0';
+      setTimeout(() => { bild.src = `bilder/${datei}.png`; bild.alt = beschreibung; text.textContent = beschreibung; bild.onload = () => { bild.style.opacity = '1'; }; }, 180);
+    });
+    if (i === 0) { b.classList.add('an'); text.textContent = beschreibung; bild.alt = beschreibung; }
+    reiter.append(b);
+  });
+  // sanftes Erscheinen beim Scrollen
+  const io = 'IntersectionObserver' in window ? new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('sichtbar'); io.unobserve(e.target); } }), { threshold: 0.12 }) : null;
+  document.querySelectorAll('.erscheint').forEach((el) => (io ? io.observe(el) : el.classList.add('sichtbar')));
+</script>
+</body>
+</html>

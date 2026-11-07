@@ -1,28 +1,44 @@
-# Kleingarten-Manager
+<p align="center">
+  <img src="docs/bilder/garten.webp" width="620" alt="Kleingarten mit Laube, Beeten, Obstbaum und Zaun – 3D-Illustration">
+</p>
 
-**Die Jahresabrechnung für euren Kleingartenverein.** Pächter einmal anlegen, jedes Jahr nur noch die
-Zählerstände eintragen – die Rechnungen kommen fertig als PDF heraus, mit QR-Code zum Bezahlen.
+<h1 align="center">Kleingarten-Manager</h1>
 
-### [⬇ Zum Download (Windows und macOS)](https://github.com/Magnethelm90/Kleingarten-Manager/releases/latest)
+<p align="center">
+  <b>Das Vereinsbüro für euren Kleingartenverein.</b><br>
+  Pächter einmal anlegen, jedes Jahr nur noch die Zählerstände eintragen – die Rechnungen kommen fertig als PDF
+  heraus, mit QR-Code zum Bezahlen. Dazu Kasse, Lageplan, Kündigungen, Rundschreiben und alles, was ein Vorstand
+  sonst in Ordnern und Tabellen sucht.
+</p>
+
+<h3 align="center"><a href="https://github.com/Magnethelm90/Kleingarten-Manager/releases/latest">⬇ Zum Download (Windows und macOS)</a></h3>
 
 - **Kostenlos**, ohne Anmeldung und ohne Abo
 - **Keine Installation:** eine Datei herunterladen und doppelklicken
 - **Eure Daten bleiben bei euch:** alles liegt auf dem eigenen Rechner, nichts wird ins Internet gesendet
 - **Für Vorstand und Kassenwart gemacht:** Zählerstände, Rechnungen, Zahlungen, Mahnungen, Kassenbericht,
-  Pächterwechsel, Warteliste, Gartenakte, Termine und die Jahresmeldung an den Verband
-- **Mit Einführung:** beim ersten Start zeigt ein kurzer Rundgang, was wohin gehört
+  Haushaltsplan, Pächterwechsel, Kündigungen, Warteliste, Gartenakte, Termine und die Jahresmeldung an den Verband
+- **Sagt selbst, was ansteht:** Fristen, offene Zahlungen, Kündigungstermine, Wasserschwund – die Übersicht meldet sich
+- **Mit Einführung:** beim ersten Start eine kurze Bildergeschichte und ein Rundgang durchs Programm
 - **Erst ausprobieren:** auf Knopfdruck mit einem erfundenen Beispielverein, der sich danach mit einem Klick wieder entfernen lässt
 
 ## So sieht es aus
 
-![Übersicht mit Begrüßung, Jahresfortschritt, Terminen und Kennzahlen](docs/bilder/uebersicht.png)
+![Übersicht mit Begrüßung, Jahresfortschritt und dem, was gerade ansteht](docs/bilder/uebersicht.png)
+
+<p align="center">
+  <img src="docs/bilder/lageplan-3d-animation.webp" width="760" alt="Der Lageplan als 3D-Modell: drehen, zoomen, Gärten anklicken">
+  <br><sub><b>Der Lageplan in 3D</b> – die Anlage zum Drehen und Zoomen, jeder Garten in der Farbe seines Abrechnungsstands</sub>
+</p>
 
 | | |
 | --- | --- |
 | ![Einführung beim ersten Start](docs/bilder/einfuehrung.png) | ![Zählerstände eintragen](docs/bilder/zaehlerstaende.png) |
-| **Einführung** beim ersten Start – fünf kurze Schritte | **Zählerstände:** Nummer eintippen, nur die neuen Stände eingeben |
+| **Einführung** beim ersten Start – fünf Bilder, dann der Rundgang | **Zählerstände:** Nummer eintippen, nur die neuen Stände eingeben |
 | ![Rechnungen prüfen und ausstellen](docs/bilder/rechnungen.png) | ![Zahlungen verfolgen](docs/bilder/zahlungen.png) |
 | **Rechnungen** prüfen und mit einem Klick für alle ausstellen | **Zahlungen** abhaken, offene Posten und Mahnungen |
+| ![Kündigung mit Fahrplan](docs/bilder/kuendigungen.png) | ![Haushaltsplan mit Plan und Ist](docs/bilder/haushalt.png) |
+| **Kündigungen:** Frist prüfen, Bestätigung drucken, Schritt für Schritt zur Übergabe | **Haushaltsplan:** Plan und Ist je Posten, auf einen Blick |
 | ![Gartenakte mit Dokumenten und Wertermittlung](docs/bilder/gartenakte.png) | ![Berichte und Jahresmeldung](docs/bilder/berichte.png) |
 | **Gartenakte:** Dokumente, Fotos, Wertermittlung und Verlauf je Garten | **Berichte & Meldungen:** Jahresbericht, Jahresmeldung für den Verband, Aushänge |
 | ![Pächter verwalten](docs/bilder/paechter.png) | ![Beispielrechnung](docs/bilder/rechnung-beispiel.png) |
@@ -87,7 +103,8 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Pächter** anlegen oder aus einer Excel-/CSV-Liste übernehmen, mit Kontakt, Gartengröße, Zählern und interner
   Notiz; gelöschte Pächter kommen erst in den Papierkorb
 - **Lageplan:** die Gärten so angeordnet, wie sie auf dem Gelände liegen, farbig nach Abrechnungsstand; freie
-  Gärten gestrichelt, mit einem Klick an jemanden von der Warteliste vergeben; als Aushang druckbar (ohne Namen)
+  Gärten gestrichelt, mit einem Klick an jemanden von der Warteliste vergeben; als Aushang druckbar (ohne Namen).
+  Auf Knopfdruck als **3D-Modell** der Anlage zum Drehen und Zoomen
 - **Plan als Hintergrund:** der eingescannte Vereinsplan oder ein Foto der Anlage unter dem Lageplan, mit
   einstellbarer Größe und Deckkraft. Darauf die **Umrisse der Parzellen** nachzeichnen (benachbarte Ecken rasten ein),
   **Wasser- und Stromleitungen**, Wege und **Einrichtungen** wie Hauptzähler, Absperrhähne, Schächte, Tor und

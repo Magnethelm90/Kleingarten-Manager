@@ -11,8 +11,11 @@ Wer das Programm nur nutzt, braucht nichts davon – die fertigen Dateien gibt e
 - **Oberfläche** in `web/` (HTML, CSS, JavaScript ohne Framework), wird ins Programm eingebettet und in einem eigenen
   Fenster angezeigt (Windows: WebView2, macOS: WebKit, Paket `webview/webview_go`).
 - Der eingebaute Webserver lauscht nur auf `127.0.0.1`.
-- Die Gartenillustration in `web/bilder/garten.webp` ist mit Blender gerendert; das Skript dazu liegt in
-  `docs/blender/garten.py`.
+- Die Illustrationen in `web/bilder/` (Garten, Laube, Gießkanne, Beet, Baum, Sonnenblumen) sind mit Blender
+  gerendert; das Skript dazu liegt in `docs/blender/szene.py`.
+- Der 3D-Lageplan (`web/lageplan3d.js`) nutzt three.js 0.170 (MIT-Lizenz), das unverändert unter
+  `web/vendor/three/` liegt; nur der Import in `OrbitControls.js` zeigt auf die lokale Datei. Es wird nichts aus
+  dem Internet geladen.
 
 ## Bauen
 

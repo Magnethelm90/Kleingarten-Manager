@@ -71,8 +71,12 @@ const ICONS = {
 };
 
 // Leerer Zustand: Symbol, kurze Überschrift, Erklärung und – wo sinnvoll – der Knopf zum nächsten Schritt.
+// Illustrationen (3D-Renderings aus Blender, siehe docs/blender) für leere Seiten, je nach Thema
+const ILLU = { personen: 'laube', karte: 'laube', kuendigung: 'laube', schluessel: 'laube', kalender: 'sonne', stern: 'sonne',
+  rechnung: 'kanne', euro: 'kanne', kasse: 'kanne', werkzeug: 'kanne', zaehler: 'kanne', warnung: 'beet', brief: 'baum', akte: 'baum', warteliste: 'baum' };
 function leer(ic, titel, text, knopf, onclick) {
-  return h('div', { class: 'leer' }, h('span', { class: 'leer-ico' }, icon(ic, 30)), h('b', null, titel), h('p', null, text),
+  const bild = ILLU[ic] ? h('img', { class: 'leer-bild', src: `/bilder/${ILLU[ic]}.webp`, alt: '', onerror: (e) => e.target.replaceWith(h('span', { class: 'leer-ico' }, icon(ic, 30))) }) : null;
+  return h('div', { class: 'leer' }, bild || h('span', { class: 'leer-ico' }, icon(ic, 30)), h('b', null, titel), h('p', null, text),
     knopf ? h('button', { class: 'btn primary', onclick }, knopf) : null);
 }
 function icon(name, size) {
@@ -357,7 +361,7 @@ function render() {
 
   if (!S.tourAutoChecked && istVollAdmin) {
     S.tourAutoChecked = true;
-    if (!st.tutorialGesehen) S.tour = { i: 0 };
+    if (!st.tutorialGesehen) setTimeout(geschichteZeigen, 60);
   }
 
   app.append(
@@ -367,7 +371,7 @@ function render() {
       h('div', { class: 'spacer' }),
       globalSearchBox(st),
       h('div', null, h('label', null, 'Jahr'), yearSel),
-      h('button', { class: 'quit help', 'data-tour': 'hilfe', onclick: () => tourGo(0), title: 'Hilfe: kurze Einführung, was wohin gehört', 'aria-label': 'Hilfe' }, '?'),
+      h('button', { class: 'quit help', 'data-tour': 'hilfe', onclick: () => geschichteZeigen(), title: 'Hilfe: kurze Einführung, was wohin gehört', 'aria-label': 'Hilfe' }, '?'),
       h('button', { class: 'quit', onclick: quitApp, title: 'Programm beenden' }, 'Beenden'),
     ),
     h('div', { class: 'shell' },
@@ -388,8 +392,51 @@ function render() {
   const tour = tourCard();
   if (tour) app.append(tour);
   tourMark();
+  // neue Seite: sanft einblenden und Kennzahlen hochzählen (nicht bei jedem Neuaufbau derselben Seite)
+  const ansicht = S.tab === 'admin' ? 'admin/' + S.adminTab : S.tab;
+  if (ansicht !== S.letzteAnsicht) {
+    S.letzteAnsicht = ansicht;
+    const main = app.querySelector('main');
+    if (main && !bewegungReduziert()) { main.classList.add('ansicht-neu'); zahlenAnimieren(main); }
+  }
   const kopf = app.querySelector('header.top');
   if (kopf) document.documentElement.style.setProperty('--kopf', kopf.offsetHeight + 'px');
+}
+
+// ------------------------------------------------------------------ Bewegung (dezent, abschaltbar über das System)
+
+const bewegungReduziert = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Zahlen in Kennzahl-Karten zählen beim Öffnen der Seite kurz hoch (ganze Zahlen und Euro-Beträge).
+function zahlenAnimieren(root) {
+  const els = root.querySelectorAll('.card.stat .big, .hero-fakt b');
+  for (const el of els) {
+    const t = el.textContent.trim();
+    let ziel, fmt;
+    if (/^\d{1,6}$/.test(t)) { ziel = Number(t); fmt = (v) => String(Math.round(v)); }
+    else if (/^-?[\d.]+,\d{2} €$/.test(t)) { ziel = parseNum(t.replace(' €', '')); fmt = (v) => eur(Math.round(v * 100) / 100); }
+    else continue;
+    if (!ziel || Number.isNaN(ziel)) continue;
+    const start = performance.now(), dauer = 700;
+    const schritt = (jetzt) => {
+      if (!el.isConnected) return;
+      const x = Math.min(1, (jetzt - start) / dauer), e = 1 - Math.pow(1 - x, 3);
+      el.textContent = x < 1 ? fmt(ziel * e) : t;
+      if (x < 1) requestAnimationFrame(schritt);
+    };
+    el.textContent = fmt(0);
+    requestAnimationFrame(schritt);
+  }
+}
+
+// Erfolgsmoment: kleine, ruhige Bestätigung mit gezeichnetem Haken (z. B. wenn alle Rechnungen bezahlt sind).
+function erfolgsHinweis(titel, text) {
+  const haken = svgEl('svg', { viewBox: '0 0 52 52', class: 'erfolg-haken', 'aria-hidden': 'true' },
+    svgEl('circle', { cx: 26, cy: 26, r: 23 }), svgEl('path', { d: 'M15 27l7 7 15-16' }));
+  const el = h('div', { class: 'erfolg', role: 'status' }, haken, h('div', null, h('b', null, titel), h('span', null, text)),
+    h('button', { class: 'erfolg-zu', 'aria-label': 'Schließen', onclick: () => el.remove() }, '✕'));
+  document.body.append(el);
+  setTimeout(() => { el.classList.add('weg'); setTimeout(() => el.remove(), 400); }, 7000);
 }
 
 // ------------------------------------------------------------------ Einführungsrundgang
@@ -416,6 +463,57 @@ const TOUR = [
     text: 'Am Jahresende schließt »Jahreswechsel« das Jahr ab, mit Checkliste. Deine Daten werden automatisch gesichert; unter »Passwort« schützt du die Verwaltung. Das Suchfeld oben findet jeden Pächter, und diese Einführung erreichst du jederzeit über den runden »?«-Knopf oben rechts.',
     ziel: 'hilfe', gehe: () => { adminTabWaehlen('jahreswechsel'); } },
 ];
+
+// Willkommen: fünf Bilder mit kurzem Text, danach auf Wunsch der Rundgang durchs Programm.
+const GESCHICHTE = [
+  { bild: 'garten', titel: 'Willkommen im Kleingarten-Manager', text: 'Das Vereinsbüro für euren Kleingartenverein: Abrechnung, Pächter, Kasse und alles drumherum. Alles liegt auf diesem Rechner – ohne Cloud, ohne Anmeldung.' },
+  { bild: 'beet', titel: 'Zählerstände in Minuten', text: 'Gartennummer eintippen, Wasser und Strom eingeben, fertig. Vorjahresstände kennt das Programm schon, gerechnet wird automatisch – auch Pacht, Beiträge und Stunden.' },
+  { bild: 'kanne', titel: 'Rechnungen, die bezahlt werden', text: 'Jede Rechnung als PDF mit QR-Code für die Banking-App, per Post oder E-Mail. Zahlungen hakst du ab oder liest sie aus dem Kontoauszug ein, Mahnungen gibt es auf Knopfdruck.' },
+  { bild: 'laube', titel: 'Der ganze Verein an einem Ort', text: 'Lageplan, Warteliste, Kündigungen, Termine, Rundschreiben, Beschlüsse und Verträge. Was gerade ansteht, sagt dir die Übersicht von selbst.' },
+  { bild: 'sonne', titel: 'Bereit?', text: 'Der kurze Rundgang zeigt dir in fünf Schritten, wo was ist. Oder du schaust dich selbst um – ausprobieren geht gefahrlos mit den Beispieldaten.' },
+];
+
+function geschichteZeigen() {
+  if (document.querySelector('.geschichte')) return;
+  S.tour = null; render();
+  let i = 0;
+  const dlg = h('dialog', { class: 'geschichte', 'aria-label': 'Willkommen' });
+  const buehne = h('div', { class: 'gs-buehne' });
+  const punkte = h('div', { class: 'gs-punkte' });
+  const zurueck = h('button', { class: 'btn' }, 'Zurück');
+  const weiter = h('button', { class: 'btn primary' });
+  const selbst = h('button', { class: 'btn' }, 'Selbst umschauen');
+  const ende = (rundgang) => { dlg.close(); dlg.remove(); if (rundgang) tourGo(1); else tourEnd(); };
+  const zeigen = (neu, richtung) => {
+    i = neu;
+    const g = GESCHICHTE[i];
+    const folie = h('div', { class: 'gs-folie' + (richtung ? ' rein-' + richtung : '') },
+      h('div', { class: 'gs-bild' }, h('img', { src: `/bilder/${g.bild}.webp`, alt: '' })),
+      h('div', { class: 'gs-text' }, h('span', { class: 'gs-schritt' }, `${i + 1} von ${GESCHICHTE.length}`), h('h2', null, g.titel), h('p', null, g.text)));
+    const alt = buehne.firstChild;
+    if (alt && richtung && !bewegungReduziert()) { alt.classList.add('raus-' + richtung); setTimeout(() => alt.remove(), 320); } else if (alt) alt.remove();
+    buehne.append(folie);
+    punkte.replaceChildren(...GESCHICHTE.map((_, k) => h('button', { class: k === i ? 'an' : '', 'aria-label': `Bild ${k + 1}`, onclick: () => k !== i && zeigen(k, k > i ? 'rechts' : 'links') })));
+    zurueck.style.visibility = i ? 'visible' : 'hidden';
+    const letzte = i === GESCHICHTE.length - 1;
+    weiter.textContent = letzte ? 'Rundgang starten' : 'Weiter';
+    selbst.style.display = letzte ? '' : 'none';
+  };
+  zurueck.addEventListener('click', () => i > 0 && zeigen(i - 1, 'links'));
+  weiter.addEventListener('click', () => (i === GESCHICHTE.length - 1 ? ende(true) : zeigen(i + 1, 'rechts')));
+  selbst.addEventListener('click', () => ende(false));
+  dlg.addEventListener('cancel', (e) => { e.preventDefault(); ende(false); });
+  dlg.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' && i < GESCHICHTE.length - 1) zeigen(i + 1, 'rechts');
+    if (e.key === 'ArrowLeft' && i > 0) zeigen(i - 1, 'links');
+  });
+  dlg.append(h('button', { class: 'gs-zu', 'aria-label': 'Überspringen', title: 'Überspringen (Esc)', onclick: () => ende(false) }, 'Überspringen ✕'),
+    buehne, h('div', { class: 'gs-fuss' }, zurueck, punkte, h('div', { class: 'gs-knoepfe' }, selbst, weiter)));
+  document.body.append(dlg);
+  zeigen(0, null);
+  dlg.showModal();
+  weiter.focus();
+}
 
 async function tourGo(i) {
   S.tour = { i };
@@ -1395,6 +1493,20 @@ function viewLageplan() {
         : null);
   }
 
+  if (S.lage3d && !edit && list.length) {
+    const daten = {
+      gaerten: [...mitNr.filter((p) => pos[p.gartennr.trim()] || !hatKarte).map((p, i) => {
+        const nr = p.gartennr.trim(), q = pos[nr] || { x: 20 + (i % 8) * (LP_W + 20), y: 20 + Math.floor(i / 8) * (LP_H + 30) };
+        return { nr, name: istAdmin ? p.name : '', status: status.get(p.id), text: labels[status.get(p.id)], x: q.x, y: q.y, umriss: q.umriss || null };
+      }), ...freie.map((nr) => ({ nr, frei: true, status: 'frei', text: 'frei', x: pos[nr].x, y: pos[nr].y, umriss: pos[nr].umriss || null }))],
+      objekte: kb.objekte || [], leitungen: kb.leitungen || [],
+      bild: kb.bild ? { url: `/api/lageplan-bild?v=${encodeURIComponent(kb.bild)}`, w: kb.bildBreite * (kb.massstab || 1), h: kb.bildHoehe * (kb.massstab || 1), deckkraft: kb.deckkraft || 0.85 } : null,
+      dachfarbe: parseInt((getComputedStyle(document.documentElement).getPropertyValue('--green').trim() || '#2f6f3e').replace('#', ''), 16) || 0x2f6f3e,
+    };
+    kartenAnsicht = h('div', null, lageplan3dAnsicht(daten),
+      h('p', { class: 'hint', style: 'margin-top:8px' }, 'Ziehen dreht die Anlage, Mausrad zoomt, rechte Maustaste verschiebt. Ein Klick auf einen Garten öffnet ihn.'));
+  }
+
   let leiste = null;
   if (istAdmin && !st.readOnly && list.length) {
     leiste = edit
@@ -1414,15 +1526,18 @@ function viewLageplan() {
           } catch (e) { handleErr(e); }
         } }, 'Anordnung speichern')),
       werkzeugKasten()))
-      : h('button', { class: 'btn', onclick: () => { S.lageEntwurf = startEntwurf(mitNr, gespeichert); S.lageKarteEntwurf = startKarteEntwurf(); S.lageWerkzeug = null; render(); } },
+      : h('button', { class: 'btn', onclick: () => { S.lage3d = false; S.lageEntwurf = startEntwurf(mitNr, gespeichert); S.lageKarteEntwurf = startKarteEntwurf(); S.lageWerkzeug = null; render(); } },
         h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, icon('karte', 18), hatKarte || hatHintergrund ? 'Karte bearbeiten' : 'Gärten wie auf dem Gelände anordnen'));
   }
 
+  const umschalter = list.length && !edit ? h('div', { class: 'segment', role: 'group', 'aria-label': 'Ansicht' },
+    h('button', { class: S.lage3d ? '' : 'an', onclick: () => { S.lage3d = false; render(); } }, 'Plan'),
+    h('button', { class: S.lage3d ? 'an' : '', title: 'Die Anlage als 3D-Modell zum Drehen und Zoomen', onclick: () => { S.lage3d = true; render(); } }, '3D')) : null;
   const druck = list.length && !edit ? h('button', { class: 'btn', title: 'Lageplan als Aushang zum Ausdrucken (ohne Abrechnungsstand)', onclick: () => lageplanDrucken(istAdmin) },
     h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, icon('drucker', 18), 'Drucken')) : null;
   const wartende = st.wartelisteAnzahl || 0;
   return h('div', null,
-    h('div', { class: 'toolbar' }, h('h2', { style: 'margin:0' }, `Lageplan ${st.year}`), h('div', { class: 'spacer' }), druck, edit ? null : leiste),
+    h('div', { class: 'toolbar' }, h('h2', { style: 'margin:0' }, `Lageplan ${st.year}`), h('div', { class: 'spacer' }), umschalter, druck, edit || S.lage3d ? null : leiste),
     freie.length && !edit ? h('div', { class: 'banner info' },
       h('span', null, `${freie.length === 1 ? `Garten ${freie[0]} ist` : `${freie.length} Gärten sind`} frei. `,
         wartende ? `${wartende} Interessent${wartende === 1 ? '' : 'en'} auf der Warteliste.` : 'Die Warteliste ist leer.'),
@@ -1514,6 +1629,25 @@ function startEntwurf(mitNr, gespeichert) {
     mitNr.forEach((p, i) => { e[p.gartennr.trim()] = { x: 20 + (i % 8) * (LP_W + 20), y: 20 + Math.floor(i / 8) * (LP_H + 30) }; });
   }
   return e;
+}
+
+// 3D-Ansicht: ein Element, das bei jedem Neuaufbau der Seite wiederverwendet wird (die Szene bleibt erhalten).
+function lageplan3dAnsicht(daten) {
+  if (!S.lage3dZ) S.lage3dZ = { el: h('div', { class: 'lage3d' }, h('div', { class: 'lage3d-laden' }, '3D-Ansicht wird aufgebaut …')), api: null, schluessel: '' };
+  const z = S.lage3dZ, schluessel = JSON.stringify(daten);
+  const klick = (nr) => {
+    const p = S.state.paechter.find((x) => !x.ausgeschiedenAm && (x.gartennr || '').trim() === nr);
+    if (p) { S.tab = 'eingabe'; S.eingabeMode = 'schnell'; S.quickId = p.id; render(); return; }
+    if (!S.state.hasPassword || S.state.loggedIn) freienGartenVergeben(nr);
+  };
+  if (!z.api && !z.laedt) {
+    z.laedt = true;
+    import('/lageplan3d.js').then((m) => { z.api = m.erstelle(z.el, daten, { klick }); z.schluessel = schluessel; })
+      .catch(() => { z.el.textContent = 'Die 3D-Ansicht ließ sich nicht laden.'; })
+      .finally(() => { z.laedt = false; });
+  } else if (z.api && z.schluessel !== schluessel) { z.api.aktualisiere(daten); z.schluessel = schluessel; }
+  else if (z.api) z.api.weiter();
+  return z.el;
 }
 
 // ---- Karte unter dem Lageplan: Hintergrundbild, Umrisse, Leitungen und Einrichtungen
@@ -2008,6 +2142,13 @@ async function savePayment(e, patch) {
   // volle Zahlung: Betrag nicht separat führen
   if (e.bezahltBetrag != null && Math.round(e.bezahltBetrag * 100) === Math.round(payTotal(e) * 100)) e.bezahltBetrag = null;
   if (e.bezahltAm && payOpen(e) < -0.004) toast(`Hinweis: ${eur(-payOpen(e))} mehr als der Rechnungsbetrag eingetragen.`, 'ok');
+  // war das die letzte offene Rechnung des Jahres?
+  const st = S.state, forderungen = (st.archive || []).filter((x) => x.status === 'gueltig' && x.gesamt > 0);
+  S.erfolgGezeigt = S.erfolgGezeigt || {};
+  if (e.bezahltAm && forderungen.length >= 3 && !forderungen.some(payIsOpen) && !S.erfolgGezeigt[st.year]) {
+    S.erfolgGezeigt[st.year] = true;
+    erfolgsHinweis(`Alle Rechnungen ${st.year} sind bezahlt`, `${forderungen.length} Rechnungen, zusammen ${eur(forderungen.reduce((a, x) => a + payTotal(x), 0))}. Gute Arbeit!`);
+  }
 }
 
 async function paymentDialog(e) {
