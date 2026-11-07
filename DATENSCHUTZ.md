@@ -86,6 +86,10 @@ Empfängerlisten entfernt. E-Mails verschickt das eigene E-Mail-Programm, alle A
 Auskunft. Beim endgültigen Löschen der Person wird der Name überall durch „(gelöschte Person)“ ersetzt; ein noch
 ausgegebener Schlüssel bleibt so sichtbar, damit er nicht in Vergessenheit gerät.
 
+**Kündigungen und Pachtverträge:** Eine erfasste Kündigung (Datum, Grund, erledigte Schritte) steht in der
+Auskunft und wird beim endgültigen Löschen der Person entfernt. Ein in die Gartenakte gelegter Pachtvertrag gehört
+zur Person und wird mit ihr gelöscht. Beschlussbuch, Vereinsverträge und Haushaltsplan enthalten keine Pächterdaten.
+
 **Kontoauszug:** Die CSV-Datei aus dem Online-Banking wird nur im Arbeitsspeicher gelesen und nicht gespeichert;
 sie enthält auch Buchungen Dritter. Übernommen werden nur die bestätigten Zahlungsvermerke an den Rechnungen. Damit
 derselbe Auszug nicht zweimal gebucht wird, bleibt von jeder übernommenen Buchung ein gekürzter Prüfwert (Hash) ohne

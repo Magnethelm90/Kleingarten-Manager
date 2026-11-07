@@ -65,6 +65,7 @@ const ICONS = {
   waage: ['M12 4v16', 'M7 20h10', 'M5 7h14', 'M5 7l-3 6a3 3 0 0 0 6 0z', 'M19 7l-3 6a3 3 0 0 0 6 0z'],
   menue: ['M4 7h16', 'M4 12h16', 'M4 17h16'],
   brief: ['M3 6h18v12H3z', 'M3 7l9 6 9-6'],
+  kuendigung: ['M5 21V4h9v17', 'M14 4l5 2v15', 'M11 13h.01', 'M3 21h18'],
   werkzeug: ['M14.7 6.3a4 4 0 0 0 5 5L12 19a2.1 2.1 0 0 1-3-3z', 'M14.7 6.3L17 4l3 3-2.3 2.3'],
   drucker: ['M7 9V3h10v6', 'M5 9h14a2 2 0 0 1 2 2v6h-4', 'M7 17H3v-6a2 2 0 0 1 2-2', 'M7 14h10v7H7z'],
 };
@@ -272,12 +273,15 @@ const NAV = [
     { tab: 'lageplan', label: 'Lageplan', ic: 'karte' },
     { tab: 'termine', label: 'Termine', ic: 'kalender' },
     { admin: 'paechter', label: 'Pächter', ic: 'personen', tour: 'admin' },
+    { admin: 'kuendigungen', label: 'Kündigungen', ic: 'kuendigung' },
     { admin: 'warteliste', label: 'Warteliste', ic: 'warteliste' },
     { admin: 'maengel', label: 'Mängel', ic: 'warnung' },
     { admin: 'rundschreiben', label: 'Rundschreiben', ic: 'brief' },
-    { admin: 'inventar', label: 'Schlüssel & Geräte', ic: 'schluessel' }] },
+    { admin: 'inventar', label: 'Schlüssel & Geräte', ic: 'schluessel' },
+    { admin: 'verwaltung', label: 'Beschlüsse & Verträge', ic: 'akte' }] },
   { gruppe: 'Kasse & Berichte', items: [
     { admin: 'kassenbericht', label: 'Kassenbericht', ic: 'kasse' },
+    { admin: 'haushalt', label: 'Haushaltsplan', ic: 'waage' },
     { admin: 'spenden', label: 'Spenden', ic: 'stern' },
     { admin: 'vorauszahlung', label: 'Vorauszahlungen', ic: 'kalender' },
     { admin: 'sepa', label: 'Lastschrift', ic: 'euro', nur: (st) => st.sepaAktiv },
@@ -304,6 +308,9 @@ function adminTabWaehlen(id) {
   if (id === 'spenden') S.spenden = null;
   if (id === 'rundschreiben') S.rundschreiben = null;
   if (id === 'inventar') S.inventar = null;
+  if (id === 'kuendigungen') S.kuend = null;
+  if (id === 'verwaltung') S.verw = null;
+  if (id === 'haushalt') S.haushalt = null;
   if (id === 'sepa') { S.sepa = null; S.sepaVorschau = null; }
   if (id === 'vorauszahlung') S.vz = null;
   if (id === 'paechter') S.uebergaben = null;
@@ -2573,6 +2580,334 @@ function inventarGeraete() {
       : h('div', { class: 'card' }, leer('werkzeug', 'Noch keine Geräte', 'Häcksler, Rasenmäher, Leitern, Schubkarren … – mit Standort, Wartung und wer gerade was ausgeliehen hat.', '+ Gerät', () => nachher(geraetDialog(null)))));
 }
 
+// ------------------------------------------------------------------ Kündigungen
+
+async function loadKuendigungen() {
+  if (S.kuendLoading) return;
+  S.kuendLoading = true;
+  try { S.kuend = await api('GET', '/api/admin/kuendigungen'); } catch (e) { handleErr(e); S.kuend = { regel: { zum: '11-30', bis: '08-31' }, kuendigungen: [] }; }
+  S.kuendLoading = false;
+  render();
+}
+
+const mtText = (mt) => { const [m, d] = (mt || '').split('-').map(Number); return m && d ? `${d}.${m}.` : mt; };
+
+// frühestes Pachtende nach der Regel (wie KuendigungsRegel.fristgerecht in kuendigung.go)
+function fristgerecht(eingang, regel) {
+  if (!eingang) return '';
+  let y = Number(eingang.slice(0, 4));
+  if (eingang > `${y}-${regel.bis}`) y++;
+  let ende = `${y}-${regel.zum}`;
+  if (ende < eingang) ende = `${y + 1}-${regel.zum}`;
+  return ende;
+}
+
+async function kuendigungDialog(p, k) {
+  let regel = (S.kuend && S.kuend.regel) || null;
+  if (!regel) { try { regel = (await api('GET', '/api/admin/kuendigungen')).regel; } catch (e) { handleErr(e); return false; } }
+  const f = {
+    eingang: h('input', { type: 'date', value: k ? k.eingang : todayIso() }),
+    zum: h('input', { type: 'date', value: k ? k.zum : fristgerecht(todayIso(), regel) }),
+    von: h('select', null, [['paechter', 'vom Pächter'], ['verein', 'vom Verein'], ['einvernehmlich', 'im Einvernehmen']].map(([v, l]) => h('option', { value: v, selected: k ? k.von === v : v === 'paechter' }, l))),
+    grund: h('input', { type: 'text', maxlength: 200, value: k ? k.grund || '' : '', placeholder: 'z. B. Umzug, Alter' }),
+    notiz: h('input', { type: 'text', maxlength: 1000, value: k ? k.notiz || '' : '' }),
+  };
+  const frist = h('span', { class: 'fhint' });
+  const pruefe = () => {
+    const fg = fristgerecht(f.eingang.value, regel);
+    const zuFrueh = f.von.value === 'paechter' && f.zum.value && f.zum.value < fg;
+    frist.textContent = fg ? `Fristgerecht frühestens zum ${deDate(fg)} (Regel: Eingang bis ${mtText(regel.bis)}, Ende zum ${mtText(regel.zum)}).${zuFrueh ? ' Das gewählte Pachtende ist früher – geht nur im Einvernehmen.' : ''}` : '';
+    frist.classList.toggle('warn-text', !!zuFrueh);
+  };
+  f.eingang.addEventListener('change', () => { if (!k) f.zum.value = fristgerecht(f.eingang.value, regel); pruefe(); });
+  f.zum.addEventListener('change', pruefe); f.von.addEventListener('change', pruefe);
+  pruefe();
+  const fld = (label, el, wide, hint) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), el, hint || null);
+  return modal(k ? `Kündigung Garten ${k.gartennr}` : `Kündigung: ${p.name} (Garten ${p.gartennr})`, h('div', { class: 'form' },
+    fld('Eingang der Kündigung', f.eingang), fld('Kündigung', f.von), fld('Pachtende', f.zum, true, frist), fld('Grund', f.grund, true), fld('Notiz', f.notiz, true)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    try {
+      await api('POST', '/api/admin/kuendigungen', { id: k ? k.id : '', paechterId: k ? k.paechterId : p.id, eingang: f.eingang.value, zum: f.zum.value, von: f.von.value, grund: f.grund.value, notiz: f.notiz.value });
+      toast('Kündigung gespeichert – den Fahrplan findest du unter »Kündigungen«', 'ok'); S.kuend = null;
+    } catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+function adminKuendigungen() {
+  if (S.kuend == null) { loadKuendigungen(); return h('p', { class: 'hint' }, 'Wird geladen …'); }
+  const d = S.kuend;
+  const laufend = d.kuendigungen.filter((k) => !k.abgeschlossen), fertig = d.kuendigungen.filter((k) => k.abgeschlossen);
+  const neu = async () => {
+    const aktiv = S.state.paechter.filter((p) => !p.ausgeschiedenAm && p.gartennr && !laufend.some((k) => k.paechterId === p.id)).sort(cmpNr);
+    if (!aktiv.length) { toast('Es gibt keinen Pächter ohne laufende Kündigung.', 'err'); return; }
+    const wer = h('select', null, aktiv.map((p) => h('option', { value: p.id }, `Garten ${p.gartennr} – ${p.name}`)));
+    if (!(await modal('Wer kündigt?', h('div', { class: 'form' }, h('div', { class: 'field wide' }, h('label', null, 'Pächter'), wer)),
+      [{ label: 'Abbrechen', value: false }, { label: 'Weiter', cls: 'primary', value: true }]))) return;
+    if (await kuendigungDialog(aktiv.find((p) => p.id === wer.value))) { S.kuend = null; render(); }
+  };
+  const schritt = async (k, key, an) => {
+    try { await api('POST', `/api/admin/kuendigungen/${k.id}/schritt`, { schritt: key, erledigt: an }); S.kuend = null; render(); } catch (e) { handleErr(e); }
+  };
+  const bestaetigung = (k) => pdfDrucken({ url: `/api/admin/kuendigungen/${k.id}/bestaetigung`, oeffnenUrl: `/api/admin/kuendigungen/${k.id}/bestaetigung/oeffnen`,
+    titel: 'Kündigungsbestätigung', meldung: () => 'Die Bestätigung wurde im PDF-Programm geöffnet – dort drucken.' }).then(() => { S.kuend = null; render(); });
+  const karte = (k) => h('div', { class: 'card kd-karte' + (k.abgeschlossen ? ' kd-fertig' : '') },
+    h('div', { class: 'rs-kopf' },
+      h('div', null, h('b', null, `Garten ${k.gartennr} – ${k.name}`),
+        h('div', { class: 'hint' }, `Kündigung ${k.von === 'verein' ? 'durch den Verein' : k.von === 'einvernehmlich' ? 'im Einvernehmen' : 'durch den Pächter'} vom ${deDate(k.eingang)} zum ${deDate(k.zum)}${k.grund ? ' · ' + k.grund : ''}`),
+        k.zuFrueh ? h('div', { class: 'warn-text' }, `Fristgerecht wäre erst der ${deDate(k.fristgemaess)}.`) : null),
+      k.abgeschlossen ? h('span', { class: 'badge ok' }, `abgeschlossen ${deDate(k.abgeschlossen)}`) : h('span', { class: 'badge ' + (k.offen ? 'warn' : 'ok') }, k.offen ? `${k.offen} offen` : 'alles erledigt')),
+    k.abgeschlossen ? null : h('ul', { class: 'kd-schritte' }, k.schritte.map((x) => h('li', { class: x.erledigt ? 'erledigt' : '' },
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!x.erledigt, disabled: x.auto, onchange: (e) => schritt(k, x.key, e.target.checked) }),
+        h('span', null, x.titel, x.erledigt ? h('span', { class: 'hint' }, x.auto ? ' – vom Programm erkannt' : ` – ${deDate(x.erledigt)}`) : null)),
+      x.erledigt ? null : h('div', { class: 'hint kd-hilfe' }, x.hilfe)))),
+    h('div', { class: 'rs-knoepfe' },
+      k.abgeschlossen ? null : h('button', { class: 'btn small primary', onclick: () => bestaetigung(k) }, 'Bestätigung drucken'), ' ',
+      k.abgeschlossen ? null : h('button', { class: 'btn small', onclick: () => { adminTabWaehlen('warteliste'); render(); } }, 'Warteliste'), ' ',
+      k.abgeschlossen || !k.gartennr ? null : h('button', { class: 'btn small', onclick: () => gartenakteDialog(k.gartennr) }, 'Gartenakte / Wertermittlung'), ' ',
+      mehrMenue([
+        k.abgeschlossen ? null : { label: 'Bearbeiten', aktion: async () => { if (await kuendigungDialog(null, k)) { S.kuend = null; render(); } } },
+        { label: k.abgeschlossen ? 'Wieder öffnen' : 'Abschließen', aktion: () => schritt(k, 'abgeschlossen', !k.abgeschlossen) },
+        { label: 'Löschen (zurückgezogen)', gefahr: true, aktion: async () => {
+          if (!(await confirmBox(`Kündigung für Garten ${k.gartennr} löschen, z. B. weil sie zurückgezogen wurde?`, 'Löschen', true))) return;
+          try { await api('DELETE', `/api/admin/kuendigungen/${k.id}`); S.kuend = null; render(); } catch (e) { handleErr(e); }
+        } }])));
+  const zum = h('input', { type: 'text', value: d.regel.zum, maxlength: 5, style: 'width:5em', placeholder: 'MM-TT' });
+  const bis = h('input', { type: 'text', value: d.regel.bis, maxlength: 5, style: 'width:5em', placeholder: 'MM-TT' });
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Eine Kündigung erfassen, die Frist prüfen und Schritt für Schritt bis zur Übergabe abhaken. Wertermittlung, Schlüsselrückgabe und Pächterwechsel erkennt das Programm selbst; das Cockpit erinnert an alles, was noch offen ist.'),
+    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: neu }, '+ Kündigung erfassen')),
+    laufend.length ? h('div', { class: 'rs-liste' }, laufend.map(karte))
+      : h('div', { class: 'card' }, leer('kuendigung', 'Keine laufenden Kündigungen', 'Kündigt jemand, erfasse es hier oder beim Pächter unter »Mehr«. Dann gibt es Bestätigungsbrief und Fahrplan bis zur Übergabe.', '+ Kündigung erfassen', neu)),
+    fertig.length ? [h('h3', null, 'Abgeschlossen'), h('div', { class: 'rs-liste' }, fertig.map(karte))] : null,
+    h('h3', null, 'Kündigungsregel des Vereins'),
+    h('div', { class: 'card' }, h('div', { class: 'toolbar' },
+      h('span', null, 'Kündigung muss eingehen bis'), bis, h('span', null, 'zum Pachtende am'), zum, h('span', { class: 'hint' }, '(Monat-Tag, z. B. 08-31 und 11-30)'),
+      h('button', { class: 'btn small', onclick: async () => {
+        try { await api('PUT', '/api/admin/kuendigungen/regel', { zum: zum.value.trim(), bis: bis.value.trim() }); toast('Regel gespeichert', 'ok'); S.kuend = null; render(); } catch (e) { handleErr(e); }
+      } }, 'Speichern')),
+    h('p', { class: 'hint', style: 'margin:6px 0 0' }, 'Steht in eurem Pachtvertrag. Das Bundeskleingartengesetz sieht für Kündigungen durch den Verein den 30. November vor.')));
+}
+
+// ------------------------------------------------------------------ Pachtvertrag
+
+async function pachtvertragDialog(p) {
+  const beginn = h('input', { type: 'date' });
+  const text = h('textarea', { rows: 14, class: 'rs-eingabe' });
+  try { text.value = (await api('GET', '/api/admin/vertragsbestimmungen')).text; } catch (e) { handleErr(e); return; }
+  const q = () => `?paechter=${encodeURIComponent(p.id)}${beginn.value ? '&beginn=' + beginn.value : ''}`;
+  const speichereText = async () => { await api('PUT', '/api/admin/vertragsbestimmungen', { text: text.value }); };
+  const w = await breiterDialog(`Pachtvertrag Garten ${p.gartennr} – ${p.name}`, h('div', { class: 'form' },
+    h('div', { class: 'field' }, h('label', null, 'Pachtbeginn'), beginn, h('span', { class: 'fhint' }, 'leer = aus der Gartenhistorie')),
+    h('div', { class: 'field wide' }, h('label', null, 'Bestimmungen des Vereins'), text,
+      h('span', { class: 'fhint' }, 'Gilt für alle Verträge. Zeilen mit »§« werden Überschriften. Pächter, Garten, Pacht, Beiträge, Preise und Kündigungsfrist setzt das Programm selbst ein; der Lageplan kommt als Anlage dazu.'))),
+  [{ label: 'Abbrechen', value: '' }, { label: 'In die Gartenakte legen', value: 'akte' }, { label: 'Drucken', cls: 'primary', value: 'druck' }]);
+  if (!w) return;
+  try { await speichereText(); } catch (e) { handleErr(e); return; }
+  if (w === 'druck') await pdfDrucken({ url: `/api/admin/pachtvertrag${q()}`, oeffnenUrl: `/api/admin/pachtvertrag/oeffnen${q()}`, titel: 'Pachtvertrag', meldung: () => 'Der Pachtvertrag wurde im PDF-Programm geöffnet – dort zweimal drucken.' });
+  if (w === 'akte') { try { await api('POST', `/api/admin/pachtvertrag/ablegen${q()}`); toast(`Pachtvertrag in der Gartenakte von Garten ${p.gartennr} abgelegt`, 'ok'); } catch (e) { handleErr(e); } }
+}
+
+// ------------------------------------------------------------------ Beschlüsse und Verträge
+
+async function loadVerwaltung() {
+  if (S.verwLoading) return;
+  S.verwLoading = true;
+  try {
+    const [b, v] = await Promise.all([api('GET', '/api/admin/beschluesse'), api('GET', '/api/admin/vertraege')]);
+    S.verw = { beschluesse: b, vertraege: v.vertraege, arten: v.arten, jaehrlich: v.jaehrlich };
+  } catch (e) { handleErr(e); S.verw = { beschluesse: [], vertraege: [], arten: [], jaehrlich: 0 }; }
+  S.verwLoading = false;
+  render();
+}
+
+function adminVerwaltung() {
+  if (S.verw == null) { loadVerwaltung(); return h('p', { class: 'hint' }, 'Wird geladen …'); }
+  const vt = S.verwSeite === 'vertraege';
+  return h('div', null, h('div', { class: 'subtabs' },
+    h('button', { class: vt ? '' : 'active', onclick: () => { S.verwSeite = 'beschluesse'; render(); } }, `Beschlussbuch (${S.verw.beschluesse.length})`),
+    h('button', { class: vt ? 'active' : '', onclick: () => { S.verwSeite = 'vertraege'; render(); } }, `Verträge & Versicherungen (${S.verw.vertraege.length})`)),
+  vt ? verwaltungVertraege() : verwaltungBeschluesse());
+}
+
+async function beschlussDialog(b) {
+  const f = {
+    datum: h('input', { type: 'date', value: b ? b.datum : todayIso() }),
+    gremium: h('select', null, ['Mitgliederversammlung', 'Vorstand'].map((g) => h('option', { value: g, selected: b ? b.gremium === g : false }, g))),
+    nummer: h('input', { type: 'text', maxlength: 30, value: b ? b.nummer : '', placeholder: 'leer = automatisch' }),
+    titel: h('input', { type: 'text', maxlength: 200, value: b ? b.titel : '', placeholder: 'z. B. Wasserpreis ab 2027: 2,10 € je m³' }),
+    text: h('textarea', { rows: 4, maxlength: 5000, class: 'rs-eingabe' }),
+    ja: h('input', { type: 'number', min: 0, value: b && b.ja ? b.ja : '' }), nein: h('input', { type: 'number', min: 0, value: b && b.nein ? b.nein : '' }),
+    enth: h('input', { type: 'number', min: 0, value: b && b.enthaltung ? b.enthaltung : '' }),
+    ergebnis: h('select', null, ['angenommen', 'abgelehnt', 'zur Kenntnis'].map((g) => h('option', { value: g, selected: b ? b.ergebnis === g : false }, g))),
+    stich: h('input', { type: 'text', maxlength: 200, value: b ? b.stichworte || '' : '', placeholder: 'z. B. Wasser, Preise' }),
+  };
+  f.text.value = b ? b.text || '' : '';
+  const fld = (label, el, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), el);
+  return modal(b ? `Beschluss ${b.nummer}` : 'Neuer Beschluss', h('div', { class: 'form' },
+    fld('Datum', f.datum), fld('Gremium', f.gremium), fld('Beschluss *', f.titel, true), fld('Wortlaut / Erläuterung', f.text, true),
+    fld('Ja', f.ja), fld('Nein', f.nein), fld('Enthaltung', f.enth), fld('Ergebnis', f.ergebnis), fld('Nummer', f.nummer), fld('Stichworte', f.stich)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    const n = (el) => (el.value === '' ? 0 : Number(el.value));
+    try { await api('POST', '/api/admin/beschluesse', { id: b ? b.id : '', datum: f.datum.value, gremium: f.gremium.value, nummer: f.nummer.value, titel: f.titel.value, text: f.text.value,
+      ja: n(f.ja), nein: n(f.nein), enthaltung: n(f.enth), ergebnis: f.ergebnis.value, stichworte: f.stich.value }); }
+    catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+function verwaltungBeschluesse() {
+  const alle = S.verw.beschluesse;
+  const q = (S.beschlussSuche || '').trim().toLowerCase();
+  const l = alle.filter((b) => !q || [b.titel, b.text, b.stichworte, b.nummer, b.datum.slice(0, 4)].some((x) => (x || '').toLowerCase().includes(q)));
+  const nachher = async (p) => { if (await p) { S.verw = null; render(); } };
+  const suche = h('input', { type: 'search', placeholder: 'Suchen, z. B. Wasser oder 2024', value: S.beschlussSuche || '', style: 'width:260px',
+    oninput: (e) => { S.beschlussSuche = e.target.value; clearTimeout(S.beschlussTimer); S.beschlussTimer = setTimeout(() => { render(); const el = document.querySelector('.beschluss-suche'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 250); } });
+  suche.classList.add('beschluss-suche');
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Was Vorstand und Mitgliederversammlung wann beschlossen haben – mit Abstimmungsergebnis und Stichworten zum Wiederfinden. Die Nummer vergibt das Programm fortlaufend je Jahr (z. B. MV 2025/3).'),
+    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(beschlussDialog(null)) }, '+ Beschluss'), suche,
+      h('div', { class: 'spacer' }),
+      alle.length ? h('button', { class: 'btn', onclick: () => pdfDrucken({ url: '/api/admin/beschlussbuch', oeffnenUrl: '/api/admin/beschlussbuch/oeffnen', titel: 'Beschlussbuch', meldung: () => 'Das Beschlussbuch wurde im PDF-Programm geöffnet.' }) }, 'Beschlussbuch drucken') : null),
+    l.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['Nr.', 'Datum', 'Beschluss', 'Ergebnis', ''].map((t) => h('th', null, t)))),
+      h('tbody', null, l.map((b) => h('tr', null, h('td', null, b.nummer), h('td', null, deDate(b.datum), h('div', { class: 'hint' }, b.gremium)),
+        h('td', { class: 'wrap' }, h('b', null, b.titel), b.text ? h('div', { class: 'hint' }, b.text) : null, b.stichworte ? h('div', { class: 'hint' }, '🏷 ' + b.stichworte) : null),
+        h('td', null, h('span', { class: 'badge ' + (b.ergebnis === 'angenommen' ? 'ok' : b.ergebnis === 'abgelehnt' ? 'err' : 'neu') }, b.ergebnis),
+          b.ja + b.nein + b.enthaltung ? h('div', { class: 'hint' }, `${b.ja} : ${b.nein} : ${b.enthaltung}`) : null),
+        h('td', { class: 'aktionen' }, h('button', { class: 'btn small', onclick: () => nachher(beschlussDialog(b)) }, 'Bearbeiten'), ' ',
+          mehrMenue([{ label: 'Löschen', gefahr: true, aktion: async () => {
+            if (!(await confirmBox(`Beschluss ${b.nummer} löschen?`, 'Löschen', true))) return;
+            try { await api('DELETE', `/api/admin/beschluesse/${b.id}`); S.verw = null; render(); } catch (e) { handleErr(e); }
+          } }])))))))
+      : h('div', { class: 'card' }, alle.length ? h('p', { class: 'hint' }, 'Keine Treffer.') : leer('akte', 'Noch keine Beschlüsse', 'Trage Beschlüsse nach jeder Versammlung ein – dann ist die Frage »Wann haben wir das beschlossen?« schnell beantwortet.', '+ Beschluss', () => nachher(beschlussDialog(null)))));
+}
+
+async function vertragDialog(v) {
+  const f = {
+    art: h('select', null, S.verw.arten.map((a) => h('option', { value: a, selected: v ? v.art === a : false }, a))),
+    bez: h('input', { type: 'text', maxlength: 120, value: v ? v.bezeichnung : '', placeholder: 'z. B. Vereinshaftpflicht' }),
+    partner: h('input', { type: 'text', maxlength: 120, value: v ? v.partner || '' : '' }),
+    nummer: h('input', { type: 'text', maxlength: 60, value: v ? v.nummer || '' : '' }),
+    beginn: h('input', { type: 'date', value: v ? v.beginn || '' : '' }),
+    ende: h('input', { type: 'date', value: v ? v.ende || '' : '' }),
+    frist: h('input', { type: 'number', min: 0, max: 60, value: v && v.fristMonate ? v.fristMonate : '' }),
+    verl: h('input', { type: 'number', min: 0, max: 120, value: v && v.verlaengert ? v.verlaengert : '' }),
+    kosten: h('input', { type: 'text', inputmode: 'decimal', value: v && v.kosten ? numIn(v.kosten) : '' }),
+    turnus: h('select', null, ['jährlich', 'vierteljährlich', 'monatlich', 'einmalig'].map((t) => h('option', { value: t, selected: v ? v.turnus === t : false }, t))),
+    gekuendigt: h('input', { type: 'date', value: v ? v.gekuendigt || '' : '' }),
+    notiz: h('input', { type: 'text', maxlength: 1000, value: v ? v.notiz || '' : '' }),
+  };
+  const fld = (label, el, wide, hint) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), el, hint ? h('span', { class: 'fhint' }, hint) : null);
+  return modal(v ? v.bezeichnung : 'Neuer Vertrag', h('div', { class: 'form' },
+    fld('Art', f.art), fld('Bezeichnung *', f.bez), fld('Vertragspartner', f.partner), fld('Vertrags-/Versicherungsnr.', f.nummer),
+    fld('Beginn', f.beginn), fld('Läuft bis', f.ende, false, 'Ende der aktuellen Laufzeit, leer = unbefristet'),
+    fld('Kündigungsfrist (Monate)', f.frist), fld('Verlängert sich um (Monate)', f.verl, false, '0 = endet von selbst'),
+    fld('Kosten in €', f.kosten), fld('Zahlweise', f.turnus), fld('Gekündigt am', f.gekuendigt), fld('Notiz', f.notiz, true)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    const kosten = f.kosten.value.trim() ? parseNum(f.kosten.value) : 0;
+    if (Number.isNaN(kosten)) { toast('Bitte die Kosten als Zahl eintragen.', 'err'); return false; }
+    try { await api('POST', '/api/admin/vertraege', { id: v ? v.id : '', art: f.art.value, bezeichnung: f.bez.value, partner: f.partner.value, nummer: f.nummer.value, beginn: f.beginn.value, ende: f.ende.value,
+      fristMonate: Number(f.frist.value || 0), verlaengert: Number(f.verl.value || 0), kosten, turnus: f.turnus.value, gekuendigt: f.gekuendigt.value, notiz: f.notiz.value }); }
+    catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+function verwaltungVertraege() {
+  const l = S.verw.vertraege;
+  const heute = todayIso();
+  const in60 = (() => { const d = new Date(); d.setDate(d.getDate() + 60); return d.toISOString().slice(0, 10); })();
+  const nachher = async (p) => { if (await p) { S.verw = null; render(); } };
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Versicherungen, Versorger, Zwischenpacht und andere Verträge mit Laufzeit und Kündigungsfrist. Rund zwei Monate vor dem letzten Kündigungstag erinnert das Cockpit – Zeit genug, Angebote zu vergleichen.'),
+    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(vertragDialog(null)) }, '+ Vertrag'),
+      h('div', { class: 'spacer' }), h('span', { class: 'stat' }, `${l.length} Verträge · ${eur(S.verw.jaehrlich)} im Jahr`)),
+    l.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['Vertrag', 'Partner', 'Läuft bis', 'Kündigen bis', 'Kosten / Jahr', ''].map((t) => h('th', null, t)))),
+      h('tbody', null, l.map((v) => h('tr', null,
+        h('td', { class: 'wrap' }, h('b', null, v.bezeichnung), h('div', { class: 'hint' }, v.art + (v.nummer ? ' · ' + v.nummer : ''))),
+        h('td', { class: 'wrap' }, v.partner || ''),
+        h('td', null, v.laeuftBis ? deDate(v.laeuftBis) : h('span', { class: 'hint' }, 'unbefristet'), v.verlaengert && !v.gekuendigt ? h('div', { class: 'hint' }, `verlängert sich um ${v.verlaengert} Mon.`) : null),
+        h('td', null, v.gekuendigt ? h('span', { class: 'badge neu' }, `gekündigt ${deDate(v.gekuendigt)}`) : v.kuendigenBis ? [deDate(v.kuendigenBis),
+          v.kuendigenBis >= heute && v.kuendigenBis <= in60 ? h('span', { class: 'badge warn', style: 'margin-left:6px' }, 'bald') : null] : '–'),
+        h('td', { class: 'num' }, v.jaehrlich ? eur(v.jaehrlich) : ''),
+        h('td', { class: 'aktionen' }, h('button', { class: 'btn small', onclick: () => nachher(vertragDialog(v)) }, 'Bearbeiten'), ' ',
+          mehrMenue([{ label: 'Löschen', gefahr: true, aktion: async () => {
+            if (!(await confirmBox(`Vertrag »${v.bezeichnung}« löschen?`, 'Löschen', true))) return;
+            try { await api('DELETE', `/api/admin/vertraege/${v.id}`); S.verw = null; render(); } catch (e) { handleErr(e); }
+          } }])))))))
+      : h('div', { class: 'card' }, leer('akte', 'Noch keine Verträge', 'Haftpflicht, Strom, Wasser, Zwischenpacht … – mit Laufzeit und Kündigungsfrist, damit kein Kündigungstermin mehr verpasst wird.', '+ Vertrag', () => nachher(vertragDialog(null)))));
+}
+
+// ------------------------------------------------------------------ Haushaltsplan
+
+function adminHaushalt() {
+  const st = S.state;
+  const jahr = S.haushaltJahr || st.currentYear;
+  if (!S.haushalt || S.haushalt.jahr !== jahr) {
+    if (!S.haushaltLoading) {
+      S.haushaltLoading = true;
+      api('GET', `/api/admin/haushalt?year=${jahr}`).then((d) => { S.haushalt = d; }).catch((e) => { handleErr(e); S.haushalt = { jahr, einnahmen: [], ausgaben: [] }; })
+        .finally(() => { S.haushaltLoading = false; render(); });
+    }
+    return h('p', { class: 'hint' }, 'Wird geladen …');
+  }
+  const d = S.haushalt;
+  const eingaben = { einnahmen: new Map(), ausgaben: new Map() };
+  const notiz = h('textarea', { rows: 3, class: 'rs-eingabe', maxlength: 2000, placeholder: 'z. B. geplante Anschaffungen, Rücklagen' }); notiz.value = d.notiz || '';
+  const jahrSel = h('select', { onchange: (e) => { S.haushaltJahr = Number(e.target.value); render(); } },
+    [...new Set([...st.years, st.currentYear + 1])].sort((a, b) => b - a).map((y) => h('option', { value: y, selected: y === jahr }, String(y))));
+  const tabelle = (art, titel, zeilen) => {
+    let soll = 0, ist = 0, abwSumme = 0;
+    const rows = zeilen.map((z) => {
+      const inp = h('input', { type: 'text', inputmode: 'decimal', value: z.soll != null ? numIn(z.soll) : '', class: 'hh-in', placeholder: '–' });
+      eingaben[art].set(z.posten, inp);
+      if (z.soll != null) soll += z.soll;
+      ist += z.ist;
+      const abw = z.soll != null ? z.ist - z.soll : null;
+      if (abw != null) abwSumme += abw;
+      const anteil = z.soll ? Math.min(150, Math.round(z.ist / z.soll * 100)) : null;
+      const schlecht = abw != null && (art === 'ausgaben' ? abw > 0.004 : abw < -0.004);
+      return h('tr', null, h('td', null, z.posten), h('td', { class: 'r' }, inp), h('td', { class: 'r' }, eur(z.ist)),
+        h('td', { class: 'r' + (schlecht ? ' diffwarn' : '') }, abw == null ? '–' : eur(abw)),
+        h('td', null, anteil == null ? null : h('div', { class: 'hh-erreicht' }, h('div', { class: 'hh-balken' }, h('span', { class: schlecht ? 'zu-viel' : '', style: `width:${Math.min(100, anteil)}%` })), h('i', null, (anteil >= 150 ? '≥ ' : '') + anteil + ' %'))));
+    });
+    return h('div', { class: 'card tablewrap', style: 'margin-bottom:14px' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, [titel, 'Plan', 'Ist', 'Abweichung', 'erreicht'].map((t) => h('th', null, t)))),
+      h('tbody', null, rows, h('tr', { class: 'summe' }, h('td', null, h('b', null, 'Summe')), h('td', { class: 'r' }, h('b', null, eur(soll))), h('td', { class: 'r' }, h('b', null, eur(ist))), h('td', { class: 'r', title: 'nur Posten mit Plan' }, eur(abwSumme)), h('td')))));
+  };
+  const sammeln = () => {
+    const out = { einnahmen: {}, ausgaben: {} };
+    for (const art of ['einnahmen', 'ausgaben']) for (const [p, inp] of eingaben[art]) {
+      if (!inp.value.trim()) continue;
+      const v = parseNum(inp.value);
+      if (Number.isNaN(v) || v < 0) throw new Error(`Bitte bei »${p}« einen Betrag ab 0 eintragen.`);
+      out[art][p] = v;
+    }
+    return out;
+  };
+  const speichern = async () => {
+    let werte;
+    try { werte = sammeln(); } catch (e) { toast(e.message, 'err'); return; }
+    try { S.haushalt = await api('PUT', `/api/admin/haushalt?year=${jahr}`, { ...werte, notiz: notiz.value }); toast('Haushaltsplan gespeichert', 'ok'); render(); } catch (e) { handleErr(e); }
+  };
+  const ausVorjahr = async () => {
+    try {
+      const vj = await api('GET', `/api/admin/haushalt?year=${jahr - 1}`);
+      for (const art of ['einnahmen', 'ausgaben']) for (const z of vj[art]) { const inp = eingaben[art].get(z.posten); if (inp && z.ist) inp.value = numIn(Math.round(z.ist)); }
+      toast('Ist-Werte des Vorjahres eingesetzt (gerundet) – anpassen und speichern', 'ok');
+    } catch (e) { handleErr(e); }
+  };
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Plane Einnahmen und Ausgaben des Jahres. Das Ist kommt laufend aus dem Kassenbericht (Rechnungen, Spenden, sonstige Ausgaben nach Kategorie) – so sieht man jederzeit, wo der Verein steht. Praktisch für Mitgliederversammlung und Kassenprüfer.'),
+    h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), jahrSel,
+      d.vorjahr ? h('button', { class: 'btn', onclick: ausVorjahr }, `Plan aus dem Ist ${jahr - 1} vorschlagen`) : null,
+      h('div', { class: 'spacer' }),
+      h('button', { class: 'btn', onclick: () => pdfDrucken({ url: `/api/admin/haushalt/pdf?year=${jahr}`, oeffnenUrl: `/api/admin/haushalt/pdf/oeffnen?year=${jahr}`, titel: 'Haushaltsplan', meldung: () => 'Der Haushaltsplan wurde im PDF-Programm geöffnet.' }) }, 'Als PDF')),
+    tabelle('einnahmen', 'Einnahmen', d.einnahmen),
+    tabelle('ausgaben', 'Ausgaben', d.ausgaben),
+    h('div', { class: 'card' }, h('div', { class: 'form' }, h('div', { class: 'field wide' }, h('label', null, 'Erläuterungen'), notiz)),
+      h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: speichern }, 'Plan speichern'))));
+}
+
 // ------------------------------------------------------------------ Vorauszahlungen per Überweisung
 
 async function loadVz(jahr) {
@@ -2917,7 +3252,7 @@ function viewAdmin() {
   const st = S.state;
   if (st.hasPassword && !st.loggedIn) return viewLogin();
   const t = S.adminTab;
-  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'maengel' ? adminMaengel() : t === 'spenden' ? adminSpenden() : t === 'sepa' ? adminSepa() : t === 'vorauszahlung' ? adminVorauszahlung() : t === 'rundschreiben' ? adminRundschreiben() : t === 'inventar' ? adminInventar() : t === 'einstellungen' ? adminSettings()
+  const body = t === 'paechter' ? adminPaechter() : t === 'warteliste' ? adminWarteliste() : t === 'maengel' ? adminMaengel() : t === 'spenden' ? adminSpenden() : t === 'sepa' ? adminSepa() : t === 'vorauszahlung' ? adminVorauszahlung() : t === 'rundschreiben' ? adminRundschreiben() : t === 'inventar' ? adminInventar() : t === 'kuendigungen' ? adminKuendigungen() : t === 'verwaltung' ? adminVerwaltung() : t === 'haushalt' ? adminHaushalt() : t === 'einstellungen' ? adminSettings()
     : t === 'jahreswechsel' ? adminYear() : t === 'kassenbericht' ? adminKassenbericht(false) : t === 'berichte' ? adminBerichte()
       : t === 'jubilaeen' ? adminJubilaeen() : t === 'daten' ? adminData() : t === 'protokoll' ? adminProtokoll() : t === 'datenschutz' ? adminDatenschutz() : adminSecurity();
   const eintrag = navEintrag('admin', t);
@@ -3051,6 +3386,8 @@ function adminPaechter() {
           p.gartennr ? [h('button', { class: 'btn small', title: `Gartenakte von Garten ${p.gartennr}: Dokumente, Wertermittlungen, Übergaben, Verlauf`, onclick: () => gartenakteDialog(p.gartennr.trim()) }, 'Akte'), ' '] : null,
           mehrMenue([
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Pächterwechsel …', title: 'Garten an einen neuen Pächter übergeben (Schlussrechnung, Übergabeprotokoll, neuer Pächter)', aktion: () => paechterwechselDialog(p) } : null,
+            p.gartennr && !p.ausgeschiedenAm ? { label: 'Kündigung erfassen …', title: 'Kündigung mit Frist und Fahrplan bis zur Übergabe', aktion: async () => { if (await kuendigungDialog(p)) { adminTabWaehlen('kuendigungen'); render(); } } } : null,
+            p.gartennr && p.gartengroesse > 0 ? { label: 'Pachtvertrag …', title: 'Unterpachtvertrag zum Unterschreiben, auf Wunsch in die Gartenakte', aktion: () => pachtvertragDialog(p) } : null,
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Willkommensmappe', title: 'PDF für neue Pächter: Garten, Zähler, Termine, Lageplan, Ansprechpartner', aktion: () => willkommenDrucken(p) } : null,
             { label: 'Auskunft (DSGVO)', title: 'Alle gespeicherten Daten dieser Person als Datei herunterladen (Art. 15 DSGVO)', aktion: () => { location.href = `/api/admin/paechter/${p.id}/auskunft`; } },
             { label: 'In den Papierkorb', gefahr: true, aktion: async () => {
@@ -3597,6 +3934,7 @@ function adminKassenbericht(pruefMode) {
     if (vals.some((v) => Number.isNaN(v) || (v !== null && v < 0))) { toast('Bitte nur Zahlen ab 0 eingeben.', 'err'); return; }
     try {
       S.kasse = await api('PUT', `/api/admin/versorger?year=${S.kasseYear}`, { wasserM3: vals[0], wasserEUR: vals[1], stromKWh: vals[2], stromEUR: vals[3] });
+      S.schwund = null;
       toast('Gespeichert', 'ok');
       render();
     } catch (e) { handleErr(e); }
@@ -3628,11 +3966,45 @@ function adminKassenbericht(pruefMode) {
       h('p', { class: 'hint' }, 'Trage hier die Werte der Hauptzähler bzw. der Versorgerrechnung ein, um sie mit der Summe der Pächterabrechnung zu vergleichen. Eine größere Abweichung kann auf einen Zählerfehler, Schwund oder eine falsche Ablesung hindeuten.'),
       h('div', { class: 'tablewrap' }, versorgerTable), verlustHinweis,
       pruefMode ? null : h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: saveVersorger }, 'Werte speichern'))),
+    h('h3', null, 'Schwund über die Jahre'),
+    schwundKarte(),
     h('div', { class: 'actions', style: 'margin-top:16px;margin-bottom:22px' },
       h('button', { class: 'btn primary', title: 'Zusammenfassung des Jahres für die Mitgliederversammlung, ohne Namen', onclick: () => jahresberichtDrucken(S.kasseYear) }, `Jahresbericht ${S.kasseYear} (PDF)`),
       h('a', { class: 'btn', href: `/api/admin/export-kassenbericht?year=${S.kasseYear}` }, `Kassenbericht ${S.kasseYear} als Excel`)),
     h('h3', null, 'Verlauf über die Jahre'),
     kassenberichtVerlaufCard());
+}
+
+// Wasserschwund: Hauptzähler gegen die Summe der Gartenzähler, Jahr für Jahr, und Gärten mit auffälligem Verbrauch.
+function schwundKarte() {
+  if (!S.schwund || S.schwund.jahr !== S.kasseYear) {
+    if (!S.schwundLoading) {
+      S.schwundLoading = true;
+      api('GET', `/api/admin/schwund?year=${S.kasseYear}`).then((d) => { S.schwund = d; }).catch((e) => { handleErr(e); S.schwund = { jahr: S.kasseYear, jahre: [], auffaellig: [] }; })
+        .finally(() => { S.schwundLoading = false; render(); });
+    }
+    return h('div', { class: 'card' }, h('p', { class: 'hint', style: 'margin:0' }, 'Wird geladen …'));
+  }
+  const d = S.schwund;
+  const mitWert = d.jahre.filter((j) => j.wasser.prozent != null || j.strom.prozent != null);
+  const zahl = (x, einheit) => (x == null ? '–' : nfFlex.format(x) + (einheit ? ' ' + einheit : ''));
+  const prozent = (w, warn) => (w.prozent == null ? '–' : h('span', { class: 'badge ' + (w.prozent >= warn ? 'err' : w.prozent < 0 ? 'warn' : 'ok') }, nfFlex.format(w.prozent) + ' %'));
+  const zeile = (j) => h('tr', null, h('td', null, j.jahr, j.unvollstaendig ? h('div', { class: 'hint' }, `${j.unvollstaendig} Gärten fehlen`) : null),
+    h('td', { class: 'r' }, zahl(j.wasser.haupt, 'm³')), h('td', { class: 'r' }, zahl(j.wasser.gaerten, 'm³')), h('td', { class: 'r' }, zahl(j.wasser.menge, 'm³')),
+    h('td', { class: 'r' }, prozent(j.wasser, d.warnAb)), h('td', { class: 'r' }, j.wasser.kosten == null ? '–' : eur(j.wasser.kosten)),
+    h('td', { class: 'r' }, zahl(j.strom.menge, 'kWh')), h('td', { class: 'r' }, j.strom.prozent == null ? '–' : nfFlex.format(j.strom.prozent) + ' %'));
+  const chart = mitWert.filter((j) => j.wasser.prozent != null).map((j) => ({ label: String(j.jahr), value: Math.max(0, j.wasser.prozent) }));
+  return h('div', { class: 'card' },
+    h('p', { class: 'hint' }, `Schwund ist Wasser (oder Strom), das der Hauptzähler zählt, das aber in keinem Garten ankommt – durch undichte Leitungen, stehende oder falsch abgelesene Zähler. Bezahlt wird es vom Verein. Ab ${nfFlex.format(d.warnAb)} % oder bei einem deutlichen Anstieg meldet sich das Cockpit. Grundlage sind die Hauptzählerwerte oben, je Jahr eingetragen.`),
+    mitWert.length ? [
+      chart.length > 1 ? [h('p', { class: 'hint', style: 'margin:0 0 4px' }, 'Wasserschwund in Prozent:'), barChart(chart, { valueFmt: (v) => nfFlex.format(v) + ' %' })] : null,
+      h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, ['Jahr', 'Hauptzähler', 'Gärten', 'Schwund', 'Anteil', 'Kosten', 'Strom-Schwund', 'Anteil'].map((t) => h('th', null, t)))),
+        h('tbody', null, [...mitWert].reverse().map(zeile))))]
+      : h('p', { class: 'hint', style: 'margin:0' }, 'Noch keine Hauptzählerwerte eingetragen. Trage oben den Wert des Hauptzählers bzw. der Versorgerrechnung ein – dann erscheint hier der Schwund, auch im Vergleich der Jahre.'),
+    h('h4', { style: 'margin:16px 0 6px' }, `Auffällige Gärten ${d.jahr}`),
+    d.auffaellig.length ? h('ul', { class: 'schwund-liste' }, d.auffaellig.map((x) => h('li', null, h('b', null, `Garten ${x.gartennr || '–'} – ${x.name}: `), x.hinweise.join('; '))))
+      : h('p', { class: 'hint', style: 'margin:0' }, 'Kein Garten fällt auf (Verbrauch im üblichen Rahmen, kein Zähler steht still).'));
 }
 
 function kassenberichtVerlaufCard() {
@@ -4903,6 +5275,7 @@ function cockpitKarte(st, istAdmin) {
     const [art, wohin, unter] = ziel.split(':');
     if (art === 'admin') adminTabWaehlen(wohin); else S.tab = wohin;
     if (wohin === 'inventar') S.invSeite = unter || 'schluessel';
+    if (wohin === 'verwaltung') S.verwSeite = unter || 'beschluesse';
     render();
   };
   if (!S.aufgaben.length) {

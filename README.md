@@ -108,6 +108,15 @@ Benutzerkonto und keine Übertragung ins Internet.
   Tagesordnung** und die **Anwesenheitsliste** zum Unterschreiben
 - **Gemeinschaftsstunden aus Arbeitseinsätzen:** Stundenliste zum Ausdrucken, danach am Rechner abhaken, wer da
   war – die Stunden landen automatisch beim Pächter, Korrekturen zählen nicht doppelt
+- **Kündigung mit Fahrplan:** Eingang und Pachtende erfassen, das Programm prüft die Frist nach eurer Regel, druckt
+  die Kündigungsbestätigung und führt Schritt für Schritt bis zur Übergabe (Nachfolger, Wertermittlung, Abnahme,
+  Schlüssel, Pächterwechsel) – mehrere Schritte erkennt es selbst, das Cockpit erinnert an den Rest
+- **Pachtvertrag** zum Unterschreiben aus Pächterdaten, Preisen und euren Vertragsbestimmungen, mit Lageplan als
+  Anlage; auf Wunsch direkt in die Gartenakte
+- **Beschlussbuch:** Beschlüsse von Vorstand und Mitgliederversammlung mit Abstimmungsergebnis und Stichworten,
+  durchsuchbar und als PDF
+- **Verträge und Versicherungen** des Vereins mit Laufzeit und Kündigungsfrist; das Cockpit meldet sich rechtzeitig
+  vor dem letzten Kündigungstag
 - **Rundschreiben** an alle oder ausgewählte Pächter: per E-Mail über das eigene E-Mail-Programm (alle Adressen
   im Bcc, bei vielen Empfängern in mehreren Paketen) und als Serienbrief für alle ohne E-Mail, mit Anschrift für den
   Fensterumschlag; dazu als Aushang und mit Vorlagen (Wasser an/ab, Arbeitseinsatz)
@@ -127,6 +136,11 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **SEPA-Lastschrift** (bei Bedarf einschaltbar) für die monatliche Vorauszahlung und die Jahresrechnung: Mandate je Pächter (mit Formular zum
   Unterschreiben), Datei für das Online-Banking (pain.008), Vorabankündigung mit allen Terminen, Rücklastschrift mit
   einem Klick; Vorauszahlungen werden auf der Jahresrechnung abgezogen und zählen in der Kasse
+- **Haushaltsplan:** Einnahmen und Ausgaben je Posten planen, das Ist kommt laufend aus dem Kassenbericht;
+  Abweichungen auf einen Blick und als PDF für die Mitgliederversammlung
+- **Wasserschwund-Kontrolle:** Hauptzähler gegen die Summe aller Gartenzähler, Jahr für Jahr in Menge, Prozent
+  und Euro, dazu die Gärten mit auffälligem Verbrauch oder stehendem Zähler; ab 10 % oder bei deutlichem Anstieg
+  warnt das Cockpit
 - **Kontoauszug einlesen:** die CSV-Datei aus dem Online-Banking laden, das Programm ordnet die Eingänge über die
   Rechnungsnummer im Verwendungszweck den Rechnungen zu (sonst Vorschlag über Name und Betrag); übernommen wird nur, was
   du bestätigst, und nichts doppelt

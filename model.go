@@ -221,6 +221,15 @@ type Data struct {
 	Rundschreiben []Rundschreiben `json:"rundschreiben,omitempty"`
 	Schluessel    []Schluessel    `json:"schluessel,omitempty"`
 	Geraete       []Geraet        `json:"geraete,omitempty"`
+	// Vertragsbestimmungen für den Pachtvertrag (leer = Standardtext, siehe pachtvertrag.go)
+	Vertragsbestimmungen string `json:"vertragsbestimmungen,omitempty"`
+	// Beschlussbuch, Verträge des Vereins und Haushaltspläne je Jahr (siehe verwaltung.go)
+	Beschluesse []Beschluss              `json:"beschluesse,omitempty"`
+	Vertraege   []Vertrag                `json:"vertraege,omitempty"`
+	Haushalt    map[string]Haushaltsplan `json:"haushalt,omitempty"`
+	// Kündigungen mit Fahrplan bis zur Übergabe (siehe kuendigung.go)
+	KuendigungsRegel KuendigungsRegel `json:"kuendigungsRegel"`
+	Kuendigungen     []Kuendigung     `json:"kuendigungen,omitempty"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).

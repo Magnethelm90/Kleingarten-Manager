@@ -16,7 +16,8 @@ import (
 // kein abgeschlossenes Jahr). Der Aufrufer hält s.mu.
 func (s *Store) datenbestandLeer() bool {
 	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 || len(s.d.Einsatzstunden) > 0 || len(s.d.Spenden) > 0 || len(s.d.Vorauszahlungen) > 0 ||
-		len(s.d.Rundschreiben) > 0 || len(s.d.Schluessel) > 0 || len(s.d.Geraete) > 0 || s.d.LageKarte.Bild != "" || len(s.d.LageKarte.Objekte) > 0 {
+		len(s.d.Rundschreiben) > 0 || len(s.d.Schluessel) > 0 || len(s.d.Geraete) > 0 ||
+		len(s.d.Kuendigungen) > 0 || len(s.d.Beschluesse) > 0 || len(s.d.Vertraege) > 0 || len(s.d.Haushalt) > 0 || s.d.LageKarte.Bild != "" || len(s.d.LageKarte.Objekte) > 0 {
 		return false
 	}
 	for _, j := range s.d.Jahre {
@@ -223,6 +224,39 @@ func (s *Store) ladeBeispieldaten() {
 		g := &s.d.Geraete[1]
 		g.PaechterID, g.Seit, g.Bis = p.ID, vorTagen(-10), vorTagen(-3)
 		g.Verlauf = []Vorgang{{Datum: vorTagen(-10), Aktion: "verliehen", PaechterID: p.ID}}
+	}
+	// Kündigung: Garten 8 kündigt zum 30. November, Bestätigung ist raus
+	if p, ok := s.aktiverPaechterLocked("8"); ok {
+		s.d.Kuendigungen = []Kuendigung{{ID: newID(), PaechterID: p.ID, Gartennr: "8", Eingang: fmt.Sprintf("%d-08-12", jahr+1), Zum: fmt.Sprintf("%d-11-30", jahr+1),
+			Von: "paechter", Grund: "Umzug", Erledigt: map[string]string{"bestaetigung": fmt.Sprintf("%d-08-15", jahr+1)}}}
+	}
+	// Beschlussbuch, Verträge, Haushaltsplan und Hauptzähler (für den Schwund)
+	s.d.Beschluesse = []Beschluss{
+		{ID: newID(), Datum: fmt.Sprintf("%d-03-14", jahr), Gremium: "Mitgliederversammlung", Nummer: fmt.Sprintf("MV %d/1", jahr), Titel: "Wasserpreis ab dem nächsten Jahr 2,04 € je m³", Ja: 31, Nein: 4, Enthaltung: 2, Ergebnis: "angenommen", Stichworte: "Wasser, Preise"},
+		{ID: newID(), Datum: fmt.Sprintf("%d-03-14", jahr), Gremium: "Mitgliederversammlung", Nummer: fmt.Sprintf("MV %d/2", jahr), Titel: "12 Pflichtstunden Gemeinschaftsarbeit, 10 € je fehlende Stunde", Ja: 29, Nein: 6, Enthaltung: 2, Ergebnis: "angenommen", Stichworte: "Gemeinschaftsarbeit"},
+		{ID: newID(), Datum: fmt.Sprintf("%d-05-02", jahr), Gremium: "Vorstand", Nummer: fmt.Sprintf("V %d/1", jahr), Titel: "Neuer Rasenmäher für den Verein bis 400 €", Text: "Angebote von zwei Händlern eingeholt, der günstigere wird gekauft.", Ergebnis: "angenommen", Stichworte: "Anschaffung, Geräte"},
+	}
+	s.d.Vertraege = []Vertrag{
+		{ID: newID(), Art: "Versicherung", Bezeichnung: "Vereinshaftpflicht", Partner: "Musterversicherung AG", Nummer: "VH-123456", Beginn: "2019-01-01", Ende: fmt.Sprintf("%d-12-31", jahr), FristMonate: 3, Verlaengert: 12, Kosten: 186.4, Turnus: "jährlich"},
+		{ID: newID(), Art: "Strom", Bezeichnung: "Stromliefervertrag Anlage", Partner: "Stadtwerke Musterstadt", Beginn: vorTagen(-640), Ende: heute.AddDate(0, 3, 20).Format("2006-01-02"), FristMonate: 3, Verlaengert: 12, Kosten: 38, Turnus: "monatlich"},
+		{ID: newID(), Art: "Pacht (Zwischenpacht)", Bezeichnung: "Zwischenpachtvertrag mit dem Verband", Partner: "Verband der Gartenfreunde", Beginn: "1998-04-01"},
+	}
+	s.d.Haushalt = map[string]Haushaltsplan{fmt.Sprint(jahr): {
+		Einnahmen: map[string]float64{"Pacht": 220, "Mitgliedsbeiträge und Umlage": 1050, "Wasser und Strom": 1600, "Spenden": 100},
+		Ausgaben:  map[string]float64{"Instandhaltung": 300, "Anschaffung": 200, "Verwaltung": 60, "Versicherung & Gebühren": 250},
+		Notiz:     "Größere Anschaffung geplant: Rasenmäher (Beschluss V 1).",
+	}}
+	if v, ok := s.viewLocked(jahr); ok {
+		summe := 0.0 // alle abgelesenen Gärten, auch solche, deren Rechnung noch unvollständig ist
+		for _, p := range v.Paechter {
+			if w := calculate(v.Settings, p, v.Ablesungen[p.ID]).WasserVerbrauch; w != nil {
+				summe += *w
+			}
+		}
+		haupt, eur := round2(summe*1.14+3), round2((summe*1.14+3)*1.9)
+		if j := s.d.Jahre[yearKey(jahr)]; j != nil {
+			j.Versorger = &Versorger{WasserM3: &haupt, WasserEUR: &eur}
+		}
 	}
 	s.d.Rundschreiben = []Rundschreiben{{ID: newID(), Datum: fmt.Sprintf("%d-03-20", jahr), An: "alle", Betreff: "Wasser wird angestellt – bitte Leitungen prüfen",
 		Text:       "Liebe Gartenfreundinnen und Gartenfreunde,\n\nam ersten Samstag im April stellen wir das Wasser in der Anlage wieder an. Bitte schließt vorher die Entleerungshähne in euren Gärten und prüft die Leitungen auf Frostschäden.\n\nWer beim Anstellen helfen möchte, ist um 9 Uhr am Haupttor herzlich willkommen.",

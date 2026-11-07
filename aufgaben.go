@@ -207,6 +207,9 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	}
 
 	s.inventarAufgabenLocked(heute, add)
+	s.schwundAufgabenLocked(heute, add)
+	s.kuendigungAufgabenLocked(heute, add)
+	s.vertragAufgabenLocked(heute, add)
 
 	// Warteliste
 	nachfragen := 0

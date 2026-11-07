@@ -149,6 +149,9 @@ func (d *Data) entfernePerson(id string) bool {
 	if d.inventarPersonEntfernen(id) {
 		changed = true
 	}
+	if d.kuendigungPersonEntfernen(id) {
+		changed = true
+	}
 	einsatz := d.Einsatzstunden[:0]
 	for _, e := range d.Einsatzstunden {
 		if e.PaechterID == id {
@@ -350,6 +353,7 @@ type auskunft struct {
 	Vorauszahl  []Vorauszahlung     `json:"vorauszahlungen"`
 	Rundschr    []string            `json:"rundschreibenAnDiePerson"`
 	Inventar    []auskunftInventar  `json:"schluesselUndGeraete"`
+	Kuendigung  []Kuendigung        `json:"kuendigungen"`
 	Aufbewahrng string              `json:"aufbewahrung"`
 }
 
@@ -460,6 +464,11 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 	}
 	a.Rundschr = s.rundschreibenFuerLocked(id)
 	a.Inventar = s.inventarAuskunftLocked(id)
+	for _, k := range s.d.Kuendigungen {
+		if k.PaechterID == id {
+			a.Kuendigung = append(a.Kuendigung, k)
+		}
+	}
 	for _, e := range s.d.AuditLog {
 		if (p.Name != "" && strings.Contains(e.Aktion, p.Name)) || (p.Mitgliedsnr != "" && strings.Contains(e.Aktion, p.Mitgliedsnr+" ")) {
 			a.Protokoll = append(a.Protokoll, e)
