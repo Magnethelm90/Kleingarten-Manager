@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -14,21 +11,14 @@ import (
 	_ "image/png" // PNG-Hintergründe lesen
 	"io"
 	"math"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
-	"time"
 )
 
-// Echte Karte unter dem Lageplan: ein eigenes Bild (Luftbild-Ausschnitt, eingescannter Vereinsplan, Foto vom
-// Aushang) oder ein amtliches Luftbild (Orthophoto), das die Vermessungsverwaltungen der Länder kostenlos als
-// Open Data anbieten. Dazu Umrisse der Parzellen sowie Leitungen und Einrichtungen (Wasser, Strom, Schächte,
-// Absperrhähne, Tore ...). Das Bild liegt als Datei im Datenordner (Ordner »Lageplan«), alles andere in der
+// Karte unter dem Lageplan: ein eigenes Bild (eingescannter Vereinsplan, Foto vom Aushang), dazu Umrisse der
+// Parzellen sowie Leitungen und Einrichtungen (Wasser, Strom, Schächte, Absperrhähne, Tore ...). Das Bild liegt als Datei im Datenordner (Ordner »Lageplan«), alles andere in der
 // Datendatei. Personenbezogene Daten gibt es hier nicht.
 
 const (
@@ -60,14 +50,10 @@ type LageKarte struct {
 	// Massstab: wie groß das Bild auf der Karte erscheint (Kartenpunkte je Bildpunkt); Deckkraft 0,1 bis 1
 	Massstab  float64 `json:"massstab,omitempty"`
 	Deckkraft float64 `json:"deckkraft,omitempty"`
-	// Quelle: Quellenvermerk, der bei amtlichen Luftbildern auf jedem Ausdruck stehen muss
-	Quelle string `json:"quelle,omitempty"`
-	// MeterJeBildpunkt: nur bei Luftbildern bekannt, ergibt die Maßstabsleiste im Ausdruck
-	MeterJeBildpunkt float64 `json:"meterJeBildpunkt,omitempty"`
-	// Luftbild: womit das Bild geladen wurde, damit es sich später neu laden lässt
-	Luftbild  *LuftbildAuftrag `json:"luftbild,omitempty"`
-	Objekte   []LageObjekt     `json:"objekte,omitempty"`
-	Leitungen []LageLinie      `json:"leitungen,omitempty"`
+	// Quelle: Quellenvermerk, steht klein auf Plan und Ausdruck (z. B. »Plan: Vorstand 2024«)
+	Quelle    string       `json:"quelle,omitempty"`
+	Objekte   []LageObjekt `json:"objekte,omitempty"`
+	Leitungen []LageLinie  `json:"leitungen,omitempty"`
 }
 
 // LageObjekt ist eine Einrichtung auf dem Gelände (Wasserzähler, Absperrhahn, Tor ...).
@@ -112,201 +98,6 @@ var linienArten = map[string]struct {
 	"weg":      {"Weg", 150, 150, 150, true},
 }
 
-// ------------------------------------------------------------------ amtliche Luftbilder
-
-// luftbildDienst ist ein frei nutzbarer Kartendienst (WMS) mit Orthophotos eines Landes.
-type luftbildDienst struct {
-	Land, URL, Layer, Quelle string
-	// MinMeter: feinste sinnvolle Auflösung in Metern je Bildpunkt
-	MinMeter float64
-}
-
-// luftbildDienste: geprüft im November 2026, alle kostenfrei (Datenlizenz Deutschland oder CC BY 4.0, siehe
-// Quellenvermerk). Hamburg fehlt, weil dessen Dienst nicht öffentlich erreichbar war; dafür gibt es »eigener Dienst«.
-var luftbildDienste = map[string]luftbildDienst{
-	"bw": {"Baden-Württemberg", "https://owsproxy.lgl-bw.de/owsproxy/ows/WMS_LGL-BW_ATKIS_DOP_20_C", "IMAGES_DOP_20_RGB", "© LGL-BW (www.lgl-bw.de), dl-de/by-2-0", 0.2},
-	"by": {"Bayern", "https://geoservices.bayern.de/od/wms/dop/v1/dop40", "by_dop40c", "© Bayerische Vermessungsverwaltung (www.geodaten.bayern.de), CC BY 4.0", 0.4},
-	"be": {"Berlin", "https://gdi.berlin.de/services/wms/truedop_2024", "truedop_2024", "© Geoportal Berlin / TrueOrthophotos 2024, dl-de/zero-2-0", 0.2},
-	"bb": {"Brandenburg", "https://isk.geobasis-bb.de/mapproxy/dop20c/service/wms", "bebb_dop20c", "© GeoBasis-DE/LGB, dl-de/by-2-0", 0.2},
-	"hb": {"Bremen", "https://geodienste.bremen.de/wms_dop20_2023", "DOP20_2023_HB", "© Landesamt GeoInformation Bremen, CC BY", 0.2},
-	"he": {"Hessen", "https://www.gds-srv.hessen.de/cgi-bin/lika-services/ogc-free-images.ows", "he_dop20_rgb", "© HVBG Hessen", 0.2},
-	"mv": {"Mecklenburg-Vorpommern", "https://www.geodaten-mv.de/dienste/adv_dop", "mv_dop", "© GeoBasis-DE/M-V", 0.2},
-	"ni": {"Niedersachsen", "https://opendata.lgln.niedersachsen.de/doorman/noauth/dop_wms", "ni_dop20", "© LGLN, CC BY 4.0", 0.2},
-	"nw": {"Nordrhein-Westfalen", "https://www.wms.nrw.de/geobasis/wms_nw_dop", "nw_dop_rgb", "© Geobasis NRW, dl-de/zero-2-0", 0.2},
-	"rp": {"Rheinland-Pfalz", "https://geo4.service24.rlp.de/wms/rp_dop20.fcgi", "rp_dop20", "© GeoBasis-DE/LVermGeoRP, dl-de/by-2-0", 0.2},
-	"sl": {"Saarland", "https://geoportal.saarland.de/freewms/dop2023", "sl_dop20_rgb", "© GeoBasis DE/LVGL-SL", 0.2},
-	"sn": {"Sachsen", "https://geodienste.sachsen.de/wms_geosn_dop-rgb/guest", "sn_dop_020", "© GeoSN, dl-de/by-2-0", 0.2},
-	"st": {"Sachsen-Anhalt", "https://www.geodatenportal.sachsen-anhalt.de/wss/service/ST_LVermGeo_DOP_WMS_OpenData/guest", "lsa_lvermgeo_dop20_2", "© GeoBasis-DE/LVermGeo ST, dl-de/by-2-0", 0.2},
-	"sh": {"Schleswig-Holstein", "https://dienste.gdi-sh.de/WMS_SH_DOP20col_OpenGBD", "sh_dop20_rgb", "© GeoBasis-DE/LVermGeo SH, CC BY 4.0", 0.2},
-	"th": {"Thüringen", "https://www.geoproxy.geoportal-th.de/geoproxy/services/DOP", "th_dop", "© GDI-Th, CC BY 4.0", 0.2},
-}
-
-// LuftbildAuftrag: welcher Ausschnitt geladen wurde (Mitte, Breite und Höhe in Metern).
-type LuftbildAuftrag struct {
-	Land   string  `json:"land"`
-	Lat    float64 `json:"lat"`
-	Lon    float64 `json:"lon"`
-	Breite float64 `json:"breite"`
-	Hoehe  float64 `json:"hoehe"`
-	// nur bei Land »eigen«: Adresse und Ebene eines anderen WMS-Dienstes
-	URL   string `json:"url,omitempty"`
-	Layer string `json:"layer,omitempty"`
-}
-
-// Für Tests austauschbar: Abruf von Luftbild und Ortssuche.
-var (
-	luftbildClient = &http.Client{Timeout: 90 * time.Second, CheckRedirect: nurOeffentlicheWeiterleitung}
-	ortssucheURL   = "https://nominatim.openstreetmap.org/search"
-)
-
-// nurOeffentlicheWeiterleitung folgt Weiterleitungen nur zu öffentlichen https-Adressen.
-func nurOeffentlicheWeiterleitung(req *http.Request, via []*http.Request) error {
-	if len(via) >= 5 {
-		return errors.New("zu viele Weiterleitungen")
-	}
-	if _, err := eigenerDienstPruefen(req.URL.String(), "ebene"); err != nil {
-		return errors.New("Weiterleitung an eine nicht erlaubte Adresse")
-	}
-	return nil
-}
-
-// eigenerDienstPruefen lässt nur öffentliche https-Adressen zu (kein Zugriff auf Geräte im eigenen Netz).
-func eigenerDienstPruefen(raw, layer string) (*url.URL, error) {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
-		return nil, bad("Bitte die https-Adresse des Kartendienstes (WMS) angeben")
-	}
-	host := u.Hostname()
-	if ip := net.ParseIP(host); ip != nil || !strings.Contains(host, ".") || strings.HasSuffix(host, ".local") || strings.EqualFold(host, "localhost") {
-		return nil, bad("Bitte die Adresse eines öffentlichen Kartendienstes angeben (keine IP-Adresse)")
-	}
-	if layer == "" || len(layer) > 100 || strings.ContainsAny(layer, "&?#= \t\r\n") {
-		return nil, bad("Bitte den Namen der Kartenebene (Layer) angeben")
-	}
-	u.RawQuery, u.Fragment = "", ""
-	return u, nil
-}
-
-// luftbildURL baut die GetMap-Anfrage (WMS 1.3.0, Web-Mercator EPSG:3857) und liefert Breite/Höhe in Bildpunkten
-// sowie die Auflösung in Metern je Bildpunkt.
-func luftbildURL(dienst luftbildDienst, a LuftbildAuftrag) (string, int, int, float64) {
-	const r = 6378137.0
-	x := r * a.Lon * math.Pi / 180
-	y := r * math.Log(math.Tan(math.Pi/4+a.Lat*math.Pi/360))
-	// Web-Mercator streckt Entfernungen um 1/cos(Breite)
-	k := 1 / math.Cos(a.Lat*math.Pi/180)
-	mpp := math.Max(dienst.MinMeter, math.Max(a.Breite, a.Hoehe)/2400)
-	w := int(math.Round(a.Breite / mpp))
-	h := int(math.Round(a.Hoehe / mpp))
-	hb, hh := a.Breite/2*k, a.Hoehe/2*k
-	q := url.Values{}
-	q.Set("SERVICE", "WMS")
-	q.Set("VERSION", "1.3.0")
-	q.Set("REQUEST", "GetMap")
-	q.Set("LAYERS", dienst.Layer)
-	q.Set("STYLES", "")
-	q.Set("CRS", "EPSG:3857")
-	q.Set("BBOX", fmt.Sprintf("%.2f,%.2f,%.2f,%.2f", x-hb, y-hh, x+hb, y+hh))
-	q.Set("WIDTH", strconv.Itoa(w))
-	q.Set("HEIGHT", strconv.Itoa(h))
-	q.Set("FORMAT", "image/jpeg")
-	trenner := "?"
-	if strings.Contains(dienst.URL, "?") {
-		trenner = "&"
-	}
-	return dienst.URL + trenner + q.Encode(), w, h, mpp
-}
-
-// handleLuftbild lädt den gewünschten Ausschnitt einmalig herunter und speichert ihn als Hintergrund.
-func (a *App) handleLuftbild(w http.ResponseWriter, r *http.Request) {
-	var in LuftbildAuftrag
-	if err := readJSON(w, r, &in); err != nil {
-		writeErr(w, err)
-		return
-	}
-	if in.Lat < 47 || in.Lat > 55.2 || in.Lon < 5.5 || in.Lon > 15.5 {
-		writeErr(w, bad("Der Ort liegt nicht in Deutschland. Bitte zuerst den Ort der Anlage suchen"))
-		return
-	}
-	if in.Breite < 50 || in.Breite > 2000 || in.Hoehe < 50 || in.Hoehe > 2000 {
-		writeErr(w, bad("Der Ausschnitt muss zwischen 50 und 2000 Metern breit und hoch sein"))
-		return
-	}
-	var dienst luftbildDienst
-	if in.Land == "eigen" {
-		u, err := eigenerDienstPruefen(in.URL, strings.TrimSpace(in.Layer))
-		if err != nil {
-			writeErr(w, err)
-			return
-		}
-		in.URL, in.Layer = u.String(), strings.TrimSpace(in.Layer)
-		dienst = luftbildDienst{Land: "eigener Dienst", URL: in.URL, Layer: in.Layer, Quelle: "Quelle: " + u.Hostname(), MinMeter: 0.1}
-	} else {
-		d, ok := luftbildDienste[in.Land]
-		if !ok {
-			writeErr(w, bad("Bitte das Bundesland wählen"))
-			return
-		}
-		dienst, in.URL, in.Layer = d, "", ""
-	}
-	adresse, _, _, mpp := luftbildURL(dienst, in)
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, adresse, nil)
-	if err != nil {
-		writeErr(w, bad("Der Kartendienst lässt sich nicht ansprechen"))
-		return
-	}
-	req.Header.Set("User-Agent", appName+"/"+appVersion)
-	resp, err := luftbildClient.Do(req)
-	if err != nil {
-		writeErr(w, bad("Keine Verbindung zum Kartendienst. Ist der Rechner mit dem Internet verbunden?"))
-		return
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxKarteUpload+1))
-	if err != nil || resp.StatusCode != http.StatusOK || len(raw) > maxKarteUpload {
-		writeErr(w, bad(fmt.Sprintf("Der Kartendienst von %s hat kein Bild geliefert. Bitte später noch einmal versuchen", dienst.Land)))
-		return
-	}
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
-	var img image.Image
-	if err == nil && cfg.Width*cfg.Height <= maxKartePixel {
-		img, _, err = image.Decode(bytes.NewReader(raw))
-	}
-	if err != nil || img == nil {
-		writeErr(w, bad(fmt.Sprintf("Der Kartendienst von %s hat kein Bild geliefert. Liegt der Ort wirklich in %s?", dienst.Land, dienst.Land)))
-		return
-	}
-	if bildEinfarbig(img) {
-		writeErr(w, bad(fmt.Sprintf("Für diesen Ort hat %s kein Luftbild. Stimmt das Bundesland?", dienst.Land)))
-		return
-	}
-	quelle := dienst.Quelle
-	if in.Land == "mv" || in.Land == "rp" {
-		quelle += " " + strconv.Itoa(time.Now().Year())
-	}
-	a.karteSpeichern(w, img, quelle, mpp, &in, "Luftbild für den Lageplan geladen ("+dienst.Land+")")
-}
-
-// bildEinfarbig erkennt leere Antworten (weiße oder schwarze Fläche außerhalb des Landesgebiets).
-func bildEinfarbig(img image.Image) bool {
-	b := img.Bounds()
-	if b.Dx() < 2 || b.Dy() < 2 {
-		return true
-	}
-	var n, sum, sum2 float64
-	for y := b.Min.Y; y < b.Max.Y; y += max(1, b.Dy()/60) {
-		for x := b.Min.X; x < b.Max.X; x += max(1, b.Dx()/60) {
-			r, g, bl, _ := img.At(x, y).RGBA()
-			v := float64(r+g+bl) / 3 / 257
-			n++
-			sum += v
-			sum2 += v * v
-		}
-	}
-	mittel := sum / n
-	return math.Sqrt(math.Max(0, sum2/n-mittel*mittel)) < 3
-}
-
 // handleKarteHochladen übernimmt ein eigenes Bild als Hintergrund.
 func (a *App) handleKarteHochladen(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxKarteUpload+1<<16)
@@ -339,17 +130,14 @@ func (a *App) handleKarteHochladen(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, bad("Das Bild lässt sich nicht lesen"))
 		return
 	}
-	a.karteSpeichern(w, img, "", 0, nil, "Hintergrundbild für den Lageplan hochgeladen")
+	a.karteSpeichern(w, img)
 }
 
 // karteSpeichern verkleinert das Bild, speichert es neu als JPEG (ohne eingebettete Zusatzdaten) und setzt es als
 // Hintergrund. Das vorige Bild wird gelöscht. Größe und Deckkraft bleiben, wenn schon ein Bild da war, sonst wird
 // das Bild so groß gezeigt, dass es etwa die Fläche der vorhandenen Anordnung einnimmt.
-func (a *App) karteSpeichern(w http.ResponseWriter, img image.Image, quelle string, mpp float64, auftrag *LuftbildAuftrag, aktion string) {
-	img, faktor := verkleinern(img, karteMaxKante)
-	if mpp > 0 {
-		mpp *= faktor
-	}
+func (a *App) karteSpeichern(w http.ResponseWriter, img image.Image) {
+	img, _ = verkleinern(img, karteMaxKante)
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 85}); err != nil {
 		writeErr(w, err)
@@ -383,8 +171,7 @@ func (a *App) karteSpeichern(w http.ResponseWriter, img image.Image, quelle stri
 		k.Deckkraft = 0.85
 	}
 	k.Bild, k.BildBreite, k.BildHoehe = name, b.Dx(), b.Dy()
-	k.Quelle, k.MeterJeBildpunkt, k.Luftbild = quelle, round4(mpp), auftrag
-	a.st.audit("%s", aktion)
+	a.st.audit("Hintergrundbild für den Lageplan hochgeladen")
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return
@@ -498,7 +285,7 @@ func (a *App) handleKarteEntfernen(w http.ResponseWriter, r *http.Request) {
 	defer a.st.mu.Unlock()
 	k := &a.st.d.LageKarte
 	alt := k.Bild
-	k.Bild, k.BildBreite, k.BildHoehe, k.Quelle, k.MeterJeBildpunkt, k.Luftbild = "", 0, 0, "", 0, nil
+	k.Bild, k.BildBreite, k.BildHoehe, k.Quelle = "", 0, 0, ""
 	a.st.audit("Hintergrundbild des Lageplans entfernt")
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
@@ -506,120 +293,6 @@ func (a *App) handleKarteEntfernen(w http.ResponseWriter, r *http.Request) {
 	}
 	a.st.karteDateiLoeschen(alt)
 	writeJSON(w, 200, k)
-}
-
-// ------------------------------------------------------------------ Ortssuche
-
-type ortTreffer struct {
-	Name string  `json:"name"`
-	Lat  float64 `json:"lat"`
-	Lon  float64 `json:"lon"`
-	Land string  `json:"land,omitempty"` // Kürzel aus luftbildDienste, wenn erkannt
-}
-
-// koordinatenAusText erkennt »52.52, 13.40« (aus Google Maps per Rechtsklick kopiert) und Kartenlinks mit
-// »@52.52,13.40« oder »mlat=52.52&mlon=13.40«.
-func koordinatenAusText(s string) (float64, float64, bool) {
-	s = strings.TrimSpace(s)
-	if i := strings.Index(s, "@"); i >= 0 {
-		s = s[i+1:]
-	}
-	if i := strings.Index(s, "mlat="); i >= 0 {
-		rest := s[i+5:]
-		lat, _, _ := strings.Cut(rest, "&")
-		_, lon, ok := strings.Cut(s, "mlon=")
-		lon, _, _ = strings.Cut(lon, "&")
-		if ok {
-			s = lat + "," + lon
-		}
-	}
-	teile := strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == ';' || r == '/' })
-	if len(teile) < 2 {
-		return 0, 0, false
-	}
-	lat, err1 := strconv.ParseFloat(teile[0], 64)
-	lon, err2 := strconv.ParseFloat(teile[1], 64)
-	if err1 != nil || err2 != nil || lat < -90 || lat > 90 || lon < -180 || lon > 180 {
-		return 0, 0, false
-	}
-	return lat, lon, true
-}
-
-// handleOrtssuche sucht eine Anschrift über OpenStreetMap (Nominatim) – nur auf Knopfdruck, eine Anfrage je Suche.
-func (a *App) handleOrtssuche(w http.ResponseWriter, r *http.Request) {
-	q := trim(r.URL.Query().Get("q"), 200)
-	if q == "" {
-		writeErr(w, bad("Bitte eine Anschrift oder Koordinaten eingeben"))
-		return
-	}
-	if lat, lon, ok := koordinatenAusText(q); ok {
-		writeJSON(w, 200, []ortTreffer{{Name: fmt.Sprintf("Koordinaten %.5f, %.5f", lat, lon), Lat: lat, Lon: lon}})
-		return
-	}
-	p := url.Values{}
-	p.Set("format", "jsonv2")
-	p.Set("q", q)
-	p.Set("countrycodes", "de")
-	p.Set("addressdetails", "1")
-	p.Set("limit", "5")
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, ortssucheURL+"?"+p.Encode(), nil)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	req.Header.Set("User-Agent", appName+"/"+appVersion+" (+"+repoURLBase+")")
-	req.Header.Set("Accept-Language", "de")
-	resp, err := luftbildClient.Do(req)
-	if err != nil {
-		writeErr(w, bad("Keine Verbindung zur Ortssuche. Ist der Rechner mit dem Internet verbunden?"))
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		writeErr(w, bad("Die Ortssuche antwortet gerade nicht. Du kannst stattdessen Koordinaten eingeben, z. B. 52.52, 13.40"))
-		return
-	}
-	var roh []struct {
-		Name    string `json:"display_name"`
-		Lat     string `json:"lat"`
-		Lon     string `json:"lon"`
-		Address struct {
-			ISO string `json:"ISO3166-2-lvl4"`
-		} `json:"address"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&roh); err != nil {
-		writeErr(w, bad("Die Antwort der Ortssuche ließ sich nicht lesen"))
-		return
-	}
-	out := []ortTreffer{}
-	for _, t := range roh {
-		lat, err1 := strconv.ParseFloat(t.Lat, 64)
-		lon, err2 := strconv.ParseFloat(t.Lon, 64)
-		if err1 != nil || err2 != nil {
-			continue
-		}
-		land := strings.ToLower(strings.TrimPrefix(t.Address.ISO, "DE-"))
-		if _, ok := luftbildDienste[land]; !ok {
-			land = ""
-		}
-		out = append(out, ortTreffer{Name: trim(t.Name, 200), Lat: lat, Lon: lon, Land: land})
-	}
-	writeJSON(w, 200, out)
-}
-
-// handleLuftbildDienste: Liste der Länder für die Auswahl im Programm.
-func (a *App) handleLuftbildDienste(w http.ResponseWriter, r *http.Request) {
-	type eintrag struct {
-		Kurz   string `json:"kurz"`
-		Land   string `json:"land"`
-		Quelle string `json:"quelle"`
-	}
-	out := []eintrag{}
-	for k, d := range luftbildDienste {
-		out = append(out, eintrag{k, d.Land, d.Quelle})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Land < out[j].Land })
-	writeJSON(w, 200, out)
 }
 
 // ------------------------------------------------------------------ Prüfen beim Speichern

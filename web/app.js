@@ -1642,7 +1642,7 @@ function werkzeugKasten() {
   const stufe = Math.log2((K.massstab || 1) / (K.massstabStart || 1));
   return h('div', { class: 'lage-werkzeuge' },
     h('button', { class: 'btn small', onclick: lageHintergrundDialog }, h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, icon('karte', 16),
-      kb.bild ? 'Hintergrund ändern' : 'Luftbild oder Plan als Hintergrund')),
+      kb.bild ? 'Hintergrund ändern' : 'Plan als Hintergrund')),
     kb.bild ? regler('Bildgröße', -2, 2, 0.05, stufe, (v) => {
       K.massstab = Math.round((K.massstabStart || 1) * Math.pow(2, v) * 10000) / 10000;
       const b = bildEl(); if (b) { b.style.width = Math.round(kb.bildBreite * K.massstab) + 'px'; b.style.height = Math.round(kb.bildHoehe * K.massstab) + 'px'; }
@@ -1680,60 +1680,15 @@ async function leitungDialog(i) {
   if (w) render();
 }
 
-// Hintergrund: amtliches Luftbild (einmalig geladen) oder eigenes Bild.
+// Hintergrund: ein eigenes Bild, z. B. der eingescannte Vereinsplan.
 async function lageHintergrundDialog() {
   const kb = S.state.lageKarte || {};
-  let dienste = [];
-  try { dienste = await api('GET', '/api/admin/lageplan/dienste'); } catch (e) { handleErr(e); return; }
-  const alt = kb.luftbild || {};
-  let ort = alt.lat ? { lat: alt.lat, lon: alt.lon, name: 'bisheriger Ausschnitt' } : null;
-  const zahl = (v) => { const el = h('input', { type: 'text', value: String(v), style: 'width:6em' }); el.setAttribute('inputmode', 'numeric'); return el; };
-  const suche = h('input', { type: 'text', placeholder: 'Anschrift der Anlage oder Koordinaten', style: 'flex:1;min-width:14em' });
-  const treffer = h('select', { style: 'display:none', onchange: () => { ort = gefunden[Number(treffer.value)]; if (ort.land) land.value = ort.land; ortInfo(); } });
-  let gefunden = [];
-  const info = h('span', { class: 'fhint' });
-  const ortInfo = () => { info.textContent = ort ? `Mitte: ${ort.lat.toFixed(5)}, ${ort.lon.toFixed(5)} (${ort.name})` : 'Noch kein Ort gewählt.'; };
-  ortInfo();
-  const land = h('select', { onchange: () => { eigen.style.display = land.value === 'eigen' ? '' : 'none'; } },
-    h('option', { value: '' }, 'Bitte wählen …'), dienste.map((d) => h('option', { value: d.kurz, selected: d.kurz === alt.land }, d.land)),
-    h('option', { value: 'eigen', selected: alt.land === 'eigen' }, 'Anderer Kartendienst (WMS) …'));
-  const wmsUrl = h('input', { type: 'text', value: alt.url || '', placeholder: 'https://…' });
-  const wmsLayer = h('input', { type: 'text', value: alt.layer || '', placeholder: 'Name der Ebene' });
-  const eigen = h('div', { class: 'form', style: alt.land === 'eigen' ? '' : 'display:none' },
-    h('div', { class: 'field' }, h('label', null, 'Adresse des Dienstes'), wmsUrl),
-    h('div', { class: 'field' }, h('label', null, 'Ebene (Layer)'), wmsLayer));
-  const breite = zahl(alt.breite || 400), hoehe = zahl(alt.hoehe || 300);
-  const suchKnopf = h('button', { class: 'btn', onclick: async () => {
-    if (!suche.value.trim()) return;
-    suchKnopf.disabled = true;
-    try {
-      gefunden = await api('GET', `/api/admin/lageplan/ortssuche?q=${encodeURIComponent(suche.value.trim())}`);
-      if (!gefunden.length) { toast('Nichts gefunden. Versuch es mit Straße und Ort oder mit Koordinaten.', 'err'); return; }
-      treffer.replaceChildren(...gefunden.map((t, i) => h('option', { value: i }, t.name)));
-      treffer.style.display = gefunden.length > 1 ? '' : 'none';
-      ort = gefunden[0];
-      if (ort.land) land.value = ort.land;
-      eigen.style.display = land.value === 'eigen' ? '' : 'none';
-      ortInfo();
-    } catch (e) { handleErr(e); } finally { suchKnopf.disabled = false; }
-  } }, 'Suchen');
-  suche.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); suchKnopf.click(); } });
   let fertig = null;
   const nachLaden = async (k) => {
     if (S.lageKarteEntwurf) Object.assign(S.lageKarteEntwurf, { massstab: k.massstab, massstabStart: k.massstab, deckkraft: k.deckkraft, quelle: k.quelle || '' });
     await reload();
     if (fertig) fertig();
   };
-  const ladeKnopf = h('button', { class: 'btn primary', onclick: async () => {
-    if (!ort) { toast('Bitte zuerst den Ort der Anlage suchen.', 'err'); return; }
-    if (!land.value) { toast('Bitte das Bundesland wählen.', 'err'); return; }
-    ladeKnopf.disabled = true; ladeKnopf.textContent = 'Wird geladen …';
-    try {
-      const k = await api('POST', '/api/admin/lageplan/luftbild', { land: land.value, lat: ort.lat, lon: ort.lon, breite: parseNum(breite.value), hoehe: parseNum(hoehe.value), url: wmsUrl.value, layer: wmsLayer.value });
-      toast('Luftbild geladen und gespeichert', 'ok');
-      await nachLaden(k);
-    } catch (e) { handleErr(e); } finally { ladeKnopf.disabled = false; ladeKnopf.textContent = 'Luftbild laden'; }
-  } }, 'Luftbild laden');
   const datei = h('input', { type: 'file', accept: '.png,.jpg,.jpeg', style: 'display:none', onchange: async () => {
     if (!datei.files.length) return;
     const fd = new FormData(); fd.append('file', datei.files[0]);
@@ -1742,28 +1697,17 @@ async function lageHintergrundDialog() {
   const quelle = h('input', { type: 'text', maxlength: 200, value: (S.lageKarteEntwurf && S.lageKarteEntwurf.quelle) || kb.quelle || '', placeholder: 'z. B. Plan: Vorstand 2024',
     oninput: () => { if (S.lageKarteEntwurf) S.lageKarteEntwurf.quelle = quelle.value; } });
   const body = h('div', { class: 'lage-hg' },
-    h('h4', null, 'Amtliches Luftbild (kostenlos)'),
-    h('p', { class: 'hint' }, 'Die Vermessungsämter der Länder stellen Luftbilder frei zur Verfügung. Das Programm lädt den Ausschnitt einmal herunter und speichert ihn – danach geht alles ohne Internet. Der vorgeschriebene Quellenvermerk steht automatisch auf jedem Ausdruck.'),
-    h('div', { class: 'form' },
-      h('div', { class: 'field wide' }, h('label', null, 'Ort der Anlage (Mitte des Ausschnitts)'),
-        h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, suche, suchKnopf), treffer, info,
-        h('span', { class: 'fhint' }, 'Anschrift (z. B. »Gartenweg 1, Musterstadt«) oder Koordinaten. Tipp: In Google Maps mit der rechten Maustaste auf die Anlage klicken, dann auf die Zahlen oben im Menü – schon sind die Koordinaten kopiert.')),
-      h('div', { class: 'field' }, h('label', null, 'Bundesland'), land),
-      h('div', { class: 'field' }, h('label', null, 'Ausschnitt in Metern'), h('div', null, breite, ' breit × ', hoehe, ' hoch'))),
-    eigen,
-    h('div', { style: 'margin:10px 0 18px' }, ladeKnopf),
-    h('h4', null, 'Oder ein eigenes Bild'),
-    h('p', { class: 'hint' }, 'Zum Beispiel ein Foto oder Scan des Vereinsplans oder ein Bildschirmfoto einer Karte (PNG oder JPG). Achte bei fremden Karten auf die Nutzungsrechte.'),
-    h('button', { class: 'btn', onclick: () => datei.click() }, 'Bild wählen …'), datei,
+    h('p', { class: 'hint' }, 'Ein Bild der Anlage als Hintergrund, zum Beispiel ein Foto oder Scan des Vereinsplans (PNG oder JPG). Darauf ziehst du die Gärten an ihren Platz und zeichnest Umrisse, Leitungen und Einrichtungen ein. Achte bei fremden Karten auf die Nutzungsrechte.'),
+    h('button', { class: 'btn primary', onclick: () => datei.click() }, kb.bild ? 'Anderes Bild wählen …' : 'Bild wählen …'), datei,
     kb.bild ? h('div', { style: 'margin-top:18px' },
       h('h4', null, 'Quellenvermerk'),
       h('div', { class: 'form' }, h('div', { class: 'field wide' }, quelle,
-        h('span', { class: 'fhint' }, 'Steht klein auf dem Plan und im Ausdruck. Bei amtlichen Luftbildern ist er vorgeschrieben – bitte nicht löschen. Wird mit »Anordnung speichern« übernommen.'))),
+        h('span', { class: 'fhint' }, 'Steht klein auf dem Plan und im Ausdruck (freiwillig). Wird mit »Anordnung speichern« übernommen.'))),
       h('button', { class: 'btn danger', style: 'margin-top:10px', onclick: async () => {
         if (!(await confirmBox('Das Hintergrundbild entfernen? Gärten, Umrisse, Leitungen und Einrichtungen bleiben.', 'Entfernen', true))) return;
         try { const k = await api('DELETE', '/api/admin/lageplan/bild'); toast('Hintergrund entfernt', 'ok'); await nachLaden(k); } catch (e) { handleErr(e); }
       } }, 'Hintergrund entfernen')) : null);
-  const p = breiterDialog('Hintergrund des Lageplans', body, [{ label: 'Schließen', value: true }]);
+  const p = modal('Hintergrund des Lageplans', body, [{ label: 'Schließen', value: true }]);
   const dlg = document.querySelector('dialog:last-of-type');
   fertig = () => { if (dlg && dlg.open) dlg.dispatchEvent(new Event('cancel')); };
   await p;
@@ -3208,7 +3152,7 @@ function adminDatenschutz() {
     h('div', { class: 'card', style: 'margin-bottom:14px' },
       h('h3', { style: 'margin-top:0' }, 'Was wird wo gespeichert?'),
       h('ul', { style: 'margin:0;padding-left:20px;line-height:1.6' },
-        li(h('b', null, 'Alles liegt nur auf diesem Rechner'), ' (Datenordner: ', h('span', { class: 'mono' }, st.dataDir), '). Es gibt keine Cloud und keine Übertragung der Daten ins Internet (nur Ortssuche und Luftbild im Lageplan fragen auf Knopfdruck die Lage der Anlage ab).'),
+        li(h('b', null, 'Alles liegt nur auf diesem Rechner'), ' (Datenordner: ', h('span', { class: 'mono' }, st.dataDir), '). Es gibt keine Cloud und keine Übertragung ins Internet.'),
         li('Pächter: Name, Anschrift, Mitgliedsnummer, Garten, Zählernummern, interne Notiz; dazu Zählerstände, Arbeitsstunden, Rechnungen, Zahlungen, Übergabeprotokolle.'),
         li('Warteliste: Name, Anschrift und Kontakt der Interessenten. Wer kein Interesse mehr hat, wird gelöscht (auch aus den Sicherungen).'),
         li('Kopien davon stecken in ausgestellten Rechnungen (Archiv und PDF-Dateien), abgeschlossenen Jahren, der Garten-Historie, dem Änderungsprotokoll und den automatischen Sicherungen.'),

@@ -462,7 +462,7 @@ func zeichneLageplan(pdf *fpdf.Fpdf, s Settings, lp lagePlan, links, oben, recht
 
 	hoehe := (maxY - minY) * faktor
 	if mitBild {
-		// Quellenvermerk (Pflicht bei amtlichen Luftbildern) und Maßstabsleiste
+		// Quellenvermerk
 		if k.Quelle != "" {
 			pdf.SetFont("lib", "", 6)
 			breite := pdf.GetStringWidth(k.Quelle) + 2
@@ -473,32 +473,6 @@ func zeichneLageplan(pdf *fpdf.Fpdf, s Settings, lp lagePlan, links, oben, recht
 			pdf.SetTextColor(60, 60, 60)
 			pdf.SetXY(px(maxX)-breite, oben+hoehe-3.2)
 			pdf.CellFormat(breite, 3.2, k.Quelle, "", 0, "C", false, 0, "")
-		}
-		if k.MeterJeBildpunkt > 0 && k.Massstab > 0 {
-			mmJeMeter := faktor * k.Massstab / k.MeterJeBildpunkt
-			laenge := 10.0
-			for _, m := range []float64{10, 20, 25, 50, 100, 200, 250, 500} {
-				if m*mmJeMeter <= 35 {
-					laenge = m
-				}
-			}
-			x0, y0 := px(minX)+3, oben+hoehe-4
-			pdf.SetFillColor(255, 255, 255)
-			pdf.SetAlpha(0.8, "Normal")
-			pdf.Rect(x0-1.5, y0-4, laenge*mmJeMeter+3+12, 6, "F")
-			pdf.SetAlpha(1, "Normal")
-			pdf.SetFillColor(30, 30, 30)
-			pdf.Rect(x0, y0, laenge*mmJeMeter, 1, "F")
-			pdf.SetFont("lib", "", 6.5)
-			pdf.SetTextColor(30, 30, 30)
-			pdf.SetXY(x0, y0-3.4)
-			pdf.CellFormat(laenge*mmJeMeter, 3, fmt.Sprintf("%g m", laenge), "", 0, "C", false, 0, "")
-			// Nordpfeil (Luftbilder sind genordet)
-			nx := x0 + laenge*mmJeMeter + 6
-			pdf.Polygon([]fpdf.PointType{{X: nx, Y: y0 - 3.5}, {X: nx - 1.3, Y: y0 + 0.5}, {X: nx + 1.3, Y: y0 + 0.5}}, "F")
-			pdf.SetFont("lib", "B", 6.5)
-			pdf.SetXY(nx+1.6, y0-3)
-			pdf.CellFormat(4, 3.5, "N", "", 0, "L", false, 0, "")
 		}
 		pdf.SetTextColor(0, 0, 0)
 	}

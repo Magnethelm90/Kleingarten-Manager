@@ -5,16 +5,13 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
-// luftbildTest erzeugt ein »Luftbild« mit Struktur (ein einfarbiges Bild gilt als leere Antwort).
-func luftbildTest(w, h int) []byte {
+// planBildTest erzeugt ein Bild mit Struktur (wie ein eingescannter Plan).
+func planBildTest(w, h int) []byte {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
@@ -36,7 +33,7 @@ func TestLageplanHintergrundUndUmrisse(t *testing.T) {
 		t.Errorf("zu kleines Bild: %d", rec.Code)
 	}
 	// großes Bild wird verkleinert und als JPEG gespeichert
-	rec := doMultipart(h, "/api/admin/lageplan/bild", "plan.jpg", luftbildTest(4000, 2000))
+	rec := doMultipart(h, "/api/admin/lageplan/bild", "plan.jpg", planBildTest(4000, 2000))
 	if rec.Code != 200 {
 		t.Fatalf("Bild hochladen: %d %s", rec.Code, rec.Body.String())
 	}
@@ -103,7 +100,7 @@ func TestLageplanHintergrundUndUmrisse(t *testing.T) {
 	}
 
 	// neues Bild ersetzt das alte (Datei wird gelöscht), Größe und Deckkraft bleiben
-	rec = doMultipart(h, "/api/admin/lageplan/bild", "plan2.jpg", luftbildTest(800, 600))
+	rec = doMultipart(h, "/api/admin/lageplan/bild", "plan2.jpg", planBildTest(800, 600))
 	k = decode[LageKarte](t, rec)
 	if k.Bild == erstes || k.Massstab != 0.5 || k.Deckkraft != 0.7 {
 		t.Errorf("zweites Bild: %+v", k)
@@ -122,98 +119,6 @@ func TestLageplanHintergrundUndUmrisse(t *testing.T) {
 	if rec := do(h, "GET", "/api/lageplan-bild", nil); rec.Code != 404 {
 		t.Errorf("Bild nach dem Entfernen: %d", rec.Code)
 	}
-}
-
-func TestLuftbildUndOrtssuche(t *testing.T) {
-	_, h := newTestApp(t)
-	var anfrage string
-	bild := luftbildTest(600, 450)
-	leer := testBild(t, 600, 450, true) // fast einfarbig: außerhalb des Landes
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasPrefix(r.URL.Path, "/wms"):
-			anfrage = r.URL.RawQuery
-			w.Header().Set("Content-Type", "image/jpeg")
-			if r.URL.Path == "/wms-leer" {
-				_, _ = w.Write(leer)
-				return
-			}
-			if r.URL.Path == "/wms-fehler" {
-				_, _ = w.Write([]byte("<ServiceException>Layer unbekannt</ServiceException>"))
-				return
-			}
-			_, _ = w.Write(bild)
-		case r.URL.Path == "/suche":
-			if !strings.Contains(r.Header.Get("User-Agent"), appName) {
-				w.WriteHeader(403)
-				return
-			}
-			_, _ = w.Write([]byte(`[{"display_name":"Gartenweg 1, Erfurt, Thüringen","lat":"50.98","lon":"11.03","address":{"ISO3166-2-lvl4":"DE-TH"}}]`))
-		}
-	}))
-	defer srv.Close()
-	alterClient, alteSuche := luftbildClient, ortssucheURL
-	luftbildClient, ortssucheURL = srv.Client(), srv.URL+"/suche"
-	luftbildDienste["test"] = luftbildDienst{"Testland", srv.URL + "/wms", "dop", "© Test", 0.2}
-	luftbildDienste["testleer"] = luftbildDienst{"Testland", srv.URL + "/wms-leer", "dop", "© Test", 0.2}
-	luftbildDienste["testfehler"] = luftbildDienst{"Testland", srv.URL + "/wms-fehler", "dop", "© Test", 0.2}
-	defer func() {
-		luftbildClient, ortssucheURL = alterClient, alteSuche
-		delete(luftbildDienste, "test")
-		delete(luftbildDienste, "testleer")
-		delete(luftbildDienste, "testfehler")
-	}()
-
-	// Ortssuche: Anschrift über den Suchdienst, Koordinaten direkt
-	treffer := decode[[]ortTreffer](t, do(h, "GET", "/api/admin/lageplan/ortssuche?q=Gartenweg+1+Erfurt", nil))
-	if len(treffer) != 1 || treffer[0].Land != "th" || treffer[0].Lat != 50.98 {
-		t.Fatalf("Ortssuche: %+v", treffer)
-	}
-	for _, q := range []string{"50.98, 11.03", "https://www.google.com/maps/@50.98,11.03,17z", "https://www.openstreetmap.org/?mlat=50.98&mlon=11.03#map=18"} {
-		tr := decode[[]ortTreffer](t, do(h, "GET", "/api/admin/lageplan/ortssuche?q="+urlQuery(q), nil))
-		if len(tr) != 1 || tr[0].Lat != 50.98 || tr[0].Lon != 11.03 {
-			t.Errorf("Koordinaten aus %q: %+v", q, tr)
-		}
-	}
-
-	auftrag := map[string]any{"land": "test", "lat": 50.98, "lon": 11.03, "breite": 400, "hoehe": 300}
-	rec := do(h, "POST", "/api/admin/lageplan/luftbild", auftrag)
-	if rec.Code != 200 {
-		t.Fatalf("Luftbild: %d %s", rec.Code, rec.Body.String())
-	}
-	k := decode[LageKarte](t, rec)
-	if k.Quelle != "© Test" || k.MeterJeBildpunkt <= 0 || k.Luftbild == nil || k.Luftbild.Land != "test" {
-		t.Errorf("Karte nach Luftbild: %+v", k)
-	}
-	for _, teil := range []string{"REQUEST=GetMap", "CRS=EPSG%3A3857", "LAYERS=dop", "WIDTH=2000", "HEIGHT=1500"} {
-		if !strings.Contains(anfrage, teil) {
-			t.Errorf("WMS-Anfrage ohne %s: %s", teil, anfrage)
-		}
-	}
-	// Fehlerfälle: leeres Bild, kein Bild, außerhalb Deutschlands, unbekanntes Land, eigener Dienst im eigenen Netz
-	for name, a := range map[string]map[string]any{
-		"leer":          {"land": "testleer", "lat": 50.98, "lon": 11.03, "breite": 400, "hoehe": 300},
-		"Fehlermeldung": {"land": "testfehler", "lat": 50.98, "lon": 11.03, "breite": 400, "hoehe": 300},
-		"Ausland":       {"land": "test", "lat": 40.0, "lon": 11.03, "breite": 400, "hoehe": 300},
-		"zu groß":       {"land": "test", "lat": 50.98, "lon": 11.03, "breite": 5000, "hoehe": 300},
-		"Land":          {"land": "xx", "lat": 50.98, "lon": 11.03, "breite": 400, "hoehe": 300},
-		"eigen IP":      {"land": "eigen", "url": "https://192.168.1.1/wms", "layer": "a", "lat": 50.98, "lon": 11.03, "breite": 400, "hoehe": 300},
-		"eigen http":    {"land": "eigen", "url": "http://example.org/wms", "layer": "a", "lat": 50.98, "lon": 11.03, "breite": 400, "hoehe": 300},
-		"eigen Layer":   {"land": "eigen", "url": "https://example.org/wms", "layer": "a&REQUEST=x", "lat": 50.98, "lon": 11.03, "breite": 400, "hoehe": 300},
-	} {
-		if rec := do(h, "POST", "/api/admin/lageplan/luftbild", a); rec.Code != 400 {
-			t.Errorf("%s: %d, erwartet 400", name, rec.Code)
-		}
-	}
-	// nur für den Vorstand
-	if rec := do(h, "GET", "/api/admin/lageplan/dienste", nil); rec.Code != 200 || !strings.Contains(rec.Body.String(), "Thüringen") {
-		t.Errorf("Dienste: %d", rec.Code)
-	}
-}
-
-func urlQuery(s string) string {
-	r := strings.NewReplacer("%", "%25", "&", "%26", "#", "%23", "?", "%3F", " ", "+", "+", "%2B")
-	return r.Replace(s)
 }
 
 func TestVerkleinernUndMitte(t *testing.T) {

@@ -192,7 +192,7 @@ type Data struct {
 	// Lageplan: Position jedes Gartens (Schlüssel Gartennummer) auf der Karte im Lageplan, in Bildpunkten.
 	// Leer = Gärten erscheinen als Raster, nach Gartennummer sortiert.
 	Lageplan map[string]LagePos `json:"lageplan,omitempty"`
-	// LageKarte: Hintergrundbild (Luftbild oder eigener Plan), Leitungen und Einrichtungen (siehe lagekarte.go)
+	// LageKarte: Hintergrundbild (eigener Plan), Leitungen und Einrichtungen (siehe lagekarte.go)
 	LageKarte LageKarte `json:"lageKarte"`
 	// Warteliste: Interessenten für einen Garten, in der Reihenfolge ihrer Anmeldung.
 	Warteliste []Bewerber `json:"warteliste,omitempty"`
