@@ -40,6 +40,11 @@ type Store struct {
 	zweiteZuletzt time.Time
 	zweiteFehler  string
 	zweiteVersuch time.Time
+
+	// Mehrplatz-Sperre (siehe sperre.go); leer = keine Sperre (Tests, Kommandozeile)
+	sperre         sperrInfo
+	sperrToken     string
+	sperreVerloren string
 }
 
 func newID() string {
@@ -157,6 +162,9 @@ func (s *Store) ensureYear(y int) *Jahr {
 // saveLocked schreibt atomar (erst temporäre Datei, dann umbenennen) und legt
 // höchstens eine Tagessicherung an. Der Aufrufer hält s.mu.
 func (s *Store) saveLocked() error {
+	if err := s.sperrePruefenLocked(); err != nil {
+		return err
+	}
 	raw, err := json.MarshalIndent(s.d, "", "  ")
 	if err != nil {
 		return err

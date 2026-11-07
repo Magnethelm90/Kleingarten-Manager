@@ -114,19 +114,20 @@ func (a *App) handleSicherungWiederherstellen(w http.ResponseWriter, r *http.Req
 	}
 	a.st.mu.Lock()
 	defer a.st.mu.Unlock()
-	// nur Namen aus der Liste der vorhandenen Sicherungen, nie ein frei angegebener Pfad
-	gefunden := false
+	// nur Namen aus der Liste der vorhandenen Sicherungen, nie ein frei angegebener Pfad: gelesen wird mit dem
+	// Namen aus dem Ordner, nicht mit dem aus der Anfrage
+	name := ""
 	for _, n := range a.st.sicherungsNamen() {
 		if n == in.Name {
-			gefunden = true
+			name = n
 			break
 		}
 	}
-	if !gefunden {
+	if name == "" {
 		writeErr(w, notFound("Sicherung nicht gefunden"))
 		return
 	}
-	raw, err := os.ReadFile(filepath.Join(a.st.backupDir(), in.Name))
+	raw, err := os.ReadFile(filepath.Join(a.st.backupDir(), name))
 	if err != nil {
 		writeErr(w, bad("Die Sicherung lässt sich nicht lesen"))
 		return
@@ -145,7 +146,7 @@ func (a *App) handleSicherungWiederherstellen(w http.ResponseWriter, r *http.Req
 	a.st.zweiteSicherungGeaendert() // die Sicherung kann einen anderen zweiten Ordner enthalten
 	a.st.ensureYear(d.Settings.Jahr)
 	a.st.migriereBelege()
-	a.st.audit("Sicherung wiederhergestellt: %s", in.Name)
+	a.st.audit("Sicherung wiederhergestellt: %s", name)
 	a.st.sicherungGeprueft = ""
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)

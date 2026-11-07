@@ -53,6 +53,18 @@ Benutzerkonto und keine Übertragung ins Internet.
 
 ## Was das Programm kann
 
+### Für den Vorstand
+
+- **Was steht an?** Die Übersicht sagt von selbst, was zu tun ist: Ablesung oder Versammlung vorbereiten, Stunden nach
+  dem Arbeitseinsatz eintragen, überfällige Zahlungen, abgelaufene Mängelfristen, Spenden ohne Bestätigung,
+  ein bald ablaufender Bescheid zur Gemeinnützigkeit, Warteliste nachfragen
+- **Amtsübergabe:** Die Vereinsakte enthält alle Daten und Dateien plus ein »Lies mich zuerst« mit Zahlen, Preisen,
+  Terminen und offenen Punkten – auf einen USB-Stick kopieren und der neue Vorstand kann sofort weitermachen
+- **Mehrere Vorstände ohne Cloud:** Liegt der Datenordner auf einem USB-Stick oder Netzlaufwerk, erkennt das Programm,
+  wenn er gerade an einem anderen Rechner geöffnet ist, und verhindert, dass Änderungen überschrieben werden
+- **Willkommensmappe** für neue Pächter (Garten, Zähler, Termine, Lageplan mit markiertem Garten, Ansprechpartner) und
+  **Exposé** für freie Gärten (Foto, Größe, Ablöse, laufende Kosten, Lage) für Interessenten der Warteliste
+
 ### Abrechnung
 
 - **Zählerstände** in der Schnelleingabe: Nummer eintippen, Name und Vorjahresstände erscheinen von selbst, nur die
@@ -76,6 +88,10 @@ Benutzerkonto und keine Übertragung ins Internet.
   Notiz; gelöschte Pächter kommen erst in den Papierkorb
 - **Lageplan:** die Gärten so angeordnet, wie sie auf dem Gelände liegen, farbig nach Abrechnungsstand; freie
   Gärten gestrichelt, mit einem Klick an jemanden von der Warteliste vergeben; als Aushang druckbar (ohne Namen)
+- **Plan als Hintergrund:** der eingescannte Vereinsplan oder ein Foto der Anlage unter dem Lageplan, mit
+  einstellbarer Größe und Deckkraft. Darauf die **Umrisse der Parzellen** nachzeichnen (benachbarte Ecken rasten ein),
+  **Wasser- und Stromleitungen**, Wege und **Einrichtungen** wie Hauptzähler, Absperrhähne, Schächte, Tor und
+  Vereinsheim eintragen. Der Ausdruck zeigt alles mit Legende
 - **Gartenakte:** alles zu einem Garten an einer Stelle – Verlauf, Übergaben, Wertermittlungen und Dokumente wie
   Bauantrag, Genehmigung, Fotos der Laube oder Pachtvertrag
 - **Pächterwechsel** in einem Schritt: Schlussrechnung für den bisherigen Pächter (nur Verbrauch bis zur Übergabe),
@@ -85,10 +101,19 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Warteliste** in der Reihenfolge der Anmeldung, mit Besichtigungsterminen und Erinnerung, lange nicht bestätigte
   Einträge nachzufragen
 - **Mängel und Gartenbegehung:** Begehungsliste zum Ausdrucken, Mängel je Garten mit Frist erfassen und dem Pächter
-  eine schriftliche Aufforderung als PDF schreiben
+  eine schriftliche Aufforderung als PDF schreiben; dazu die **Drittelregelung**: Flächenanteile schätzen und sehen,
+  welche Gärten unter einem Drittel Anbau liegen
 - **Vereinstermine:** Jahresplaner für Arbeitseinsätze, Versammlungen und Feste, als Aushang und als Kalenderdatei
   fürs Handy, mit einem Klick ins nächste Jahr übernommen; für Versammlungen gibt es die **Einladung mit
   Tagesordnung** und die **Anwesenheitsliste** zum Unterschreiben
+- **Gemeinschaftsstunden aus Arbeitseinsätzen:** Stundenliste zum Ausdrucken, danach am Rechner abhaken, wer da
+  war – die Stunden landen automatisch beim Pächter, Korrekturen zählen nicht doppelt
+- **Rundschreiben** an alle oder ausgewählte Pächter: per E-Mail über das eigene E-Mail-Programm (alle Adressen
+  im Bcc, bei vielen Empfängern in mehreren Paketen) und als Serienbrief für alle ohne E-Mail, mit Anschrift für den
+  Fensterumschlag; dazu als Aushang und mit Vorlagen (Wasser an/ab, Arbeitseinsatz)
+- **Schlüssel und Geräte:** wer welchen Tor-, Vereinsheim- oder Schachtschlüssel hat (mit Pfand und Verlauf), und
+  welche Vereinsgeräte verliehen sind oder zur Wartung müssen; das Cockpit erinnert an Schlüssel ausgeschiedener
+  Pächter, überfällige Rückgaben und fällige Wartungen
 - **Jubiläen** langjähriger Mitglieder für die Mitgliederversammlung
 
 ### Kasse und Berichte
@@ -96,6 +121,17 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Kassenbericht** mit Anfangs- und Endbestand, Vorjahresvergleich, Verlauf über die Jahre und Vergleich mit der
   Rechnung des Versorgers; sonstige Ausgaben mit Kategorie und Beleg-Fotos, wiederkehrende Ausgaben werden
   vorgeschlagen; als Excel-Datei
+- **Monatliche Vorauszahlungen per Überweisung:** Monatsbetrag je Pächter, Monatsübersicht (wer hat welchen Monat
+  bezahlt, wer ist im Rückstand), Daueraufträge werden beim Einlesen des Kontoauszugs erkannt, Erinnerung als PDF;
+  alles wird als Abschlag auf die Jahresrechnung gebucht
+- **SEPA-Lastschrift** (bei Bedarf einschaltbar) für die monatliche Vorauszahlung und die Jahresrechnung: Mandate je Pächter (mit Formular zum
+  Unterschreiben), Datei für das Online-Banking (pain.008), Vorabankündigung mit allen Terminen, Rücklastschrift mit
+  einem Klick; Vorauszahlungen werden auf der Jahresrechnung abgezogen und zählen in der Kasse
+- **Kontoauszug einlesen:** die CSV-Datei aus dem Online-Banking laden, das Programm ordnet die Eingänge über die
+  Rechnungsnummer im Verwendungszweck den Rechnungen zu (sonst Vorschlag über Name und Betrag); übernommen wird nur, was
+  du bestätigst, und nichts doppelt
+- **Spenden und Zuwendungsbestätigungen** nach dem amtlichen Muster, einzeln oder als Sammelbestätigung fürs Jahr;
+  das Programm prüft, ob der Bescheid des Finanzamts noch gilt, und zählt Spenden im Kassenbericht als Einnahme
 - **Kassenprüfer-Zugang** mit eigenem Passwort: sieht den Kassenbericht und hakt Ausgaben als geprüft ab, sonst nichts
 - **Jahresbericht** als PDF für die Mitgliederversammlung – Kennzahlen, Kasse, Diagramm, Termine, ohne Namen
 - **Jahresmeldung** für den Landes- oder Regionalverband: Parzellen, Flächen, Wechsel, Warteliste,

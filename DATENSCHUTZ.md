@@ -69,6 +69,46 @@ entfernt; erledigte Mängel lassen sich jederzeit einzeln löschen. Sie sind nur
 weder im Jahresbericht noch in Aushängen auf. Der Aushang zu fehlenden Zählerständen nennt nur Gartennummern. Die
 Erinnerungs-E-Mail geht als Blindkopie (Bcc) raus, damit keine Adressen offengelegt werden.
 
+**Lastschrift (SEPA):** Für Mandate werden Kontoinhaber, IBAN, ggf. BIC, Mandatsreferenz und Unterschriftsdatum
+gespeichert (Rechtsgrundlage: Vertrag, Art. 6 Abs. 1 lit. b DSGVO). Mandate stehen in der Auskunft und werden beim
+endgültigen Löschen der Person entfernt. Die Lastschrift-Läufe sind Buchungsbelege: Sie bleiben bis zum Ende der
+Aufbewahrungsfrist und verlieren dann Namen und IBAN. Die Dateien für das Online-Banking liegen im Ordner
+»Lastschriften« des Datenordners und können nach dem Hochladen gelöscht werden.
+
+**Vorauszahlungen:** Monatsbetrag und eingegangene Zahlungen je Pächter stehen in der Auskunft. Beim endgültigen
+Löschen der Person wird der Monatsbetrag gelöscht; die Zahlungen bleiben als Kassenbelege ohne Verknüpfung zur Person.
+
+**Rundschreiben:** Gespeichert werden Betreff, Text und – bei einer Auswahl – die Empfänger. Die Auskunft nennt die
+Rundschreiben, für die eine Person ausdrücklich ausgewählt war; beim endgültigen Löschen wird sie aus den
+Empfängerlisten entfernt. E-Mails verschickt das eigene E-Mail-Programm, alle Adressen stehen im Bcc.
+
+**Schlüssel und Geräte:** Wer einen Schlüssel oder ein Gerät hat oder hatte, steht mit Datum im Verlauf und in der
+Auskunft. Beim endgültigen Löschen der Person wird der Name überall durch „(gelöschte Person)“ ersetzt; ein noch
+ausgegebener Schlüssel bleibt so sichtbar, damit er nicht in Vergessenheit gerät.
+
+**Kontoauszug:** Die CSV-Datei aus dem Online-Banking wird nur im Arbeitsspeicher gelesen und nicht gespeichert;
+sie enthält auch Buchungen Dritter. Übernommen werden nur die bestätigten Zahlungsvermerke an den Rechnungen. Damit
+derselbe Auszug nicht zweimal gebucht wird, bleibt von jeder übernommenen Buchung ein gekürzter Prüfwert (Hash) ohne
+lesbaren Inhalt.
+
+**Spenden:** Name und Anschrift von Spendern (auch Nicht-Mitgliedern) werden für die Zuwendungsbestätigung
+gespeichert. Für bestätigte Spenden muss der Verein ein Doppel aufbewahren; sie bleiben deshalb auch beim Löschen
+eines Pächters erhalten und verlieren ihren Personenbezug erst nach Ablauf der Aufbewahrungsfrist. Unbestätigte Spenden
+verlieren beim Löschen der Person Name und Anschrift, der Betrag bleibt für die Kasse.
+
+**Vereinsakte (Amtsübergabe):** Die ZIP-Datei ist eine vollständige Kopie des Datenordners mit allen
+Personendaten. Sie gehört nur in die Hände des neuen Vorstands und sollte nach der Übergabe gelöscht werden. Das
+Programm behält im Datenordner nur die neueste Akte und löscht alle, sobald eine Person endgültig gelöscht wird.
+
+**Begehungen:** Geschätzte Flächenanteile (Drittelregelung) gehören zum Pächter, der den Garten damals hatte; sie
+stehen in der Auskunft und werden mit der Person gelöscht.
+
+**Willkommensmappe und Exposé:** Die dort eingetragenen Ansprechpartner erscheinen auf Papieren, die weitergegeben
+werden – nur mit Einverständnis der genannten Personen. Das Exposé enthält keine Daten des bisherigen Pächters.
+
+**Arbeitseinsätze:** Wer bei welchem Einsatz wie viele Stunden geleistet hat, steht nur in der Verwaltung (nicht im
+öffentlichen Jahresplaner), ist Teil der Auskunft und wird beim endgültigen Löschen der Person entfernt.
+
 **Warteliste:** Einträge werden gelöscht, sobald kein Interesse mehr besteht (auch aus allen Sicherungen); wird ein
 Garten vergeben, gehen die Angaben in die Stammdaten des neuen Pächters über. Wer seit über 2 Jahren nicht
 nachgefragt wurde, wird markiert (unter »Warteliste« und »Datenschutz«): dann nachfragen oder löschen.
@@ -103,8 +143,8 @@ Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 | Datenschutzbeauftragter | [Name/Kontakt oder „nicht benannt, da weniger als 20 Personen ständig mit der Verarbeitung beschäftigt sind (§ 38 BDSG)“] |
 | Zweck | Verwaltung der Pachtverhältnisse, Abrechnung von Wasser, Strom, Pacht und Beiträgen, Zahlungsüberwachung, Kassenführung des Vereins |
 | Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Pacht-/Mitgliedschaftsvertrag), lit. c (steuerliche Aufbewahrungspflichten), lit. f (Vereinsverwaltung) |
-| Betroffene | Pächterinnen und Pächter, Mitglieder, Interessenten auf der Warteliste |
-| Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, bei Begehungen festgestellte Mängel, interne Notiz |
+| Betroffene | Pächterinnen und Pächter, Mitglieder, Interessenten auf der Warteliste, Spenderinnen und Spender |
+| Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, Bankverbindung und Lastschriftmandate, bei Begehungen festgestellte Mängel, Spenden, interne Notiz |
 | Empfänger | Vorstand/Kassenwart; Kassenprüfer (Lesezugriff auf den Kassenbericht); Steuerberatung, Bank bei Zahlungsvorgängen; keine Auftragsverarbeiter |
 | Drittlandübermittlung | keine |
 | Löschfristen | Stammdaten: nach Ende der Mitgliedschaft bzw. des Pachtverhältnisses; Rechnungen, Jahresunterlagen und Übergabeprotokolle: [10] Jahre ab Ende des Ausstellungs- bzw. Übergabejahres; Warteliste: sobald kein Interesse mehr besteht (Nachfrage spätestens alle 2 Jahre) |

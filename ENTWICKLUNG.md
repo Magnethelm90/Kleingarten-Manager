@@ -35,7 +35,7 @@ Konsolenfenster mit den Log-Ausgaben offen.
 **macOS** (der mitgelieferte `clang` baut Apple Silicon und Intel):
 
 ```
-VERSION=1.5
+VERSION=1.5.1
 CGO_ENABLED=1 GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-arm64 .
 CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64" go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-amd64 .
 ```
@@ -60,9 +60,11 @@ Lokal reicht meist `go vet ./... && go test ./...`. Für die Eingabeprüfung gib
 
 ## Neue Version veröffentlichen
 
+Versionsnummern werden fortlaufend vergeben (1.5, 1.5.1, 1.5.2, …); die Update-Prüfung vergleicht sie Stelle für Stelle.
+
 ```
-git tag v1.5
-git push origin v1.5
+git tag v1.5.1
+git push origin v1.5.1
 ```
 
 Alternativ auf der GitHub-Seite unter »Releases« einen neuen Release mit neuem Tag anlegen. In beiden Fällen

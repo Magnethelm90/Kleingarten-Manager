@@ -576,13 +576,15 @@ type kassenbericht struct {
 	// Tatsächlich geflossenes Geld (nach dem heutigen Zahlungsstand)
 	EinnahmenBezahlt   float64 `json:"einnahmenBezahlt"`   // von Pächtern eingegangen
 	GuthabenAusgezahlt float64 `json:"guthabenAusgezahlt"` // an Pächter ausgezahlte Guthaben
+	Spenden            float64 `json:"spenden"`            // Spenden an den Verein (siehe spenden.go)
+	Vorauszahlungen    float64 `json:"vorauszahlungen"`    // monatliche Vorauszahlungen per Lastschrift (siehe sepa.go)
 
 	// Sonstige Ausgaben der Vereinskasse (Kontoführung, Anschaffungen, Reparaturen, ...)
 	Ausgaben          []Ausgabe        `json:"ausgaben"`
 	AusgabenSumme     float64          `json:"ausgabenSumme"`
 	AusgabenKategorie []kategorieSumme `json:"ausgabenKategorie"`
 
-	// Saldo = EinnahmenBezahlt - GuthabenAusgezahlt - AusgabenSumme: die Kassenbewegung
+	// Saldo = EinnahmenBezahlt + Spenden - GuthabenAusgezahlt - AusgabenSumme: die Kassenbewegung
 	// dieses Jahres. Anfangsbestand ist der Kassenbestand zu Jahresbeginn (von Hand
 	// gepflegt bzw. beim Jahreswechsel aus dem Vorjahr übernommen), Kassenbestand ist
 	// Anfangsbestand + Saldo – der tatsächliche Kontostand am heutigen Tag.
@@ -691,7 +693,9 @@ func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
 		k.Berechnet++
 	}
 	k.Paechter = k.Ausgestellt + k.Berechnet + len(k.Unvollstaendig)
-	k.Saldo = k.EinnahmenBezahlt - k.GuthabenAusgezahlt - k.AusgabenSumme
+	k.Spenden = s.spendenSummeLocked(v.Jahr)
+	k.Vorauszahlungen = s.vorauszahlungenLocked(v.Jahr)
+	k.Saldo = k.EinnahmenBezahlt + k.Vorauszahlungen + k.Spenden - k.GuthabenAusgezahlt - k.AusgabenSumme
 	k.Kassenbestand = k.Anfangsbestand + k.Saldo
 	for _, x := range []*float64{&k.WasserVerbrauch, &k.StromVerbrauch, &k.Summen.KostenWasser, &k.Summen.KostenEnergie,
 		&k.Summen.NachzahlungStunden, &k.Summen.Zwischensumme1, &k.Summen.PachtGarten, &k.Summen.PachtVerein, &k.Summen.PachtFrei,
@@ -870,6 +874,8 @@ func kassenberichtRows(k kassenbericht, verein string) [][]xCell {
 		[]xCell{{"Kassenbestand", stHeader}, {"Betrag (€)", stHeader}},
 		[]xCell{{"Anfangsbestand", stNormal}, {k.Anfangsbestand, stEUR}},
 		[]xCell{{"+ Von Pächtern eingegangene Zahlungen", stNormal}, {k.EinnahmenBezahlt, stEUR}},
+		[]xCell{{"+ Vorauszahlungen der Pächter", stNormal}, {k.Vorauszahlungen, stEUR}},
+		[]xCell{{"+ Spenden", stNormal}, {k.Spenden, stEUR}},
 		[]xCell{{"− An Pächter ausgezahlte Guthaben", stNormal}, {-k.GuthabenAusgezahlt, stEUR}},
 		[]xCell{{"− Sonstige Ausgaben", stNormal}, {-k.AusgabenSumme, stEUR}},
 		[]xCell{{"Kassenbestand (Kontostand heute)", stBold}, {k.Kassenbestand, stEURb}},
