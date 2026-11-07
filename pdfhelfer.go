@@ -61,7 +61,15 @@ func neuesPDF(s Settings, titel string, quer bool) *fpdf.Fpdf {
 	return pdf
 }
 
-func pdfBytes(pdf *fpdf.Fpdf) ([]byte, error) {
+// pdfBytes schreibt das fertige PDF. Die Schriftbibliothek kennt nur Zeichen bis U+FFFF und bricht bei anderen
+// (z. B. Emoji) mit einem Laufzeitfehler ab; die Daten werden zwar beim Speichern bereinigt, falls trotzdem ein
+// solches Zeichen durchrutscht, gibt es hier eine verständliche Meldung statt eines Absturzes.
+func pdfBytes(pdf *fpdf.Fpdf) (out []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			out, err = nil, bad("Das PDF ließ sich nicht erstellen: Ein Text enthält ein Zeichen, das die Schrift nicht kennt (z. B. ein Emoji). Bitte den Text ändern.")
+		}
+	}()
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
 		return nil, err

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -533,11 +532,7 @@ func buildWertermittlung(s Settings, x Wertermittlung) ([]byte, error) {
 		pdf.SetXY(xx, y+1)
 		pdf.CellFormat(sw, 5, t, "", 0, "C", false, 0, "")
 	}
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 func (a *App) wertermittlungPDF(id string) ([]byte, string, error) {

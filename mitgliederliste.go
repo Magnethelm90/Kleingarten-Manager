@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net/http"
@@ -110,11 +109,7 @@ func buildMitgliederliste(s Settings, ps []Paechter) ([]byte, error) {
 		}
 		y += rowH
 	}
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 func nonEmpty(xs ...string) []string {

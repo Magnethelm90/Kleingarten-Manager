@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -477,9 +476,5 @@ func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
 	pdf.SetTextColor(110, 110, 110)
 	pdf.SetXY(leftX, 287)
 	pdf.CellFormat(rightX-leftX, 4, s.VereinName+" · Übergabeprotokoll · erstellt mit dem Kleingarten-Manager", "", 0, "C", false, 0, "")
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }

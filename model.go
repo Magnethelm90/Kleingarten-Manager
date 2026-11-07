@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -314,7 +315,7 @@ func validNum(x float64) bool {
 func validNumPtr(p *float64) bool { return p == nil || validNum(*p) }
 
 func trim(s string, max int) string {
-	s = strings.TrimSpace(s)
+	s = strings.TrimSpace(nurDruckbar(s))
 	r := []rune(s)
 	if len(r) > max {
 		r = r[:max]
@@ -389,4 +390,61 @@ func fmtFlex(x float64) string {
 		s = strings.TrimSuffix(s, ",")
 	}
 	return s
+}
+
+// nurDruckbar entfernt Zeichen jenseits von U+FFFF (z. B. Emoji): Die PDF-Bibliothek kann sie nicht setzen und
+// bricht sonst beim Erzeugen jeder Rechnung oder Liste ab, in der der Text vorkommt.
+func nurDruckbar(s string) string {
+	for _, r := range s {
+		if r > 0xFFFF {
+			return strings.Map(func(r rune) rune {
+				if r > 0xFFFF {
+					return -1
+				}
+				return r
+			}, s)
+		}
+	}
+	return s
+}
+
+// texteBereinigen wendet nurDruckbar auf alle Texte im Datenbestand an (beim Laden und vor jedem Speichern), damit
+// auch alte Daten, eingespielte Sicherungen und Felder ohne eigene Prüfung nie ein PDF zum Absturz bringen.
+func texteBereinigen(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if !v.IsNil() {
+			texteBereinigen(v.Elem())
+		}
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			if v.Type().Field(i).IsExported() {
+				texteBereinigen(v.Field(i))
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < v.Len(); i++ {
+			texteBereinigen(v.Index(i))
+		}
+	case reflect.Map:
+		for _, k := range v.MapKeys() {
+			wert := reflect.New(v.Type().Elem()).Elem()
+			wert.Set(v.MapIndex(k))
+			texteBereinigen(wert)
+			neu := k
+			if k.Kind() == reflect.String {
+				if b := nurDruckbar(k.String()); b != k.String() {
+					neu = reflect.ValueOf(b).Convert(k.Type())
+					v.SetMapIndex(k, reflect.Value{})
+				}
+			}
+			v.SetMapIndex(neu, wert)
+		}
+	case reflect.String:
+		if v.CanSet() {
+			if b := nurDruckbar(v.String()); b != v.String() {
+				v.SetString(b)
+			}
+		}
+	}
 }

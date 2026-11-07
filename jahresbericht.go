@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"net/http"
@@ -409,11 +408,7 @@ func buildJahresbericht(d jahresberichtDaten) ([]byte, error) {
 		}
 	}
 
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 func (a *App) jahresberichtPDF(r *http.Request) ([]byte, string, error) {

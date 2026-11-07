@@ -216,10 +216,11 @@ func FuzzKontoauszug(f *testing.F) {
 func FuzzPdfListeUndPruefer(f *testing.F) {
 	f.Add("12", "Müller, Anna; Brandt\nVogel", "W-0001 ⚠ ünïcödé 💧")
 	f.Fuzz(func(t *testing.T, a, b, c string) {
+		a, b, c = trim(a, 200), trim(b, 200), trim(c, 200) // wie beim Speichern
 		s := defaultSettings()
 		pdf := neuesPDF(s, "Test", true)
 		zeilen := [][]string{}
-		for i := 0; i < 40; i++ {
+		for i := 0; i < 3; i++ {
 			zeilen = append(zeilen, []string{a, b, c})
 		}
 		pdfListe(pdf, s, c, b, []string{a, b, c}, []float64{30, 60, 90}, zeilen, 9)

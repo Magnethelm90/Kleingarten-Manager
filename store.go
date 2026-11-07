@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -125,6 +126,7 @@ func parseDaten(raw []byte) (*Data, error) {
 	if d.Rechnungen == nil {
 		d.Rechnungen = []*Rechnung{}
 	}
+	texteBereinigen(reflect.ValueOf(&d))
 	return &d, nil
 }
 
@@ -165,6 +167,7 @@ func (s *Store) saveLocked() error {
 	if err := s.sperrePruefenLocked(); err != nil {
 		return err
 	}
+	texteBereinigen(reflect.ValueOf(s.d))
 	raw, err := json.MarshalIndent(s.d, "", "  ")
 	if err != nil {
 		return err

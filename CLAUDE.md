@@ -44,4 +44,5 @@
 - `staticcheck -checks "all,-ST1005,-ST1000,-ST1003,-ST1021" ./...` (deutsche Fehlermeldungen sind gewollt)
 - `deadcode .` (externalURLAllowed ist nur unter Build-Tag genutzt, kein Fehler)
 - ESLint 9 mit `@eslint/js` recommended + `globals.browser` auf web/app.js und web/lageplan3d.js
+- PDF-Schrift kann nur Zeichen bis U+FFFF: `trim()` und `texteBereinigen` (Laden/Speichern) entfernen Emoji, `pdfBytes` fängt Abstürze ab. Neue PDFs immer mit `pdfBytes(pdf)` beenden.
 - Testdaten-Ordner immer mit `mktemp -d` anlegen – alte Ordner im Scratchpad enthalten veraltete Daten.

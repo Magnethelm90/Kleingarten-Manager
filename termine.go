@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -405,11 +404,7 @@ func buildJahresplan(s Settings, jahr int, ts []Termin) ([]byte, error) {
 	pdf.SetTextColor(110, 110, 110)
 	pdf.SetXY(leftX, 287)
 	pdf.CellFormat(rightX-leftX, 4, fmt.Sprintf("%s · Stand %s", s.VereinName, time.Now().Format("02.01.2006")), "", 0, "C", false, 0, "")
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 func (a *App) jahresplanPDF(r *http.Request) ([]byte, string, error) {

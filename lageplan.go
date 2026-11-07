@@ -231,11 +231,7 @@ func buildLageplan(s Settings, lp lagePlan, mitNamen bool) ([]byte, error) {
 	}
 	pdf.SetXY(links, max(y, 199))
 	pdf.CellFormat(rechts-links, 4, hinweis+" · Stand "+time.Now().Format("02.01.2006"), "", 0, "L", false, 0, "")
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 type legendenEintrag struct {
