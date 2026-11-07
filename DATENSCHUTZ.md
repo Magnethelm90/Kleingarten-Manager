@@ -108,6 +108,10 @@ Programm behält im Datenordner nur die neueste Akte und löscht alle, sobald ei
 auch nach dem Ausscheiden in der Historie. Einträge lassen sich einzeln löschen, wenn sie nicht mehr gebraucht
 werden. Die Kassenprüfung speichert nur die Namen der Prüfer und ihre Feststellungen.
 
+**Protokolle und Laubenkataster:** Protokolle sind Vereinsunterlagen und enthalten nur, was ihr hineinschreibt –
+Namen von Mitgliedern dort sparsam verwenden. Das Laubenkataster gehört zum Garten, nicht zur Person, und enthält
+außer der Anzeige des aktuellen Pächters keine Personendaten.
+
 **Begehungen:** Geschätzte Flächenanteile (Drittelregelung) gehören zum Pächter, der den Garten damals hatte; sie
 stehen in der Auskunft und werden mit der Person gelöscht.
 

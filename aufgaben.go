@@ -214,6 +214,8 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	s.pruefungAufgabenLocked(heute, add)
 	s.aemterAufgabenLocked(heute, add)
 	s.pachtgrenzeAufgabenLocked(heute, add)
+	s.barkasseAufgabenLocked(heute, add)
+	s.bautenAufgabenLocked(heute, add)
 
 	// Warteliste
 	nachfragen := 0

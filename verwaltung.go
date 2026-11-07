@@ -62,18 +62,7 @@ func (a *App) handleBeschlussSpeichern(w http.ResponseWriter, r *http.Request) {
 	a.st.mu.Lock()
 	defer a.st.mu.Unlock()
 	if in.Nummer == "" {
-		// fortlaufend je Gremium und Jahr, z. B. »MV 2025/3«
-		kurz := "MV"
-		if in.Gremium == "Vorstand" {
-			kurz = "V"
-		}
-		n := 1
-		for _, b := range a.st.d.Beschluesse {
-			if b.ID != in.ID && b.Gremium == in.Gremium && b.Datum[:4] == in.Datum[:4] {
-				n++
-			}
-		}
-		in.Nummer = fmt.Sprintf("%s %s/%d", kurz, in.Datum[:4], n)
+		in.Nummer = a.st.beschlussNummerLocked(in)
 	}
 	for i := range a.st.d.Beschluesse {
 		if in.ID != "" && a.st.d.Beschluesse[i].ID == in.ID {
@@ -91,6 +80,25 @@ func (a *App) handleBeschlussSpeichern(w http.ResponseWriter, r *http.Request) {
 	a.st.d.Beschluesse = append(a.st.d.Beschluesse, in)
 	a.st.audit("Beschluss %s eingetragen", in.Nummer)
 	a.speichernUndAntworten(w, in)
+}
+
+// beschlussNummerLocked vergibt die nächste Nummer je Gremium und Jahr, z. B. »MV 2025/3«. Der Aufrufer hält s.mu.
+func (s *Store) beschlussNummerLocked(in Beschluss) string {
+	kurz := "MV"
+	if in.Gremium == "Vorstand" {
+		kurz = "V"
+	}
+	// höchste vergebene Nummer + 1, damit nach dem Löschen eines Beschlusses keine Nummer doppelt vorkommt
+	praefix := fmt.Sprintf("%s %s/", kurz, in.Datum[:4])
+	n := 0
+	for _, b := range s.d.Beschluesse {
+		if b.ID != in.ID && strings.HasPrefix(b.Nummer, praefix) {
+			if x, err := strconv.Atoi(strings.TrimPrefix(b.Nummer, praefix)); err == nil {
+				n = max(n, x)
+			}
+		}
+	}
+	return fmt.Sprintf("%s%d", praefix, n+1)
 }
 
 func (a *App) handleBeschlussLoeschen(w http.ResponseWriter, r *http.Request) {

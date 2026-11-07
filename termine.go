@@ -150,6 +150,10 @@ func (a *App) handleTerminDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	a.st.mu.Lock()
 	defer a.st.mu.Unlock()
+	if _, ok := a.st.d.Sitzungen[id]; ok {
+		writeErr(w, bad("Zu diesem Termin gibt es ein Protokoll – der Termin bleibt deshalb im Jahresplaner"))
+		return
+	}
 	for i, t := range a.st.d.Termine {
 		if t.ID == id {
 			a.st.d.Termine = append(a.st.d.Termine[:i], a.st.d.Termine[i+1:]...)

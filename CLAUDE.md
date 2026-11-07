@@ -36,6 +36,10 @@
   Prüfer-Zugang), Ämter mit Amtswechsel-Checkliste (aemter.go, Unterseite in »Vereinsverwaltung«), Begehungsmodus
   (nur Frontend, Mängel-Seite), Pachtobergrenze § 5 BKleingG (pachtgrenze.go, Karte in Einstellungen),
   Cockpit-Hinweis für Ausgaben ohne Beleg.
+- Barkasse (barkasse.go, Karte im Kassenbericht, Belegnummern über Jahr.BarLetzteNr nie doppelt; Kassenprüfung
+  vergleicht gezähltes Bargeld mit dem Kassenbuch), Laubenkataster (bauten.go, Unterseite »Mängel & Lauben«),
+  Versammlungsprotokoll (sitzung.go, Knopf »Protokoll« bei Terminen; Abstimmungen ↔ Beschlussbuch synchron,
+  Nummer über beschlussNummerLocked = höchste + 1). modal() ignoriert null-Knöpfe.
 - Gesamtprüfung Nov 2026: staticcheck, govulncheck, deadcode, ESLint (recommended), go test -race, Fuzz-Tests,
   Playwright-Durchlauf aller Seiten (prüft auch »null«/»NaN« im Text) – alles sauber.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).

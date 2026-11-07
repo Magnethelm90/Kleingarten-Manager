@@ -153,6 +153,10 @@ type Jahr struct {
 	// Wird beim Jahreswechsel automatisch aus dem Kassenbestand des Vorjahres
 	// vorbelegt, kann aber jederzeit von Hand angepasst werden.
 	Anfangsbestand *float64 `json:"anfangsbestand,omitempty"`
+	// Barkasse: Kassenbuch für Bargeld (siehe barkasse.go); BarAnfang leer = Endbestand des Vorjahres
+	Barkasse    []Barbuchung `json:"barkasse,omitempty"`
+	BarAnfang   *float64     `json:"barAnfang,omitempty"`
+	BarLetzteNr int          `json:"barLetzteNr,omitempty"` // zuletzt vergebene Belegnummer (wird nie neu vergeben)
 }
 
 // AdminAuth speichert ein Passwort nur als Hash (für Admin und Kassenprüfer).
@@ -241,6 +245,9 @@ type Data struct {
 	Kassenpruefungen map[string]Kassenpruefung `json:"kassenpruefungen,omitempty"`
 	Aemter           []Amt                     `json:"aemter,omitempty"`
 	Pachtgrenze      Pachtgrenze               `json:"pachtgrenze"`
+	// Bauwerke je Garten (Laubenkataster, siehe bauten.go) und Protokolle von Versammlungen (siehe sitzung.go)
+	Bauwerke  []Bauwerk                    `json:"bauwerke,omitempty"`
+	Sitzungen map[string]Sitzungsprotokoll `json:"sitzungen,omitempty"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).

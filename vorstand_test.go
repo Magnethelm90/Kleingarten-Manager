@@ -150,3 +150,110 @@ func TestEichjahrBleibtBeimZaehler(t *testing.T) {
 		t.Errorf("übernommen: Wasser %d, Strom %d", neu.WasserEichjahr, neu.StromEichjahr)
 	}
 }
+
+func TestBarkasse(t *testing.T) {
+	app, h := newTestApp(t)
+	app.st.mu.Lock()
+	jahr := app.st.d.Settings.Jahr
+	app.st.ensureYear(jahr - 1)
+	app.st.mu.Unlock()
+	u := func(p string, y int) string { return fmt.Sprintf("/api/admin/barkasse%s?year=%d", p, y) }
+	do(h, "PUT", u("/anfang", jahr-1), map[string]any{"betrag": 50})
+	do(h, "POST", u("", jahr-1), map[string]any{"datum": fmt.Sprintf("%d-06-01", jahr-1), "text": "Fest", "betrag": 20})
+	b := decode[barkasseAnsicht](t, do(h, "GET", u("", jahr), nil))
+	if !b.AnfangVJ || b.Anfang != 70 {
+		t.Fatalf("Anfang aus Vorjahr: %+v", b)
+	}
+	b = decode[barkasseAnsicht](t, do(h, "POST", u("", jahr), map[string]any{"datum": fmt.Sprintf("%d-03-01", jahr), "text": "Erde", "betrag": -12.5}))
+	b = decode[barkasseAnsicht](t, do(h, "POST", u("", jahr), map[string]any{"datum": fmt.Sprintf("%d-02-01", jahr), "text": "Pfand", "betrag": 5}))
+	if b.Bestand != 62.5 || len(b.Buchungen) != 2 || b.Buchungen[0].BelegNr != 2 || b.Laufend[0] != 75 {
+		t.Fatalf("Buchungen: %+v", b)
+	}
+	// gelöschte Belegnummern werden nicht neu vergeben
+	b = decode[barkasseAnsicht](t, do(h, "DELETE", "/api/admin/barkasse/"+b.Buchungen[0].ID+fmt.Sprintf("?year=%d", jahr), nil))
+	b = decode[barkasseAnsicht](t, do(h, "POST", u("", jahr), map[string]any{"datum": fmt.Sprintf("%d-04-01", jahr), "text": "X", "betrag": 1}))
+	if b.Buchungen[len(b.Buchungen)-1].BelegNr != 3 {
+		t.Errorf("Belegnummer nach Löschen: %+v", b.Buchungen)
+	}
+	if rec := do(h, "POST", u("", jahr), map[string]any{"datum": "2025-01-01", "text": "Null", "betrag": 0}); rec.Code != 400 {
+		t.Errorf("Betrag 0 angenommen: %d", rec.Code)
+	}
+	// Kassenprüfung: gezähltes Bargeld gegen den Bestand des Kassenbuchs
+	x := decode[pruefAnsicht](t, do(h, "GET", fmt.Sprintf("/api/admin/kassenpruefung?year=%d", jahr), nil))
+	x = decode[pruefAnsicht](t, do(h, "PUT", fmt.Sprintf("/api/admin/kassenpruefung?year=%d", jahr), map[string]any{"kontostand": x.Kassenbestand, "barkasse": 60.5}))
+	if x.BarSoll == nil || *x.BarSoll != 58.5 || x.Differenz == nil || *x.Differenz != 2 {
+		t.Errorf("Prüfung mit Barkasse: soll %v, diff %v", x.BarSoll, x.Differenz)
+	}
+	pdfAblegen(t, "kassenbuch.pdf", do(h, "GET", u("/kassenbuch", jahr), nil).Body.Bytes())
+}
+
+func TestLaubenkataster(t *testing.T) {
+	app, h := newTestApp(t)
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "gartennr": "7", "name": "Anna", "gartengroesse": 300})
+	do(h, "POST", "/api/admin/bauten", map[string]any{"gartennr": "7", "art": "Laube", "flaeche": 20})
+	a := decode[bautenAntwort](t, do(h, "POST", "/api/admin/bauten", map[string]any{"gartennr": "7", "art": "Überdachter Freisitz", "flaeche": 6, "genehmigt": "nein"}))
+	if len(a.Gaerten) != 1 || a.Gaerten[0].Laube != 26 || !a.Gaerten[0].Ueber || a.Gaerten[0].Ungenehmigt != 1 || a.Gaerten[0].Name != "Anna" {
+		t.Fatalf("Kataster: %+v", a.Gaerten)
+	}
+	if rec := do(h, "POST", "/api/admin/bauten", map[string]any{"gartennr": "7", "art": "Laube", "flaeche": -1}); rec.Code != 400 {
+		t.Errorf("negative Fläche angenommen: %d", rec.Code)
+	}
+	app.st.mu.Lock()
+	var titel []string
+	app.st.bautenAufgabenLocked(time.Now(), func(_, t, _, _, _ string) { titel = append(titel, t) })
+	app.st.mu.Unlock()
+	if len(titel) != 2 {
+		t.Errorf("Cockpit: %v", titel)
+	}
+	// Bestandsschutz hebt die Warnung auf
+	laube := a.Gaerten[0].Bauten[0]
+	laube.Bestandsschutz = true
+	a = decode[bautenAntwort](t, do(h, "POST", "/api/admin/bauten", laube))
+	if a.Gaerten[0].Ueber {
+		t.Error("trotz Bestandsschutz zu groß")
+	}
+	pdfAblegen(t, "laubenkataster.pdf", do(h, "GET", "/api/admin/bauten/liste", nil).Body.Bytes())
+}
+
+func TestSitzungsprotokoll(t *testing.T) {
+	app, h := newTestApp(t)
+	tr := decode[Termin](t, do(h, "POST", "/api/admin/termine", map[string]any{"datum": "2026-03-14", "titel": "Jahreshauptversammlung", "art": "Versammlung", "von": "18:00"}))
+	d := decode[sitzungAntwort](t, do(h, "GET", "/api/admin/termine/"+tr.ID+"/protokoll", nil))
+	if !d.Neu || len(d.Protokoll.Punkte) != len(standardTops) || d.Protokoll.Beginn != "18:00" {
+		t.Fatalf("Vorlage: %+v", d.Protokoll)
+	}
+	p := d.Protokoll
+	p.Punkte[5].Text = "Der Vorstand wird entlastet."
+	p.Punkte[5].Beschluss = &Abstimmung{Titel: "Entlastung des Vorstands 2025", Ja: 30, Nein: 1, Enthaltung: 4}
+	p.Punkte[6].Beschluss = &Abstimmung{Titel: "Wasserpreis 2,10 €", Ja: 20, Nein: 15}
+	d = decode[sitzungAntwort](t, do(h, "PUT", "/api/admin/termine/"+tr.ID+"/protokoll", p))
+	app.st.mu.Lock()
+	n := len(app.st.d.Beschluesse)
+	app.st.mu.Unlock()
+	id := d.Protokoll.Punkte[5].BeschlussID
+	if n != 2 || id == "" || d.Nummern[id] != "MV 2026/1" || d.Nummern[d.Protokoll.Punkte[6].BeschlussID] != "MV 2026/2" {
+		t.Fatalf("Beschlussbuch: %d %v", n, d.Nummern)
+	}
+	// Abstimmung entfernen löscht den Beschluss, Änderung behält die Nummer
+	p = d.Protokoll
+	p.Punkte[6].Beschluss = nil
+	p.Punkte[5].Beschluss.Ja = 31
+	d = decode[sitzungAntwort](t, do(h, "PUT", "/api/admin/termine/"+tr.ID+"/protokoll", p))
+	app.st.mu.Lock()
+	bs := append([]Beschluss(nil), app.st.d.Beschluesse...)
+	app.st.mu.Unlock()
+	if len(bs) != 1 || bs[0].Ja != 31 || bs[0].Nummer != "MV 2026/1" || d.Protokoll.Punkte[6].BeschlussID != "" {
+		t.Fatalf("nach Änderung: %+v", bs)
+	}
+	// fremde Beschluss-IDs werden nicht übernommen
+	p = d.Protokoll
+	p.Punkte[0].BeschlussID = "fremd"
+	d = decode[sitzungAntwort](t, do(h, "PUT", "/api/admin/termine/"+tr.ID+"/protokoll", p))
+	if d.Protokoll.Punkte[0].BeschlussID != "" {
+		t.Error("fremde ID übernommen")
+	}
+	pdfAblegen(t, "protokoll.pdf", do(h, "GET", "/api/admin/termine/"+tr.ID+"/protokoll/pdf", nil).Body.Bytes())
+	if rec := do(h, "DELETE", "/api/admin/termine/"+tr.ID, nil); rec.Code != 400 {
+		t.Errorf("Termin mit Protokoll gelöscht: %d", rec.Code)
+	}
+}

@@ -17,7 +17,7 @@ import (
 func (s *Store) datenbestandLeer() bool {
 	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 || len(s.d.Einsatzstunden) > 0 || len(s.d.Spenden) > 0 || len(s.d.Vorauszahlungen) > 0 ||
 		len(s.d.Rundschreiben) > 0 || len(s.d.Schluessel) > 0 || len(s.d.Geraete) > 0 ||
-		len(s.d.Kuendigungen) > 0 || len(s.d.Beschluesse) > 0 || len(s.d.Vertraege) > 0 || len(s.d.Haushalt) > 0 || len(s.d.Aemter) > 0 || len(s.d.Kassenpruefungen) > 0 || s.d.Pachtgrenze.ErwerbsobstbauJeQm > 0 || s.d.LageKarte.Bild != "" || len(s.d.LageKarte.Objekte) > 0 {
+		len(s.d.Kuendigungen) > 0 || len(s.d.Beschluesse) > 0 || len(s.d.Vertraege) > 0 || len(s.d.Haushalt) > 0 || len(s.d.Aemter) > 0 || len(s.d.Bauwerke) > 0 || len(s.d.Sitzungen) > 0 || len(s.d.Kassenpruefungen) > 0 || s.d.Pachtgrenze.ErwerbsobstbauJeQm > 0 || s.d.LageKarte.Bild != "" || len(s.d.LageKarte.Objekte) > 0 {
 		return false
 	}
 	for _, j := range s.d.Jahre {
@@ -249,6 +249,33 @@ func (s *Store) ladeBeispieldaten() {
 		{ID: newID(), Amt: "Kassenwart/in", Name: "Petra Lindner", Seit: fmt.Sprintf("%d-03-14", jahr-2), Bis: fmt.Sprintf("%d-03-14", jahr+2),
 			Checkliste: map[string]string{"protokoll": fmt.Sprintf("%d-03-14", jahr-2), "bank": fmt.Sprintf("%d-03-20", jahr-2), "schluessel": fmt.Sprintf("%d-03-14", jahr-2), "zugaenge": fmt.Sprintf("%d-03-14", jahr-2), "unterlagen": fmt.Sprintf("%d-04-02", jahr-2), "verband": fmt.Sprintf("%d-04-02", jahr-2), "register": fmt.Sprintf("%d-05-10", jahr-2)}},
 		{ID: newID(), Amt: "Kassenprüfer/in", Name: "Uwe Brandt", Seit: fmt.Sprintf("%d-03-14", jahr-1), Bis: fmt.Sprintf("%d-03-14", jahr+3)},
+	}
+	// Laubenkataster: Garten 4 ist mit Freisitz über 24 m², Garten 9 hat ein Gewächshaus ohne Genehmigung
+	for _, x := range []struct {
+		nr      string
+		laube   float64
+		baujahr int
+	}{{"1", 18, 1994}, {"2", 22, 2003}, {"3", 16, 1978}, {"4", 20, 2011}, {"5", 24, 1999}, {"6", 12, 2016}, {"7", 19.5, 1987}, {"8", 21, 2008}, {"9", 17, 1996}, {"10", 23, 2001}} {
+		s.d.Bauwerke = append(s.d.Bauwerke, Bauwerk{ID: newID(), Gartennr: x.nr, Art: "Laube", Flaeche: x.laube, Baujahr: x.baujahr, Genehmigt: "ja", Bestandsschutz: x.baujahr < 1983})
+	}
+	s.d.Bauwerke = append(s.d.Bauwerke,
+		Bauwerk{ID: newID(), Gartennr: "4", Art: "Überdachter Freisitz", Flaeche: 7.5, Baujahr: 2019, Genehmigt: "unbekannt"},
+		Bauwerk{ID: newID(), Gartennr: "9", Art: "Gewächshaus", Flaeche: 6, Baujahr: 2022, Genehmigt: "nein"},
+		Bauwerk{ID: newID(), Gartennr: "2", Art: "Schuppen", Flaeche: 3, Genehmigt: "ja"})
+	// Barkasse: Sommerfest und kleine Einkäufe
+	if j := s.d.Jahre[yearKey(jahr)]; j != nil {
+		anf := 85.0
+		j.BarAnfang = &anf
+		for i, b := range []Barbuchung{
+			{Datum: fmt.Sprintf("%d-04-12", jahr), Text: "Blumenerde für den Eingang", Kategorie: "Instandhaltung", Betrag: -23.8},
+			{Datum: fmt.Sprintf("%d-06-21", jahr), Text: "Sommerfest: Getränkeverkauf", Kategorie: "Feste", Betrag: 312.5},
+			{Datum: fmt.Sprintf("%d-06-21", jahr), Text: "Sommerfest: Grillgut und Getränke", Kategorie: "Feste", Betrag: -186.4},
+			{Datum: fmt.Sprintf("%d-07-02", jahr), Text: "Einzahlung auf das Vereinskonto", Kategorie: "Umbuchung", Betrag: -100},
+		} {
+			b.ID, b.BelegNr = newID(), i+1
+			j.Barkasse = append(j.Barkasse, b)
+		}
+		j.BarLetzteNr = len(j.Barkasse)
 	}
 	s.d.Pachtgrenze = Pachtgrenze{ErwerbsobstbauJeQm: 0.035, Quelle: "Gutachterausschuss (Beispielwert)"}
 	s.d.Haushalt = map[string]Haushaltsplan{fmt.Sprint(jahr): {

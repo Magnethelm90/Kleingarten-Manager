@@ -887,3 +887,16 @@ dialog.geschichte::backdrop { background: rgba(18, 38, 24, .55); backdrop-filter
 .begehung-kopf { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
 .begehung-kopf .big { font-size: 1.5em; font-weight: 700; }
 .begehung-maengel { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 12px; margin: 8px 0; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--green); font: inherit; cursor: pointer; text-align: left; }
+.linkbtn:hover { text-decoration: underline; }
+.bau-zeile { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 2px 0; }
+.sitzung-punkte { display: flex; flex-direction: column; gap: 10px; }
+.sitzung-punkt { padding: 12px; }
+.sitzung-punkt .toolbar input[type=text] { flex: 1; min-width: 200px; }
+.sitzung-punkt textarea { width: 100%; margin-top: 6px; }
+.sitzung-beschluss { margin-top: 8px; padding: 8px 10px; border-left: 3px solid var(--green); background: var(--green-tint); border-radius: 6px; }
+.data td.neg { color: var(--err); }
+.barkasse { margin: 14px 0; }
+.barkasse summary { cursor: pointer; }
+.sitzung-beschluss .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.sitzung-beschluss .field input { width: 100%; }

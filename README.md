@@ -131,6 +131,12 @@ Benutzerkonto und keine Übertragung ins Internet.
   Schlüssel, Pächterwechsel) – mehrere Schritte erkennt es selbst, das Cockpit erinnert an den Rest
 - **Pachtvertrag** zum Unterschreiben aus Pächterdaten, Preisen und euren Vertragsbestimmungen, mit Lageplan als
   Anlage; auf Wunsch direkt in die Gartenakte
+- **Protokoll der Versammlung:** Tagesordnung aus der Einladung, je Punkt mitschreiben und abstimmen lassen;
+  Abstimmungen landen mit fortlaufender Nummer automatisch im Beschlussbuch, am Ende ein Protokoll-PDF mit
+  Unterschriftszeilen
+- **Laubenkataster:** Laube, Freisitz, Gewächshaus und Schuppen je Garten mit Größe, Baujahr und Genehmigung;
+  das Cockpit warnt, wenn Laube und überdachter Freisitz zusammen über 24 m² liegen (§ 3 BKleingG), Bestandsschutz
+  wird berücksichtigt; Liste für die Begehung als PDF
 - **Beschlussbuch:** Beschlüsse von Vorstand und Mitgliederversammlung mit Abstimmungsergebnis und Stichworten,
   durchsuchbar und als PDF
 - **Ämter:** wer welches Amt bis wann hat; das Cockpit erinnert vor Ende der Amtszeit an die Wahl, beim Amtswechsel
@@ -168,6 +174,8 @@ Benutzerkonto und keine Übertragung ins Internet.
   du bestätigst, und nichts doppelt
 - **Spenden und Zuwendungsbestätigungen** nach dem amtlichen Muster, einzeln oder als Sammelbestätigung fürs Jahr;
   das Programm prüft, ob der Bescheid des Finanzamts noch gilt, und zählt Spenden im Kassenbericht als Einnahme
+- **Barkasse:** Kassenbuch für Bargeld mit fortlaufenden Belegnummern, Anfangsbestand aus dem Vorjahr und
+  Kassenbuch als PDF; die Kassenprüfung vergleicht das gezählte Bargeld mit dem Bestand
 - **Kassenprüfung:** geführte Prüfung mit Kontostand-Abgleich, Belegkontrolle und zufälliger Stichprobe; am Ende
   ein fertiger Prüfbericht mit Empfehlung zur Entlastung für die Mitgliederversammlung. Ausgaben ohne Beleg meldet
   das Cockpit

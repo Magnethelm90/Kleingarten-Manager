@@ -50,6 +50,7 @@ type pruefAnsicht struct {
 	Saldo          float64        `json:"saldo"`
 	Kassenbestand  float64        `json:"kassenbestand"`
 	Differenz      *float64       `json:"differenz,omitempty"`
+	BarSoll        *float64       `json:"barSoll,omitempty"` // Bestand laut Kassenbuch der Barkasse
 	Ausgaben       int            `json:"ausgaben"`
 	OhneBeleg      []Ausgabe      `json:"ohneBeleg"`
 	Ungeprueft     int            `json:"ungeprueft"`
@@ -70,10 +71,19 @@ func (s *Store) pruefungLocked(jahr int) (pruefAnsicht, bool) {
 	}
 	a := pruefAnsicht{Jahr: jahr, Pruefung: p, Anfangsbestand: k.Anfangsbestand, Saldo: k.Saldo, Kassenbestand: k.Kassenbestand,
 		Ausgaben: len(k.Ausgaben), OhneBeleg: []Ausgabe{}, Stichprobe: []Ausgabe{}}
+	// Wird ein Kassenbuch für Bargeld geführt, zählt das gezählte Bargeld gegen dessen Bestand; sonst gegen den
+	// Kassenbestand (Bargeld, das nur im Kontobuch steht).
+	if s.barkasseAktivLocked(jahr) {
+		soll := s.barkasseLocked(jahr, 20).Bestand
+		a.BarSoll = &soll
+	}
 	if p.Kontostand != nil {
 		d := round2(*p.Kontostand - k.Kassenbestand)
 		if p.Barkasse != nil {
 			d = round2(d + *p.Barkasse)
+		}
+		if a.BarSoll != nil && p.Barkasse != nil {
+			d = round2(d - *a.BarSoll)
 		}
 		a.Differenz = &d
 	}
@@ -309,8 +319,11 @@ func (a *App) pruefberichtPDF(r *http.Request) ([]byte, string, error) {
 	if p.Kontostand != nil {
 		zeilen = append(zeilen, [2]string{"Kontostand laut Auszug", fmtEUR(*p.Kontostand)})
 	}
+	if x.BarSoll != nil {
+		zeilen = append(zeilen, [2]string{"Barkasse laut Kassenbuch", fmtEUR(*x.BarSoll)})
+	}
 	if p.Barkasse != nil {
-		zeilen = append(zeilen, [2]string{"Barkasse", fmtEUR(*p.Barkasse)})
+		zeilen = append(zeilen, [2]string{"Barkasse gezählt", fmtEUR(*p.Barkasse)})
 	}
 	if x.Differenz != nil {
 		zeilen = append(zeilen, [2]string{"Differenz", fmtEUR(*x.Differenz)})
