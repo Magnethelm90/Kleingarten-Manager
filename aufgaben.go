@@ -135,7 +135,7 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	}
 
 	// Gemeinnützigkeit und Spenden
-	if g := s.d.Gemeinnuetzigkeit; g.Steuernummer != "" && g.BescheidDatum != "" {
+	if g := s.d.Gemeinnuetzigkeit; s.modulAn("spenden") && g.Steuernummer != "" && g.BescheidDatum != "" {
 		if d, err := parseDate(g.BescheidDatum); err == nil {
 			jahre := freistellungGueltig
 			if g.Bescheid == "feststellung" {
@@ -156,12 +156,12 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 			offen++
 		}
 	}
-	if offen > 0 {
+	if offen > 0 && s.modulAn("spenden") {
 		add("info", mehrzahl(offen, "Spende ohne Bestätigung", "Spenden ohne Bestätigung"), "Spender brauchen die Zuwendungsbestätigung für ihre Steuererklärung.", "admin:spenden", "Spenden")
 	}
 
 	// Vorauszahlungen per Überweisung: Rückstände im laufenden Jahr
-	if len(s.d.VorauszahlungSoll) > 0 {
+	if len(s.d.VorauszahlungSoll) > 0 && s.modulAn("vorauszahlung") {
 		rueck, summe := 0, 0.0
 		for _, z := range s.vzAnsichtLocked(s.d.Settings.Jahr, heute).Zeilen {
 			if z.Rueckstand > 0 {
@@ -206,16 +206,26 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 		}
 	}
 
-	s.inventarAufgabenLocked(heute, add)
+	if s.modulAn("inventar") {
+		s.inventarAufgabenLocked(heute, add)
+	}
 	s.schwundAufgabenLocked(heute, add)
 	s.kuendigungAufgabenLocked(heute, add)
 	s.vertragAufgabenLocked(heute, add)
-	s.eichungAufgabenLocked(heute, add)
+	if s.modulAn("eichung") {
+		s.eichungAufgabenLocked(heute, add)
+	}
 	s.pruefungAufgabenLocked(heute, add)
 	s.aemterAufgabenLocked(heute, add)
-	s.pachtgrenzeAufgabenLocked(heute, add)
-	s.barkasseAufgabenLocked(heute, add)
-	s.bautenAufgabenLocked(heute, add)
+	if s.modulAn("pachtgrenze") {
+		s.pachtgrenzeAufgabenLocked(heute, add)
+	}
+	if s.modulAn("barkasse") {
+		s.barkasseAufgabenLocked(heute, add)
+	}
+	if s.modulAn("bauten") {
+		s.bautenAufgabenLocked(heute, add)
+	}
 
 	// Warteliste
 	nachfragen := 0
@@ -224,7 +234,7 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 			nachfragen++
 		}
 	}
-	if nachfragen > 0 {
+	if nachfragen > 0 && s.modulAn("warteliste") {
 		add("info", mehrzahl(nachfragen, "Eintrag auf der Warteliste nachfragen", "Einträge auf der Warteliste nachfragen"), "Seit über zwei Jahren nicht bestätigt: Besteht noch Interesse?", "admin:warteliste", "Warteliste")
 	}
 

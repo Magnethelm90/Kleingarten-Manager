@@ -521,6 +521,7 @@ type stateResp struct {
 	// SperrHinweis: Die Daten wurden auf einem anderen Rechner geöffnet, dieses Fenster speichert nicht mehr.
 	SperrHinweis string              `json:"sperrHinweis,omitempty"`
 	SepaAktiv    bool                `json:"sepaAktiv"`
+	Module       map[string]bool     `json:"module"`
 	Settings     Settings            `json:"settings"`
 	Paechter     []Paechter          `json:"paechter"`
 	Ablesungen   map[string]Ablesung `json:"ablesungen"`
@@ -596,6 +597,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	res.ZweiteSicherung = a.st.zweiteSicherungLocked()
 	res.SperrHinweis = a.st.sperrHinweisLocked()
 	res.SepaAktiv = a.st.sepaAktivLocked()
+	res.Module = a.st.moduleLocked()
 	res.Demo, res.Leer = a.st.d.Demo, a.st.datenbestandLeer()
 	res.Lageplan = a.st.d.Lageplan
 	if res.Lageplan == nil {
@@ -1739,6 +1741,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/admin/aemter/{id}", a.admin(a.handleAmtLoeschen))
 	mux.HandleFunc("POST /api/admin/aemter/{id}/wechsel", a.admin(a.handleAmtWechsel))
 	mux.HandleFunc("PUT /api/admin/aemter/{id}/checkliste", a.admin(a.handleAmtCheckliste))
+	mux.HandleFunc("PUT /api/admin/module", a.admin(a.handleModule))
 	mux.HandleFunc("GET /api/admin/pachtgrenze", a.admin(a.handlePachtgrenze))
 	mux.HandleFunc("PUT /api/admin/pachtgrenze", a.admin(a.handlePachtgrenze))
 	mux.HandleFunc("GET /api/admin/barkasse", a.adminOrPruef(a.handleBarkasse))

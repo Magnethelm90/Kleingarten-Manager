@@ -303,6 +303,7 @@ func (s *Store) ladeBeispieldaten() {
 		Hinweise:        "Mittagsruhe 13–15 Uhr, sonntags keine lauten Arbeiten\nWasser wird im April angestellt und im Oktober abgestellt\nGrünschnitt bitte zum Kompostplatz am Tor, Müll nimmt jeder selbst mit",
 	}
 	s.d.Demo = true
+	s.d.AusModule = nil // Beispieldaten zeigen alle Bereiche
 	s.audit("Beispieldaten geladen")
 }
 

@@ -192,6 +192,8 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Einführung** beim ersten Start und jederzeit über das »?«; **Beispieldaten** zum gefahrlosen Ausprobieren
 - Übersicht mit Jahresfortschritt, nächsten Terminen und Kennzahlen; Suche nach Name, Garten oder Nummer von
   jeder Seite aus
+- **Bereiche ein- und ausblenden:** Was der Verein nicht braucht (z. B. Barkasse, Laubenkataster, Spenden), verschwindet
+  aus Menü und Aufgaben; die Daten bleiben erhalten. Neue Installationen starten mit dem Grundpaket
 - **Vereinsfarbe und Logo** für Programm und Rechnungen; Modus **»Gut lesbar«** und einstellbare Schriftgröße
 
 ### Sicherung und Datenschutz

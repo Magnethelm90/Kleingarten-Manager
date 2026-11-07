@@ -42,6 +42,10 @@
   Nummer über beschlussNummerLocked = höchste + 1). modal() ignoriert null-Knöpfe.
 - Gesamtprüfung Nov 2026: staticcheck, govulncheck, deadcode, ESLint (recommended), go test -race, Fuzz-Tests,
   Playwright-Durchlauf aller Seiten (prüft auch »null«/»NaN« im Text) – alles sauber.
+- Bereiche ein-/ausblenden (module.go, Data.AusModule = Liste der AUSgeschalteten; leer = alles an, damit alte
+  Bestände alles zeigen). Neue Installation: Grundpaket (standardAusModule), Beispieldaten: alles an. Frontend:
+  NAV-Eintrag `modul:`, `modulAn()`, Karte »Bereiche« in Preise & Einstellungen; Cockpit-Hinweise per `s.modulAn()`.
+  Neue Zusatzfunktionen dort einhängen statt das Menü zu verlängern.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 )
@@ -250,6 +251,9 @@ type Data struct {
 	Sitzungen map[string]Sitzungsprotokoll `json:"sitzungen,omitempty"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
+
+	// AusModule: ausgeblendete Bereiche (module.go); leer = alles sichtbar.
+	AusModule []string `json:"ausModule,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).
 	Dokumente        []GartenDokument `json:"dokumente,omitempty"`
 	Wertermittlungen []Wertermittlung `json:"wertermittlungen,omitempty"`
@@ -296,10 +300,11 @@ func defaultSettings() Settings {
 func newData() *Data {
 	s := defaultSettings()
 	return &Data{
-		Version:  datenVersion,
-		Settings: s,
-		Paechter: []Paechter{},
-		Jahre:    map[string]*Jahr{yearKey(s.Jahr): {Ablesungen: map[string]Ablesung{}}},
+		Version:   datenVersion,
+		Settings:  s,
+		Paechter:  []Paechter{},
+		Jahre:     map[string]*Jahr{yearKey(s.Jahr): {Ablesungen: map[string]Ablesung{}}},
+		AusModule: slices.Clone(standardAusModule),
 	}
 }
 

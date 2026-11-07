@@ -278,27 +278,31 @@ const NAV = [
     { tab: 'termine', label: 'Termine', ic: 'kalender' },
     { admin: 'paechter', label: 'Pächter', ic: 'personen', tour: 'admin' },
     { admin: 'kuendigungen', label: 'Kündigungen', ic: 'kuendigung' },
-    { admin: 'warteliste', label: 'Warteliste', ic: 'warteliste' },
+    { admin: 'warteliste', modul: 'warteliste', label: 'Warteliste', ic: 'warteliste' },
     { admin: 'maengel', label: 'Mängel & Lauben', ic: 'warnung' },
-    { admin: 'rundschreiben', label: 'Rundschreiben', ic: 'brief' },
-    { admin: 'inventar', label: 'Schlüssel & Geräte', ic: 'schluessel' },
+    { admin: 'rundschreiben', modul: 'rundschreiben', label: 'Rundschreiben', ic: 'brief' },
+    { admin: 'inventar', modul: 'inventar', label: 'Schlüssel & Geräte', ic: 'schluessel' },
     { admin: 'verwaltung', label: 'Vereinsverwaltung', ic: 'akte' }] },
   { gruppe: 'Kasse & Berichte', items: [
     { admin: 'kassenbericht', label: 'Kassenbericht', ic: 'kasse' },
-    { admin: 'haushalt', label: 'Haushaltsplan', ic: 'waage' },
-    { admin: 'spenden', label: 'Spenden', ic: 'stern' },
-    { admin: 'vorauszahlung', label: 'Vorauszahlungen', ic: 'kalender' },
+    { admin: 'haushalt', modul: 'haushalt', label: 'Haushaltsplan', ic: 'waage' },
+    { admin: 'spenden', modul: 'spenden', label: 'Spenden', ic: 'stern' },
+    { admin: 'vorauszahlung', modul: 'vorauszahlung', label: 'Vorauszahlungen', ic: 'kalender' },
     { admin: 'sepa', label: 'Lastschrift', ic: 'euro', nur: (st) => st.sepaAktiv },
     { admin: 'berichte', label: 'Berichte & Meldungen', ic: 'bericht' },
     { admin: 'jahreswechsel', label: 'Jahreswechsel', ic: 'fertig' }] },
   { gruppe: 'Einstellungen', items: [
     { admin: 'einstellungen', label: 'Preise & Einstellungen', ic: 'regler' },
     { admin: 'daten', label: 'Import, Export, Sicherung', ic: 'daten' },
-    { admin: 'jubilaeen', label: 'Jubiläen', ic: 'stern' },
+    { admin: 'jubilaeen', modul: 'jubilaeen', label: 'Jubiläen', ic: 'stern' },
     { admin: 'protokoll', label: 'Änderungsprotokoll', ic: 'uhr' },
     { admin: 'datenschutz', label: 'Datenschutz', ic: 'sicherung' },
     { admin: 'sicherheit', label: 'Passwort', ic: 'schluessel' }] },
 ];
+// Bereiche: ausgeschaltete Zusatzbereiche (Einstellungen → Bereiche) erscheinen nicht im Menü.
+const modulAn = (name) => !S.state || !S.state.module || S.state.module[name] !== false;
+const navSichtbar = (x, st) => (!x.nur || x.nur(st)) && (!x.modul || modulAn(x.modul));
+const navLabel = (x) => (x.admin === 'maengel' && !modulAn('bauten') ? 'Mängel' : x.label);
 const navEintrag = (tab, adminTab) => NAV.flatMap((g) => g.items).find((x) => (x.admin ? tab === 'admin' && x.admin === adminTab : x.tab === tab));
 
 // Wechsel in einen Admin-Bereich: zwischengespeicherte Listen dieses Bereichs neu laden.
@@ -336,11 +340,11 @@ function seitenleiste(st) {
   return h('aside', { class: 'sidebar' + (S.menueOffen ? ' offen' : ''), 'aria-label': 'Bereiche' },
     NAV.map((g) => h('div', { class: 'nav-gruppe' },
       h('div', { class: 'nav-titel' }, g.gruppe),
-      g.items.filter((x) => !x.nur || x.nur(st)).map((x) => {
+      g.items.filter((x) => navSichtbar(x, st)).map((x) => {
         const aktiv = x.admin ? S.tab === 'admin' && S.adminTab === x.admin : S.tab === x.tab;
-        return h('button', { class: 'nav-item' + (aktiv ? ' active' : ''), 'data-tour': x.tour || x.tab || null, title: x.label,
+        return h('button', { class: 'nav-item' + (aktiv ? ' active' : ''), 'data-tour': x.tour || x.tab || null, title: navLabel(x),
           'aria-current': aktiv ? 'page' : null, onclick: () => geh(x) },
-        icon(x.ic, 19), h('span', null, x.label), x.admin && gesperrt ? h('i', { class: 'nav-schloss', title: 'Nur mit Admin-Anmeldung' }, icon('schloss', 13)) : null);
+        icon(x.ic, 19), h('span', null, navLabel(x)), x.admin && gesperrt ? h('i', { class: 'nav-schloss', title: 'Nur mit Admin-Anmeldung' }, icon('schloss', 13)) : null);
       }))));
 }
 
@@ -713,7 +717,7 @@ async function loadDashJubilaeen() {
 // Hinweis auf der Übersicht, welche aktiven Mitglieder in diesem Kalenderjahr
 // ein rundes Jubiläum (5, 10, 15, ...) haben – aus der Gartenhistorie.
 function jubilaeumBanner(st, istAdmin) {
-  if (S.jubilaeumDismissed || !istAdmin) return null;
+  if (S.jubilaeumDismissed || !istAdmin || !modulAn('jubilaeen')) return null;
   if (S.dashJubilaeen == null) { if (!S.dashJubilaeenLoading) loadDashJubilaeen(); return null; }
   if (!S.dashJubilaeen) return null;
   const seitByPaechter = {};
@@ -1148,7 +1152,7 @@ function viewEingabe() {
       h('div', { class: 'spacer' }),
       h('button', { class: 'btn', disabled: !st.paechter.length, title: 'Liste aller Gärten mit Zählernummern und Vorjahresständen zum Ausdrucken, mit leeren Feldern für den Ablese-Rundgang',
         onclick: () => ablesebogenDrucken(st.year) }, 'Ablesebogen drucken'),
-      !st.hasPassword || st.loggedIn ? h('button', { class: 'btn', disabled: !st.paechter.length, title: 'Wann müssen die Zähler nach dem Eichgesetz getauscht werden?', onclick: eichungDialog }, 'Eichfristen') : null),
+      (!st.hasPassword || st.loggedIn) && modulAn('eichung') ? h('button', { class: 'btn', disabled: !st.paechter.length, title: 'Wann müssen die Zähler nach dem Eichgesetz getauscht werden?', onclick: eichungDialog }, 'Eichfristen') : null),
     S.eingabeMode === 'schnell' ? viewSchnell() : viewTabelle());
 }
 
@@ -3507,7 +3511,7 @@ function viewAdmin() {
       : t === 'jubilaeen' ? adminJubilaeen() : t === 'daten' ? adminData() : t === 'protokoll' ? adminProtokoll() : t === 'datenschutz' ? adminDatenschutz() : adminSecurity();
   const eintrag = navEintrag('admin', t);
   return h('div', null,
-    h('h2', null, eintrag ? eintrag.label : 'Verwaltung'),
+    h('h2', null, eintrag ? navLabel(eintrag) : 'Verwaltung'),
     !st.hasPassword ? h('div', { class: 'banner warn' }, 'Für die Verwaltung ist noch kein Passwort gesetzt – jeder an diesem Rechner kann Pächter und Preise ändern. ',
       h('button', { class: 'btn small', onclick: () => { adminTabWaehlen('sicherheit'); render(); } }, 'Passwort festlegen')) : null,
     body);
@@ -3870,11 +3874,57 @@ function adminSettings() {
     aussehenKarte(st),
     h('p', { class: 'hint' }, `Diese Werte gelten für das laufende Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
     h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'))),
-    pachtgrenzeKarte());
+    pachtgrenzeKarte(),
+    bereicheKarte(st));
+}
+
+// Bereiche ein- und ausblenden. Daten ausgeblendeter Bereiche bleiben erhalten.
+const BEREICHE = [
+  ['warteliste', 'Warteliste', 'Interessenten für freie Gärten, Besichtigungen'],
+  ['rundschreiben', 'Rundschreiben', 'Briefe und Aushänge an alle Pächter'],
+  ['inventar', 'Schlüssel & Geräte', 'Schlüsselausgabe, Gerätebuch, Wartung'],
+  ['bauten', 'Laubenkataster', 'Lauben und Bauten je Garten, 24-m²-Grenze'],
+  ['eichung', 'Eichfristen', 'Wann Wasser- und Stromzähler getauscht werden müssen'],
+  ['barkasse', 'Barkasse', 'Kassenbuch für Bargeld mit Belegnummern'],
+  ['haushalt', 'Haushaltsplan', 'Plan für das Jahr, Vergleich mit dem Ist'],
+  ['spenden', 'Spenden', 'Zuwendungsbestätigungen, Gemeinnützigkeit'],
+  ['vorauszahlung', 'Vorauszahlungen', 'Monatliche Abschläge per Überweisung'],
+  ['pachtgrenze', 'Pachtobergrenze', 'Vergleich mit der Höchstpacht nach § 5 BKleingG'],
+  ['jubilaeen', 'Jubiläen', 'Runde Mitgliedsjahre, Ehrungen'],
+];
+
+function bereicheKarte(st) {
+  const kaesten = BEREICHE.map(([k, name, text]) => {
+    const cb = h('input', { type: 'checkbox', checked: st.module ? st.module[k] !== false : true });
+    cb.addEventListener('change', async () => {
+      try {
+        await api('PUT', '/api/admin/module', { [k]: cb.checked });
+        S.aufgaben = null;
+        await reload();
+      } catch (e) { handleErr(e); cb.checked = !cb.checked; }
+    });
+    return h('label', { class: 'bereich' }, cb, h('span', null, h('b', null, name), h('small', null, text)));
+  });
+  // Lastschrift hat einen eigenen Schalter; mit vorhandenen Mandaten bleibt der Bereich sichtbar.
+  const sepaCb = h('input', { type: 'checkbox', checked: !!st.sepaAktiv });
+  sepaCb.addEventListener('change', async () => {
+    try {
+      const d = await api('GET', '/api/admin/sepa');
+      await api('PUT', '/api/admin/sepa/einstellungen', { ...d.einstellungen, aktiv: sepaCb.checked });
+      await reload();
+      if (!sepaCb.checked && S.state.sepaAktiv) toast('Es gibt noch Lastschrift-Mandate – der Bereich bleibt deshalb sichtbar.');
+    } catch (e) { handleErr(e); sepaCb.checked = !sepaCb.checked; }
+  });
+  const sepa = h('label', { class: 'bereich' }, sepaCb, h('span', null, h('b', null, 'Lastschrift'), h('small', null, 'SEPA-Mandate und Datei für das Online-Banking')));
+  return h('div', { class: 'card' },
+    h('h3', null, 'Bereiche'),
+    h('p', { class: 'hint' }, 'Was euer Verein nicht braucht, lässt sich ausblenden – Menü und Aufgaben bleiben dann übersichtlich. Eingetragene Daten bleiben erhalten und sind nach dem Einschalten wieder da.'),
+    h('div', { class: 'bereiche' }, kaesten, sepa));
 }
 
 // Pachtobergrenze nach § 5 BKleingG: höchstens das Vierfache der ortsüblichen Pacht im Erwerbsobstbau.
 function pachtgrenzeKarte() {
+  if (!modulAn('pachtgrenze')) return null;
   if (S.pachtgrenze == null) {
     if (!S.pachtgrenzeLaedt) {
       S.pachtgrenzeLaedt = true;
@@ -4158,6 +4208,7 @@ function barbuchungDialog(b) {
 }
 
 function barkasseKarte(pruefMode) {
+  if (!modulAn('barkasse')) return null;
   const jahr = S.kasseYear;
   if (!S.barkasse || S.barkasse.jahr !== jahr) {
     if (!S.barkasseLaedt) {
@@ -5193,6 +5244,7 @@ async function begehungDurchfuehren() {
 }
 
 function adminBegehung() {
+  if (!modulAn('bauten')) return adminMaengel();
   const bauten = S.maengelSeite === 'bauten';
   return h('div', null, h('div', { class: 'subtabs' },
     h('button', { class: bauten ? '' : 'active', onclick: () => { S.maengelSeite = 'maengel'; render(); } }, 'Mängel und Nutzung'),
@@ -5953,7 +6005,7 @@ async function loadDashWarteliste() {
 }
 
 function besichtigungenKarte(st, istAdmin) {
-  if (!istAdmin || !st.wartelisteAnzahl) return null;
+  if (!istAdmin || !st.wartelisteAnzahl || !modulAn('warteliste')) return null;
   if (S.dashWarteliste == null) { if (!S.dashWartelisteLoading) loadDashWarteliste(); return null; }
   const heute = todayIso();
   const l = S.dashWarteliste.filter((b) => b.besichtigungAm && b.besichtigungAm >= heute && !b.besichtigungErgebnis)
