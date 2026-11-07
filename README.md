@@ -117,7 +117,8 @@ Benutzerkonto und keine Übertragung ins Internet.
   beim Wechsel als Ablösesumme vorgeschlagen
 - **Warteliste** in der Reihenfolge der Anmeldung, mit Besichtigungsterminen und Erinnerung, lange nicht bestätigte
   Einträge nachzufragen
-- **Mängel und Gartenbegehung:** Begehungsliste zum Ausdrucken, Mängel je Garten mit Frist erfassen und dem Pächter
+- **Mängel und Gartenbegehung:** Begehungsliste zum Ausdrucken oder geführte Begehung am Laptop (Garten für Garten
+  Mängel ankreuzen und Nutzung schätzen), Mängel je Garten mit Frist erfassen und dem Pächter
   eine schriftliche Aufforderung als PDF schreiben; dazu die **Drittelregelung**: Flächenanteile schätzen und sehen,
   welche Gärten unter einem Drittel Anbau liegen
 - **Vereinstermine:** Jahresplaner für Arbeitseinsätze, Versammlungen und Feste, als Aushang und als Kalenderdatei
@@ -132,6 +133,8 @@ Benutzerkonto und keine Übertragung ins Internet.
   Anlage; auf Wunsch direkt in die Gartenakte
 - **Beschlussbuch:** Beschlüsse von Vorstand und Mitgliederversammlung mit Abstimmungsergebnis und Stichworten,
   durchsuchbar und als PDF
+- **Ämter:** wer welches Amt bis wann hat; das Cockpit erinnert vor Ende der Amtszeit an die Wahl, beim Amtswechsel
+  führt eine Checkliste durch die Übergabe (Bankvollmacht, Vereinsregister, Schlüssel, Zugänge)
 - **Verträge und Versicherungen** des Vereins mit Laufzeit und Kündigungsfrist; das Cockpit meldet sich rechtzeitig
   vor dem letzten Kündigungstag
 - **Rundschreiben** an alle oder ausgewählte Pächter: per E-Mail über das eigene E-Mail-Programm (alle Adressen
@@ -155,6 +158,8 @@ Benutzerkonto und keine Übertragung ins Internet.
   einem Klick; Vorauszahlungen werden auf der Jahresrechnung abgezogen und zählen in der Kasse
 - **Haushaltsplan:** Einnahmen und Ausgaben je Posten planen, das Ist kommt laufend aus dem Kassenbericht;
   Abweichungen auf einen Blick und als PDF für die Mitgliederversammlung
+- **Eichfristen der Zähler:** Wasserzähler 6 Jahre, Stromzähler 8 Jahre (einstellbar); das Cockpit warnt, die
+  Tauschliste für den Wasserwart kommt als PDF, beim Zählerwechsel setzt das Programm das Eichjahr selbst
 - **Wasserschwund-Kontrolle:** Hauptzähler gegen die Summe aller Gartenzähler, Jahr für Jahr in Menge, Prozent
   und Euro, dazu die Gärten mit auffälligem Verbrauch oder stehendem Zähler; ab 10 % oder bei deutlichem Anstieg
   warnt das Cockpit
@@ -163,7 +168,13 @@ Benutzerkonto und keine Übertragung ins Internet.
   du bestätigst, und nichts doppelt
 - **Spenden und Zuwendungsbestätigungen** nach dem amtlichen Muster, einzeln oder als Sammelbestätigung fürs Jahr;
   das Programm prüft, ob der Bescheid des Finanzamts noch gilt, und zählt Spenden im Kassenbericht als Einnahme
-- **Kassenprüfer-Zugang** mit eigenem Passwort: sieht den Kassenbericht und hakt Ausgaben als geprüft ab, sonst nichts
+- **Kassenprüfung:** geführte Prüfung mit Kontostand-Abgleich, Belegkontrolle und zufälliger Stichprobe; am Ende
+  ein fertiger Prüfbericht mit Empfehlung zur Entlastung für die Mitgliederversammlung. Ausgaben ohne Beleg meldet
+  das Cockpit
+- **Kassenprüfer-Zugang** mit eigenem Passwort: sieht den Kassenbericht, hakt Ausgaben als geprüft ab und führt die
+  Kassenprüfung durch, sonst nichts
+- **Pachtobergrenze** nach § 5 Bundeskleingartengesetz: das Programm vergleicht den Pachtsatz mit dem Vierfachen der
+  ortsüblichen Pacht und zeigt, wie viel Luft bleibt
 - **Jahresbericht** als PDF für die Mitgliederversammlung – Kennzahlen, Kasse, Diagramm, Termine, ohne Namen
 - **Jahresmeldung** für den Landes- oder Regionalverband: Parzellen, Flächen, Wechsel, Warteliste,
   Gemeinschaftsstunden, Abgaben – als Übersicht und Excel-Datei

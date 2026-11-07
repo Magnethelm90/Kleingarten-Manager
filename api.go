@@ -25,7 +25,7 @@ import (
 )
 
 // appVersion wird beim Release-Build über -ldflags "-X main.appVersion=..." gesetzt.
-var appVersion = "1.1"
+var appVersion = "1.5.1"
 
 // appAutor erscheint in der Fußzeile der Oberfläche und im Konsolenfenster.
 const appAutor = "Derek"
@@ -184,8 +184,8 @@ func (a *App) sessionValid(r *http.Request) bool {
 
 // ---------------------------------------------------------------- Kassenprüfer-Anmeldung
 //
-// Eigener, optionaler Zugang mit Lesezugriff auf den Kassenbericht (inkl. des
-// Geprüft-Hakens), aber ohne die übrigen Admin-Rechte. Ist kein Kassenprüfer-
+// Eigener, optionaler Zugang mit Lesezugriff auf den Kassenbericht, dem Geprüft-Haken
+// und der geführten Kassenprüfung (siehe pruefung.go), aber ohne die übrigen Admin-Rechte. Ist kein Kassenprüfer-
 // Passwort eingerichtet (Standard), gibt es diesen Zugang schlicht nicht.
 
 func (a *App) hasPruefPassword() bool { return a.st.d.PruefAuth.Hash != "" }
@@ -1325,6 +1325,12 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 			}
 			p.Notiz = old.Notiz // gibt es in keiner Importdatei, darf beim Aktualisieren nicht verloren gehen
 			p.AusgeschiedenAm = old.AusgeschiedenAm
+			if p.WasserzaehlerNr == old.WasserzaehlerNr {
+				p.WasserEichjahr = old.WasserEichjahr
+			}
+			if p.StromzaehlerNr == old.StromzaehlerNr {
+				p.StromEichjahr = old.StromEichjahr
+			}
 			a.st.d.Paechter[idx] = p
 			a.st.gartenWechsel(p.ID, old.Gartennr, p.Gartennr, p.Mitgliedsnr, p.Name)
 			updated++
@@ -1333,6 +1339,7 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 			if p.Versand == "" {
 				p.Versand = "Emailsendung" // wie beim Anlegen im Formular
 			}
+			a.st.eichjahrUebernehmenLocked(&p)
 			a.st.d.Paechter = append(a.st.d.Paechter, p)
 			a.st.gartenOeffnen(p.ID, p.Gartennr, p.Mitgliedsnr, p.Name)
 			added++

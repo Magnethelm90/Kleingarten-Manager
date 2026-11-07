@@ -94,7 +94,7 @@ header.top .brand span { font-size: 12px; opacity: .8; display: block; max-width
 .top button.quit:hover { background: rgba(255,255,255,.24); }
 .top button.help { padding: 6px 0; width: 34px; font-weight: 700; margin-left: auto; border-radius: 999px; }
 
-main { padding: 24px 28px 60px; max-width: 1600px; width: 100%; }
+main { padding: 24px 28px 60px; max-width: 1600px; width: 100%; min-width: 0; }
 h2 { margin: 0 0 6px; font-size: 22px; font-weight: 700; letter-spacing: -.2px; text-wrap: balance; }
 h3 { margin: 24px 0 10px; font-size: 15px; color: var(--green-dark); font-weight: 650; }
 h3.sect { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 22px 0 10px; }
@@ -174,10 +174,9 @@ td.gesamt.guthaben { color: var(--ok); }
 td.r { text-align: right; font-variant-numeric: tabular-nums; }
 td.name { font-weight: 550; }
 td.wrap { white-space: normal; min-width: 150px; max-width: 230px; }
-.s2 { min-width: 190px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
 tbody td.sticky, thead th.sticky { position: sticky; background: #fff; z-index: 1; }
 .s1 { left: 0; min-width: 66px; max-width: 66px; }
-.s2 { left: 66px; box-shadow: 2px 0 0 #e6eae1; }
+.s2 { left: 66px; box-shadow: 2px 0 0 #e6eae1; min-width: 190px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
 thead th.sticky { background: var(--green-tint); z-index: 3; }
 thead tr.group th.sticky { background: var(--green); }
 tbody tr:hover td.sticky { background: #f6faf5; }
@@ -301,7 +300,6 @@ aside.sidebar {
 .nav-schloss { color: var(--muted); opacity: .6; display: inline-flex; }
 .nav-item:focus-visible { outline: none; box-shadow: var(--ring); }
 .menue-knopf { display: none; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: 8px; padding: 5px 7px; cursor: pointer; }
-main { min-width: 0; }
 
 @media (max-width: 1450px) {
   header.top { padding: 6px 12px; gap: 10px; }
@@ -693,7 +691,6 @@ td.wrap .hint { font-size: 12.5px; }
 .n-drittel { position: absolute; left: 33.33%; top: -2px; bottom: -2px; width: 2px; background: #1f2a1c; }
 .nutzung-legende { display: flex; align-items: center; gap: 4px; margin: 6px 0 10px; }
 .nutzung-legende span { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-left: 8px; }
-.warn-text { color: var(--warn); }
 
 /* Was steht an? */
 .cockpit { margin-bottom: 14px; }

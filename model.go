@@ -177,7 +177,7 @@ type Data struct {
 	Jahre    map[string]*Jahr `json:"jahre"`
 	Admin    AdminAuth        `json:"admin"`
 	// PruefAuth: eigenes, optionales Passwort für einen Kassenprüfer-Zugang mit
-	// Lesezugriff auf den Kassenbericht (inkl. Geprüft-Haken), aber ohne die
+	// Lesezugriff auf den Kassenbericht (inkl. Geprüft-Haken und Kassenprüfung), aber ohne die
 	// übrigen Admin-Rechte. Leer = Rolle nicht eingerichtet.
 	PruefAuth AdminAuth `json:"pruefAuth,omitempty"`
 	// Rechnungen ist das Archiv aller ausgestellten Rechnungen. Jeder Eintrag

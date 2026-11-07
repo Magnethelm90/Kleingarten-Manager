@@ -117,7 +117,7 @@ const numIn = (v) => (v == null ? '' : nfIn.format(v));
 
 // Zahlen deutsch oder englisch schreibbar: "2,5" "2.5" "1.234,5"; leer -> null; Unsinn -> NaN
 function parseNum(s) {
-  s = String(s ?? '').trim().replace(/[€\s ]/g, '');
+  s = String(s ?? '').trim().replace(/[€\s\u00a0]/g, '');
   if (s === '') return null;
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
   else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, '');
@@ -282,7 +282,7 @@ const NAV = [
     { admin: 'maengel', label: 'Mängel', ic: 'warnung' },
     { admin: 'rundschreiben', label: 'Rundschreiben', ic: 'brief' },
     { admin: 'inventar', label: 'Schlüssel & Geräte', ic: 'schluessel' },
-    { admin: 'verwaltung', label: 'Beschlüsse, Verträge, Ämter', ic: 'akte' }] },
+    { admin: 'verwaltung', label: 'Vereinsverwaltung', ic: 'akte' }] },
   { gruppe: 'Kasse & Berichte', items: [
     { admin: 'kassenbericht', label: 'Kassenbericht', ic: 'kasse' },
     { admin: 'haushalt', label: 'Haushaltsplan', ic: 'waage' },
@@ -2614,7 +2614,7 @@ function adminInventar() {
   return h('div', null, sub, geraete ? inventarGeraete() : inventarSchluessel());
 }
 
-function verlaufDialog(titel, verlauf) {
+function inventarVerlaufDialog(titel, verlauf) {
   const l = [...(verlauf || [])].reverse();
   return modal(titel, l.length ? h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
     h('thead', null, h('tr', null, ['Datum', 'Vorgang', 'Wer', 'Notiz'].map((t) => h('th', null, t)))),
@@ -2695,7 +2695,7 @@ function inventarSchluessel() {
           k.inhaberName
             ? h('button', { class: 'btn small', onclick: () => nachher(datumDialog(`Rückgabe ${k.art} ${k.nummer}`, `Zurück von ${k.inhaberName}.${k.pfand ? ' Pfand ' + eur(k.pfand) + ' zurückzahlen.' : ''}`, `/api/admin/schluessel/${k.id}/rueckgabe`)) }, 'Rückgabe')
             : h('button', { class: 'btn small', onclick: () => nachher(empfaengerDialog(`${k.art}schlüssel ${k.nummer} ausgeben`, `/api/admin/schluessel/${k.id}/ausgabe`, false)) }, 'Ausgeben'), ' ',
-          mehrMenue([{ label: 'Bearbeiten', aktion: () => nachher(schluesselDialog(k)) }, { label: 'Verlauf', aktion: () => verlaufDialog(`Verlauf ${k.art} ${k.nummer}`, k.verlauf) },
+          mehrMenue([{ label: 'Bearbeiten', aktion: () => nachher(schluesselDialog(k)) }, { label: 'Verlauf', aktion: () => inventarVerlaufDialog(`Verlauf ${k.art} ${k.nummer}`, k.verlauf) },
             { label: 'Löschen', gefahr: true, aktion: async () => {
               if (!(await confirmBox(`Schlüssel ${k.art} ${k.nummer} löschen (z. B. verloren oder Schloss getauscht)?`, 'Löschen', true))) return;
               try { await api('DELETE', `/api/admin/schluessel/${k.id}`); invNeuLaden(); } catch (e) { handleErr(e); }
@@ -2754,7 +2754,7 @@ function inventarGeraete() {
             mehrMenue([
               { label: 'Wartung erledigt', aktion: () => nachher(datumDialog(`Wartung ${g.name}`, '', `/api/admin/geraete/${g.id}/wartung`)) },
               { label: 'Bearbeiten', aktion: () => nachher(geraetDialog(g)) },
-              { label: 'Verlauf', aktion: () => verlaufDialog(`Verlauf ${g.name}`, g.verlauf) },
+              { label: 'Verlauf', aktion: () => inventarVerlaufDialog(`Verlauf ${g.name}`, g.verlauf) },
               { label: 'Löschen', gefahr: true, aktion: async () => {
                 if (!(await confirmBox(`Gerät »${g.name}« löschen?`, 'Löschen', true))) return;
                 try { await api('DELETE', `/api/admin/geraete/${g.id}`); invNeuLaden(); } catch (e) { handleErr(e); }
@@ -4189,6 +4189,15 @@ async function pruefungDialog() {
   };
   zeichne();
   const fld = (label, el) => h('div', { class: 'field' }, h('label', null, label), el);
+  const diffZeile = h('p', { class: 'hint' });
+  const diffRechnen = () => {
+    const k = parseNum(f.konto.value), b = parseNum(f.bar.value) || 0;
+    const diff = k == null || Number.isNaN(k) || Number.isNaN(b) ? null : Math.round((k + b - d.kassenbestand) * 100) / 100;
+    diffZeile.className = diff != null && Math.abs(diff) >= 0.005 ? 'warn-text' : 'hint';
+    diffZeile.textContent = `Kassenbestand laut Programm: ${eur(d.kassenbestand)}` + (diff == null ? '.' : Math.abs(diff) < 0.005 ? ' – stimmt mit Konto und Barkasse überein.' : ` – Differenz ${eur(diff)}.`);
+  };
+  f.konto.addEventListener('input', diffRechnen); f.bar.addEventListener('input', diffRechnen);
+  diffRechnen();
   const speichern = async () => {
     const zahl = (el) => (el.value.trim() === '' ? null : parseNum(el.value));
     const konto = zahl(f.konto); const bar = zahl(f.bar);
@@ -4201,7 +4210,7 @@ async function pruefungDialog() {
   };
   const ok = await breiterDialog(`Kassenprüfung ${d.jahr}`, h('div', null,
     h('div', { class: 'form' }, fld('Tag der Prüfung', f.datum), fld('Kassenprüfer', f.pruefer), fld('Kontostand 31.12. in €', f.konto), fld('Barkasse in €', f.bar)),
-    h('p', { class: 'hint' }, `Kassenbestand laut Programm: ${eur(d.kassenbestand)}. Nach dem Speichern zeigt das Programm die Differenz.`),
+    diffZeile,
     h('h4', null, 'Prüfpunkte'), punkte, stich,
     h('h4', null, 'Ergebnis'),
     h('div', { class: 'form' }, h('div', { class: 'field wide' }, h('label', null, 'Feststellungen'), f.fest), fld('Ergebnis', f.ergebnis),
@@ -4292,13 +4301,6 @@ function adminKassenbericht(pruefMode) {
     h('tbody', null,
       diffRow('Wasser', k.wasserVerbrauch, vW3, 'm³'), diffRow('Wasser (€)', k.summen.kostenWasser, vWE, '€'),
       diffRow('Strom', k.stromVerbrauch, vSK, 'kWh'), diffRow('Strom (€)', k.summen.kostenEnergie, vSE, '€')));
-  // Wasser: liegt der Hauptzähler deutlich über der Summe der Pächter, kann eine Leitung undicht sein
-  const wasserHaupt = parseNum(vW3.value);
-  const wasserLoch = wasserHaupt != null && !Number.isNaN(wasserHaupt) && wasserHaupt > 0 ? wasserHaupt - k.wasserVerbrauch : 0;
-  const verlustHinweis = wasserLoch > 0 && wasserLoch / wasserHaupt > 0.15
-    ? h('div', { class: 'banner warn', style: 'margin-top:10px' },
-      `Wasser: Der Hauptzähler zeigt ${nfFlex.format(Math.round(wasserLoch * 100) / 100)} m³ (${Math.round(wasserLoch / wasserHaupt * 100)} %) mehr, als die Pächter zusammen verbraucht haben. Das kann auf eine undichte Leitung oder einen falsch abgelesenen Zähler hindeuten.`)
-    : null;
   const saveVersorger = async () => {
     const vals = [vW3, vWE, vSK, vSE].map((i) => parseNum(i.value));
     if (vals.some((v) => Number.isNaN(v) || (v !== null && v < 0))) { toast('Bitte nur Zahlen ab 0 eingeben.', 'err'); return; }
@@ -4335,7 +4337,7 @@ function adminKassenbericht(pruefMode) {
     h('h3', null, 'Vergleich mit dem Versorger'),
     h('div', { class: 'card' },
       h('p', { class: 'hint' }, 'Trage hier die Werte der Hauptzähler bzw. der Versorgerrechnung ein, um sie mit der Summe der Pächterabrechnung zu vergleichen. Eine größere Abweichung kann auf einen Zählerfehler, Schwund oder eine falsche Ablesung hindeuten.'),
-      h('div', { class: 'tablewrap' }, versorgerTable), verlustHinweis,
+      h('div', { class: 'tablewrap' }, versorgerTable),
       pruefMode ? null : h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: saveVersorger }, 'Werte speichern'))),
     h('h3', null, 'Schwund über die Jahre'),
     schwundKarte(),
@@ -5069,15 +5071,22 @@ async function begehungDurchfuehren() {
     const l = z.letzte;
     const nf = { anbau: zahl(l ? l.anbau : ''), erholung: zahl(l ? l.erholung : ''), bebauung: zahl(l ? l.bebauung : '') };
     const speichern = async () => {
+      // erst die Nutzung (wird vom Server geprüft), dann die Mängel; gespeicherte Mängel verlieren ihr Häkchen,
+      // damit ein erneuter Versuch nach einem Fehler nichts doppelt anlegt
       try {
-        for (const a of arten.filter((x) => x.cb.checked)) {
-          await api('POST', '/api/admin/maengel', { gartennr: z.gartennr, datum, art: a.art, beschreibung: a.text.value.trim() || a.art, frist, erledigtAm: '' });
-          gespeichert++;
-        }
         const w = Object.fromEntries(Object.entries(nf).map(([k, el]) => [k, el.value.trim() === '' ? null : parseNum(el.value)]));
         if (Object.values(w).some((v) => Number.isNaN(v))) { toast('Bitte die Nutzung in Prozent als Zahl eintragen.', 'err'); return false; }
         const geaendert = !l ? Object.values(w).some((v) => v != null) : ['anbau', 'erholung', 'bebauung'].some((k) => (w[k] ?? 0) !== l[k]);
-        if (geaendert) await api('POST', '/api/admin/nutzung', { gartennr: z.gartennr, datum, anbau: w.anbau ?? 0, erholung: w.erholung ?? 0, bebauung: w.bebauung ?? 0, notiz: '' });
+        if (geaendert) {
+          await api('POST', '/api/admin/nutzung', { gartennr: z.gartennr, datum, anbau: w.anbau ?? 0, erholung: w.erholung ?? 0, bebauung: w.bebauung ?? 0, notiz: '' });
+          z.letzte = { datum, anbau: w.anbau ?? 0, erholung: w.erholung ?? 0, bebauung: w.bebauung ?? 0 };
+        }
+        for (const a of arten.filter((x) => x.cb.checked)) {
+          await api('POST', '/api/admin/maengel', { gartennr: z.gartennr, datum, art: a.art, beschreibung: a.text.value.trim() || a.art, frist, erledigtAm: '' });
+          a.cb.checked = false; a.text.style.display = 'none';
+          offen.push({ gartennr: z.gartennr, art: a.art, beschreibung: a.text.value.trim() || a.art, frist });
+          gespeichert++;
+        }
       } catch (e) { handleErr(e); return false; }
       return true;
     };
@@ -5087,7 +5096,7 @@ async function begehungDurchfuehren() {
       zeichne();
     };
     const letzter = i === nutzung.length - 1;
-    box.replaceChildren(
+    box.replaceChildren(...h('div', null,
       h('div', { class: 'begehung-kopf' }, h('span', { class: 'big' }, `Garten ${z.gartennr}`), h('span', null, z.name), h('span', { class: 'hint' }, `${i + 1} von ${nutzung.length}`)),
       alt.length ? h('div', { class: 'banner warn', style: 'margin-top:8px' }, 'Noch offen: ', alt.map((m) => `${m.art} – ${m.beschreibung}${m.frist ? ` (Frist ${deDate(m.frist)})` : ''}`).join(' · ')) : null,
       h('h4', null, 'Neue Mängel'),
@@ -5100,7 +5109,7 @@ async function begehungDurchfuehren() {
         h('div', { class: 'spacer' }),
         h('button', { class: 'btn primary', onclick: async () => { if (letzter) { if (await speichern()) { box.replaceChildren(h('p', null, h('b', null, 'Begehung abgeschlossen.'), ` ${gespeichert} Mängel eingetragen.`)); } } else gehe(1, true); } },
           letzter ? 'Speichern und abschließen' : 'Speichern und weiter →')),
-      h('p', { class: 'hint' }, `Neue Mängel bekommen die Frist ${deDate(frist)}. Ohne Häkchen und ohne Änderung wird nichts gespeichert.`));
+      h('p', { class: 'hint' }, `Neue Mängel bekommen die Frist ${deDate(frist)}. Ohne Häkchen und ohne Änderung wird nichts gespeichert.`)).childNodes);
   };
   zeichne();
   await breiterDialog(`Begehung am ${deDate(datum)}`, box, [{ label: 'Beenden', value: true }]);

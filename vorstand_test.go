@@ -10,7 +10,7 @@ import (
 func TestEichStatus(t *testing.T) {
 	for _, c := range []struct {
 		eich, frist, jahr, bis int
-		status             string
+		status                 string
 	}{
 		{0, 6, 2026, 0, "unbekannt"},
 		{2019, 6, 2026, 2025, "abgelaufen"},
@@ -138,5 +138,15 @@ func TestPachtgrenze(t *testing.T) {
 	g = decode[pachtgrenzeAnsicht](t, do(h, "PUT", "/api/admin/pachtgrenze", map[string]any{"erwerbsobstbauJeQm": 0}))
 	if g.Hoechst != nil || g.Ueber {
 		t.Errorf("ohne Wert: %+v", g)
+	}
+}
+
+func TestEichjahrBleibtBeimZaehler(t *testing.T) {
+	s := &Store{d: newData()}
+	s.d.Paechter = []Paechter{{ID: "alt", WasserzaehlerNr: "W-1", WasserEichjahr: 2021, StromzaehlerNr: "S-1", StromEichjahr: 2019, Geloescht: true}}
+	neu := Paechter{ID: "neu", WasserzaehlerNr: "W-1", StromzaehlerNr: "S-9"}
+	s.eichjahrUebernehmenLocked(&neu)
+	if neu.WasserEichjahr != 2021 || neu.StromEichjahr != 0 {
+		t.Errorf("übernommen: Wasser %d, Strom %d", neu.WasserEichjahr, neu.StromEichjahr)
 	}
 }

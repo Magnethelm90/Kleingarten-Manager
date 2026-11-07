@@ -96,6 +96,23 @@ func (s *Store) eichungLocked(jahr int) []eichZeile {
 	return out
 }
 
+// eichjahrUebernehmenLocked: Zähler gehören zum Garten, nicht zur Person. Bekommt ein Pächter (Wechsel, Vergabe,
+// Import) einen Zähler, dessen Nummer schon bei einem anderen – auch gelöschten – Pächter mit Eichjahr steht,
+// wird das Eichjahr übernommen. Der Aufrufer hält s.mu.
+func (s *Store) eichjahrUebernehmenLocked(p *Paechter) {
+	for _, q := range s.d.Paechter {
+		if q.ID == p.ID {
+			continue
+		}
+		if p.WasserEichjahr == 0 && q.WasserEichjahr > 0 && p.WasserzaehlerNr != "" && q.WasserzaehlerNr == p.WasserzaehlerNr {
+			p.WasserEichjahr = q.WasserEichjahr
+		}
+		if p.StromEichjahr == 0 && q.StromEichjahr > 0 && p.StromzaehlerNr != "" && q.StromzaehlerNr == p.StromzaehlerNr {
+			p.StromEichjahr = q.StromEichjahr
+		}
+	}
+}
+
 func (a *App) handleEichung(w http.ResponseWriter, r *http.Request) {
 	jahr := time.Now().Year()
 	a.st.mu.Lock()

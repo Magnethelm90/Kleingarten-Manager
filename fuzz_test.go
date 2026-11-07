@@ -211,3 +211,23 @@ func FuzzKontoauszug(f *testing.F) {
 		}
 	})
 }
+
+// FuzzPdfListeUndPruefer: beliebige Texte in Tabellen-PDFs (Tauschliste) und Prüfernamen dürfen nichts zum Absturz bringen.
+func FuzzPdfListeUndPruefer(f *testing.F) {
+	f.Add("12", "Müller, Anna; Brandt\nVogel", "W-0001 ⚠ ünïcödé 💧")
+	f.Fuzz(func(t *testing.T, a, b, c string) {
+		s := defaultSettings()
+		pdf := neuesPDF(s, "Test", true)
+		zeilen := [][]string{}
+		for i := 0; i < 40; i++ {
+			zeilen = append(zeilen, []string{a, b, c})
+		}
+		pdfListe(pdf, s, c, b, []string{a, b, c}, []float64{30, 60, 90}, zeilen, 9)
+		if _, err := pdfBytes(pdf); err != nil {
+			t.Fatal(err)
+		}
+		if n := pruefNamen(b); len(n) > 3 {
+			t.Fatalf("zu viele Namen: %v", n)
+		}
+	})
+}

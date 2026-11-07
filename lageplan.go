@@ -97,6 +97,7 @@ func (a *App) handleGartenVergeben(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, bad("Bitte die Gartengröße eintragen"))
 		return
 	}
+	a.st.eichjahrUebernehmenLocked(&p)
 	if a.st.nrTaken(p.Mitgliedsnr, "") {
 		writeErr(w, bad("Die Mitgliedsnummer "+p.Mitgliedsnr+" gibt es schon"))
 		return

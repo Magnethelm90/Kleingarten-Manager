@@ -122,7 +122,7 @@ func (s *Store) pruefungLocked(jahr int) (pruefAnsicht, bool) {
 		case "kontostand":
 			switch {
 			case a.Differenz == nil:
-				pu.Hinweis = "Kontostand laut Auszug unten eintragen – das Programm rechnet die Differenz aus."
+				pu.Hinweis = "Kontostand laut Auszug oben eintragen – das Programm rechnet die Differenz aus."
 			case math.Abs(*a.Differenz) < 0.005:
 				pu.Hinweis = "Stimmt überein mit dem Kassenbestand von " + fmtEUR(k.Kassenbestand) + "."
 			default:

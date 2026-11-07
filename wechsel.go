@@ -165,6 +165,7 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	a.st.eichjahrUebernehmenLocked(&neu)
 	if a.st.nrTaken(neu.Mitgliedsnr, "") {
 		msg := "Die Mitgliedsnummer " + neu.Mitgliedsnr + " gibt es schon"
 		if strings.EqualFold(neu.Mitgliedsnr, alt.Mitgliedsnr) {
@@ -457,7 +458,7 @@ func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
 		pdf.AddPage()
 		y = 30
 	} else {
-		y = maxf(y+14, 255)
+		y = max(y+14, 255)
 	}
 	font("", 10)
 	zeile(leftX, rightX-leftX, 6, s.Ort+", den ______________________", "L")
@@ -481,11 +482,4 @@ func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
-}
-
-func maxf(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }

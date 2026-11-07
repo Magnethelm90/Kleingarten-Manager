@@ -140,6 +140,10 @@ func (a *App) handleAmtWechsel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	alt := &a.st.d.Aemter[i]
+	if alt.Seit != "" && in.Seit < alt.Seit {
+		writeErr(w, bad("Der Tag der Wahl liegt vor dem Amtsantritt von "+alt.Name))
+		return
+	}
 	alt.Ehemalig = true
 	if alt.Bis == "" || alt.Bis > in.Seit {
 		alt.Bis = in.Seit

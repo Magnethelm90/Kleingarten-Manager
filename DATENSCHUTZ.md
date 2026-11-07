@@ -104,6 +104,10 @@ verlieren beim Löschen der Person Name und Anschrift, der Betrag bleibt für di
 Personendaten. Sie gehört nur in die Hände des neuen Vorstands und sollte nach der Übergabe gelöscht werden. Das
 Programm behält im Datenordner nur die neueste Akte und löscht alle, sobald eine Person endgültig gelöscht wird.
 
+**Ämter:** Namen und Amtszeiten der Amtsinhaber sind Vereinsunterlagen (wer wann gewählt war) und bleiben deshalb
+auch nach dem Ausscheiden in der Historie. Einträge lassen sich einzeln löschen, wenn sie nicht mehr gebraucht
+werden. Die Kassenprüfung speichert nur die Namen der Prüfer und ihre Feststellungen.
+
 **Begehungen:** Geschätzte Flächenanteile (Drittelregelung) gehören zum Pächter, der den Garten damals hatte; sie
 stehen in der Auskunft und werden mit der Person gelöscht.
 
@@ -126,7 +130,7 @@ Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 - Server lauscht nur auf `127.0.0.1`, Schutz gegen fremde Webseiten (Host-/Origin-Prüfung, Pflicht-Header,
   Content-Security-Policy ohne Inline-Skripte)
 - Admin-Passwort optional, nur als PBKDF2-Hash gespeichert, Sperre nach Fehlversuchen
-- getrennter Kassenprüfer-Zugang mit Lesezugriff
+- getrennter Kassenprüfer-Zugang: Lesezugriff auf die Kasse, schreiben nur Geprüft-Haken und Kassenprüfung
 - Änderungsprotokoll, automatische Sicherungen (im Programm wiederherstellbar), Papierkorb statt sofortigem Löschen
 - Dateien werden nur für den Benutzer lesbar angelegt (Rechte 0600/0700; wirksam unter macOS und Linux, unter Windows
   schützt das Benutzerkonto bzw. die Festplattenverschlüsselung)
