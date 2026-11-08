@@ -192,6 +192,10 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Einführung** beim ersten Start und jederzeit über das »?«; **Beispieldaten** zum gefahrlosen Ausprobieren
 - Übersicht mit Jahresfortschritt, nächsten Terminen und Kennzahlen; Suche nach Name, Garten oder Nummer von
   jeder Seite aus
+- **Einrichtungs-Assistent** beim ersten Start: Verein, Preise, gebrauchte Bereiche und Pächter-Import in vier Schritten
+- **Vereinsjahr** auf der Übersicht: was wann ansteht, von der Kassenprüfung bis zum Jahresabschluss; Erledigtes
+  erkennt das Programm selbst oder wird abgehakt
+- **Erklärungen zum Aufklappen** (»?«) an Preisen, Beiträgen und Abrechnungsfeldern
 - **Bereiche ein- und ausblenden:** Was der Verein nicht braucht (z. B. Barkasse, Laubenkataster, Spenden), verschwindet
   aus Menü und Aufgaben; die Daten bleiben erhalten. Neue Installationen starten mit dem Grundpaket
 - **Vereinsfarbe und Logo** für Programm und Rechnungen; Modus **»Gut lesbar«** und einstellbare Schriftgröße

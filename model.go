@@ -254,6 +254,9 @@ type Data struct {
 
 	// AusModule: ausgeblendete Bereiche (module.go); leer = alles sichtbar.
 	AusModule []string `json:"ausModule,omitempty"`
+
+	// Vereinsjahr: von Hand abgehakte Punkte im Vereinsjahr (vereinsjahr.go), je Kalenderjahr.
+	Vereinsjahr map[string][]string `json:"vereinsjahr,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).
 	Dokumente        []GartenDokument `json:"dokumente,omitempty"`
 	Wertermittlungen []Wertermittlung `json:"wertermittlungen,omitempty"`

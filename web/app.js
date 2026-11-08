@@ -152,6 +152,25 @@ async function api(method, url, body, isForm) {
   return data;
 }
 
+// Kleine Erklärung zum Aufklappen: »?« neben einer Beschriftung. Es ist immer nur eine offen; Klick daneben oder Esc schließt.
+function hilfe(text) {
+  const box = h('span', { class: 'hilfe-box', role: 'note' }, text);
+  const knopf = h('button', { type: 'button', class: 'hilfe-i', 'aria-label': 'Erklärung anzeigen', 'aria-expanded': 'false' }, '?');
+  const w = h('span', { class: 'hilfe' }, knopf, box);
+  knopf.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const offen = w.classList.contains('offen');
+    hilfenSchliessen();
+    if (!offen) { w.classList.add('offen'); knopf.setAttribute('aria-expanded', 'true'); }
+  });
+  return w;
+}
+function hilfenSchliessen() {
+  document.querySelectorAll('.hilfe.offen').forEach((x) => { x.classList.remove('offen'); x.querySelector('.hilfe-i').setAttribute('aria-expanded', 'false'); });
+}
+document.addEventListener('click', (e) => { if (!e.target.closest('.hilfe-box')) hilfenSchliessen(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.querySelector('.hilfe.offen')) { e.preventDefault(); e.stopPropagation(); hilfenSchliessen(); } }, true);
+
 function toast(msg, kind) {
   const box = document.getElementById('toasts');
   const t = h('div', { class: 'toast ' + (kind || '') }, msg);
@@ -331,7 +350,7 @@ function seitenleiste(st) {
   const gesperrt = st.hasPassword && !st.loggedIn;
   const geh = async (x) => {
     if (x.admin) adminTabWaehlen(x.admin); else S.tab = x.tab;
-    if (x.tab === 'uebersicht') { S.dashWarteliste = null; S.aufgaben = null; }
+    if (x.tab === 'uebersicht') { S.dashWarteliste = null; S.aufgaben = null; S.vj = null; }
     if ((S.tab === 'admin' || S.tab === 'uebersicht' || S.tab === 'termine') && S.year !== st.currentYear) S.year = st.currentYear;
     S.menueOffen = false;
     await reload();
@@ -531,11 +550,14 @@ async function tourGo(i) {
 
 function tourEnd() {
   S.tour = null;
+  let ersterStart = false;
   if (S.state && !S.state.tutorialGesehen) {
     S.state.tutorialGesehen = true;
+    ersterStart = true;
     api('POST', '/api/tutorial').catch(() => { /* beim nächsten Start erneut anbieten */ });
   }
   render();
+  if (ersterStart && S.state.leer) setTimeout(einrichtungsAssistent, 150);
 }
 
 function tourCard() {
@@ -771,11 +793,11 @@ function demoBanner(st) {
 function beispieldatenKarte(st, istAdmin) {
   if (!st.leer || !istAdmin) return null;
   return h('div', { class: 'card', style: 'margin-bottom:14px' },
-    h('h3', { style: 'margin-top:0' }, 'Erst einmal ausprobieren?'),
-    h('p', { class: 'hint' }, 'Lade einen erfundenen Verein mit 12 Pächtern, Zählerständen und ein paar Kassenbuchungen. So siehst du sofort, wie Rechnungen, Zahlungen und der Kassenbericht aussehen. Die Beispieldaten lassen sich danach mit einem Klick wieder vollständig entfernen.'),
+    h('h3', { style: 'margin-top:0' }, 'Wie möchtest du anfangen?'),
+    h('p', { class: 'hint' }, 'Der Einrichtungs-Assistent fragt in vier kurzen Schritten Verein, Preise und die gebrauchten Bereiche ab und hilft beim Eintragen der Pächter. Oder lade erst einen erfundenen Verein mit 12 Pächtern zum Ausprobieren – die Beispieldaten lassen sich danach mit einem Klick wieder entfernen.'),
     h('div', { class: 'actions' },
-      h('button', { class: 'btn primary', onclick: beispieldatenLaden }, 'Mit Beispieldaten ausprobieren'),
-      h('button', { class: 'btn', onclick: () => { adminTabWaehlen('paechter'); render(); } }, 'Gleich eigene Pächter anlegen')));
+      h('button', { class: 'btn primary', onclick: einrichtungsAssistent }, 'Programm einrichten'),
+      h('button', { class: 'btn', onclick: beispieldatenLaden }, 'Mit Beispieldaten ausprobieren')));
 }
 
 // Erinnerung an die Datensicherung außer Haus: ohne zweiten Sicherungsordner (USB-Stick, Netzlaufwerk)
@@ -841,6 +863,7 @@ function viewUebersicht() {
     jubilaeumBanner(st, istAdmin),
     st.demo ? null : zweiteSicherungBanner(st, istAdmin),
     cockpitKarte(st, istAdmin),
+    vereinsjahrKarte(st, istAdmin),
     st.paechter.length ? jahresFortschritt(st, istAdmin) : null,
     h('div', { class: 'zwei-spalten' }, naechsteTermine(st), besichtigungenKarte(st, istAdmin)),
     h('div', { class: 'cards' }, cards),
@@ -1052,10 +1075,12 @@ async function detailsDialog(tr, p) {
   const num = (val, id) => h('input', { type: 'text', inputmode: 'decimal', id, value: numIn(val || null), autocomplete: 'off' });
   const vers = num(cur.versicherung, 'd-vers'), grund = num(cur.grundsteuer, 'd-grund'), ausl = num(cur.auslagen, 'd-ausl');
   const hint = h('textarea', { rows: 3, maxlength: 300, style: 'width:100%', id: 'd-hint' }, cur.hinweis || '');
-  const field = (label, input, unit) => h('div', { class: 'field' }, h('label', null, label),
+  const field = (label, input, unit, text) => h('div', { class: 'field' }, h('label', null, label, text ? hilfe(text) : null),
     unit ? h('div', { class: 'inputunit' }, input, h('span', null, unit)) : input);
   const body = h('div', { class: 'form' },
-    field('Versicherung', vers, '€'), field('Grundsteuer', grund, '€'), field('Sonstige Auslagen', ausl, '€'),
+    field('Versicherung', vers, '€', 'Anteil an einer Versicherung, die der Verein für den Garten bezahlt hat (z. B. Lauben- oder Glasversicherung) und weiterberechnet.'),
+    field('Grundsteuer', grund, '€', 'Anteilige Grundsteuer, die der Verpächter dem Verein berechnet und die auf die Gärten umgelegt wird.'),
+    field('Sonstige Auslagen', ausl, '€', 'Weitere Beträge nur für diesen Garten, z. B. ein vom Verein bezahlter Zählertausch. Am besten im Hinweis darunter erläutern.'),
     h('div', { class: 'field wide' }, h('label', null, 'Hinweis / Erläuterung (steht auf der Rechnung)'), hint));
   await modal(`Weitere Angaben – ${p.name}`, body, [
     { label: 'Abbrechen', value: false },
@@ -3821,6 +3846,20 @@ function papierkorbCard() {
 
 // ---- Einstellungen
 
+const HILFE = {
+  rechnungsdatum: 'Steht auf allen Rechnungen dieses Jahres. Das Zahlungsziel ist der Tag, bis zu dem bezahlt sein soll – danach gilt eine Rechnung als überfällig.',
+  einspruchTage: 'So viele Tage haben Pächter Zeit, sich bei Fragen oder Unstimmigkeiten zur Abrechnung zu melden. Der Satz steht auf Rechnung und E-Mail; 0 = kein Hinweis.',
+  wasserGrundpreis: 'Fester Betrag je Garten und Jahr, unabhängig vom Verbrauch (z. B. für Zähler und Leitungsnetz). Dazu kommt der Verbrauch mal Preis je m³.',
+  energieGrundpreis: 'Fester Betrag je Garten und Jahr, unabhängig vom Verbrauch. Dazu kommt der Verbrauch mal Preis je kWh. Gärten ohne Stromzähler zahlen nichts.',
+  pflichtstunden: 'So viele Gemeinschaftsstunden soll jeder Pächter im Jahr leisten. Für jede fehlende Stunde wird die Nachzahlung berechnet.',
+  stundenObergrenze: 'Mehrstunden werden nur bis zu dieser Gesamtzahl vergütet. Beispiel: Pflicht 10, Grenze 15 – vergütet werden höchstens 5 Stunden.',
+  pachtJeQm: 'Pacht je m² Gartenfläche, wie sie der Verpächter dem Verein berechnet. Die Gartengröße steht beim Pächter. Die Pacht darf nach § 5 BKleingG höchstens das Vierfache der ortsüblichen Pacht im Obst- und Gemüseanbau betragen.',
+  vereinsflaecheQm: 'Anteil an Wegen, Vereinsheim und Gemeinschaftsflächen, den jeder Pächter mitpachtet – in m². Er wird mit der Pacht je m² berechnet.',
+  freieGaertenQm: 'Leer stehende Gärten muss der Verein trotzdem pachten. Die Fläche wird auf alle Pächter umgelegt – Anteil je Pächter in m², berechnet mit der Pacht je m².',
+  territorialverband: 'Beitrag, den der Verein je Mitglied an den Stadt-, Kreis- oder Territorialverband abführt. Steht auf der Rechnung zusammen mit dem Vereinsbeitrag.',
+  umlageStandard: 'Betrag für besondere Ausgaben, z. B. eine neue Wasserleitung – beschlossen von der Mitgliederversammlung. Beim einzelnen Pächter lässt sich ein abweichender Betrag eintragen.',
+};
+
 const SETTINGS_FORM = [
   ['Verein und Rechnung', [
     ['vereinName', 'Vereinsname', 'text', '', true], ['ort', 'PLZ und Ort', 'text'], ['absenderzeile', 'Absenderzeile (kleine Zeile über der Anschrift)', 'text', '', true],
@@ -3851,7 +3890,7 @@ function adminSettings() {
           : h('input', { type: 'text', value: val, maxlength: 250, autocomplete: 'off' });
       inputs[key] = { input, type };
       const unit = type === 'num' ? hint : null;
-      form.append(h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label),
+      form.append(h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label, HILFE[key] ? hilfe(HILFE[key]) : null),
         unit ? h('div', { class: 'inputunit' }, input, h('span', null, unit)) : input,
         type !== 'num' && hint ? h('span', { class: 'fhint' }, hint) : null));
     }
@@ -3876,6 +3915,92 @@ function adminSettings() {
     h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'))),
     pachtgrenzeKarte(),
     bereicheKarte(st));
+}
+
+// ------------------------------------------------------------------ Einrichtungs-Assistent
+// Vier Schritte: Verein, Preise, Bereiche, Pächter. Gespeichert wird nach Schritt 3 in einem Rutsch;
+// alles lässt sich später unter »Preise & Einstellungen« ändern.
+async function einrichtungsAssistent() {
+  if (document.querySelector('dialog.assistent')) return;
+  const st = S.state, set = st.settings;
+  const text = (key, ph) => h('input', { type: 'text', value: set[key] || '', placeholder: ph || '', maxlength: 250, autocomplete: 'off' });
+  const zahl = (key) => h('input', { type: 'text', inputmode: 'decimal', value: numIn(set[key]), autocomplete: 'off' });
+  const f = {
+    vereinName: text('vereinName', 'z. B. KGV Sonnenschein e. V.'), ort: text('ort', 'z. B. 12345 Gartenstadt'),
+    bankName: text('bankName'), iban: text('iban', 'DE…'), bic: text('bic'),
+    wasserGrundpreis: zahl('wasserGrundpreis'), wasserPreis: zahl('wasserPreis'), energieGrundpreis: zahl('energieGrundpreis'), energiePreis: zahl('energiePreis'),
+    pachtJeQm: zahl('pachtJeQm'), vereinsbeitrag: zahl('vereinsbeitrag'), pflichtstunden: zahl('pflichtstunden'), nachzahlungJeStd: zahl('nachzahlungJeStd'),
+  };
+  const feld = (label, input, einheit, key, breit) => h('div', { class: 'field' + (breit ? ' wide' : '') }, h('label', null, label, key && HILFE[key] ? hilfe(HILFE[key]) : null),
+    einheit ? h('div', { class: 'inputunit' }, input, h('span', null, einheit)) : input);
+  const bereiche = BEREICHE.map(([k, name, t]) => ({ k, cb: h('input', { type: 'checkbox', checked: modulAn(k) }), name, t }));
+  const sepaCb = h('input', { type: 'checkbox', checked: !!st.sepaAktiv });
+  const schritte = [
+    { titel: 'Euer Verein', text: 'Name und Bankverbindung stehen auf jeder Rechnung.', inhalt: h('div', { class: 'form' },
+      feld('Vereinsname', f.vereinName, null, null, true), feld('PLZ und Ort', f.ort), feld('Bank', f.bankName), feld('IBAN', f.iban), feld('BIC', f.bic)) },
+    { titel: 'Preise und Beiträge', text: 'Die Werte aus eurer letzten Abrechnung oder dem Beschluss der Mitgliederversammlung. Weitere Einstellungen (Vereinsfläche, Umlage, Stundenvergütung …) folgen später unter »Preise & Einstellungen«.', inhalt: h('div', { class: 'form' },
+      h('div', { class: 'section-title' }, 'Wasser'), feld('Grundpreis pro Jahr', f.wasserGrundpreis, '€', 'wasserGrundpreis'), feld('Preis je m³', f.wasserPreis, '€'),
+      h('div', { class: 'section-title' }, 'Strom'), feld('Grundpreis pro Jahr', f.energieGrundpreis, '€', 'energieGrundpreis'), feld('Preis je kWh', f.energiePreis, '€'),
+      h('div', { class: 'section-title' }, 'Pacht, Beitrag, Stunden'), feld('Pacht je m²', f.pachtJeQm, '€', 'pachtJeQm'), feld('Vereinsbeitrag', f.vereinsbeitrag, '€'),
+      feld('Pflichtstunden', f.pflichtstunden, 'Stunden', 'pflichtstunden'), feld('Nachzahlung je fehlende Stunde', f.nachzahlungJeStd, '€')) },
+    { titel: 'Was braucht euer Verein?', text: 'Abrechnung, Pächter, Termine, Mängel und Kassenbericht sind immer dabei. Zusatzbereiche nur ankreuzen, wenn ihr sie nutzt – das lässt sich jederzeit ändern.', inhalt: h('div', { class: 'bereiche' },
+      bereiche.map((b) => h('label', { class: 'bereich' }, b.cb, h('span', null, h('b', null, b.name), h('small', null, b.t)))),
+      h('label', { class: 'bereich' }, sepaCb, h('span', null, h('b', null, 'Lastschrift'), h('small', null, 'SEPA-Mandate und Datei für das Online-Banking')))) },
+    { titel: 'Pächter eintragen', text: 'Gespeichert! Jetzt fehlen nur noch die Pächter. Habt ihr eine Liste in Excel, übernimmt das Programm sie mit Gartennummer, Anschrift, Größe und Zählernummern.', inhalt: h('div', { class: 'assi-wahl' },
+      h('button', { class: 'assi-option', onclick: () => ende(() => adminTabWaehlen('daten')) }, icon('daten', 26), h('b', null, 'Aus einer Excel-Liste übernehmen'), h('span', null, 'Unter »Import, Export, Sicherung« die Datei wählen – vor dem Übernehmen zeigt das Programm eine Vorschau.')),
+      h('button', { class: 'assi-option', onclick: () => ende(() => adminTabWaehlen('paechter')) }, icon('personen', 26), h('b', null, 'Von Hand anlegen'), h('span', null, 'Für kleine Vereine oder zum Ergänzen einzelner Pächter.'))) },
+  ];
+  let i = 0;
+  const dlg = h('dialog', { class: 'assistent', 'aria-label': 'Einrichtung' });
+  const kopf = h('div', { class: 'assi-kopf' }), koerper = h('div', { class: 'assi-koerper' });
+  const zurueck = h('button', { class: 'btn' }, 'Zurück'), weiter = h('button', { class: 'btn primary' });
+  const ende = (danach) => { dlg.close(); dlg.remove(); if (danach) danach(); S.aufgaben = null; reload(); };
+  const zeigen = () => {
+    const sch = schritte[i];
+    kopf.replaceChildren(h('div', { class: 'assi-schritte' }, schritte.map((x, k) => h('span', { class: k === i ? 'an' : k < i ? 'fertig' : '' }, `${k + 1}. ${x.titel}`))),
+      h('h2', null, sch.titel), h('p', { class: 'hint' }, sch.text));
+    koerper.replaceChildren(sch.inhalt);
+    zurueck.style.visibility = i > 0 && i < 3 ? 'visible' : 'hidden';
+    weiter.textContent = i === 2 ? 'Speichern' : i === 3 ? 'Später' : 'Weiter';
+    const erstes = koerper.querySelector('input');
+    if (erstes) erstes.focus();
+  };
+  const speichern = async () => {
+    const data = { ...set };
+    for (const k of ['vereinName', 'ort', 'bankName', 'iban', 'bic']) data[k] = f[k].value.trim();
+    for (const k of ['wasserGrundpreis', 'wasserPreis', 'energieGrundpreis', 'energiePreis', 'pachtJeQm', 'vereinsbeitrag', 'pflichtstunden', 'nachzahlungJeStd']) {
+      const v = parseNum(f[k].value);
+      if (v === null || Number.isNaN(v) || v < 0) { i = 1; zeigen(); f[k].classList.add('err'); f[k].focus(); toast('Bitte in allen Preisfeldern eine Zahl ab 0 eintragen.', 'err'); return false; }
+      f[k].classList.remove('err');
+      data[k] = v;
+    }
+    if (!data.vereinName) { i = 0; zeigen(); f.vereinName.classList.add('err'); toast('Bitte den Vereinsnamen eintragen.', 'err'); return false; }
+    try {
+      await api('PUT', '/api/admin/settings', data);
+    } catch (e) { i = 0; zeigen(); handleErr(e); return false; }
+    try {
+      await api('PUT', '/api/admin/module', Object.fromEntries(bereiche.map((b) => [b.k, b.cb.checked])));
+      if (sepaCb.checked !== !!st.sepaAktiv) {
+        const d = await api('GET', '/api/admin/sepa');
+        await api('PUT', '/api/admin/sepa/einstellungen', { ...d.einstellungen, aktiv: sepaCb.checked });
+      }
+    } catch (e) { handleErr(e); return false; }
+    toast('Einrichtung gespeichert', 'ok');
+    return true;
+  };
+  zurueck.addEventListener('click', () => { if (i > 0) { i--; zeigen(); } });
+  weiter.addEventListener('click', async () => {
+    if (i === 0 && !f.vereinName.value.trim()) { f.vereinName.classList.add('err'); f.vereinName.focus(); toast('Bitte den Vereinsnamen eintragen.', 'err'); return; }
+    if (i === 2) { weiter.disabled = true; const ok = await speichern(); weiter.disabled = false; if (!ok) return; }
+    if (i === 3) { ende(); return; }
+    i++; zeigen();
+  });
+  dlg.addEventListener('cancel', async (e) => { e.preventDefault(); if (i === 3 || await confirmBox('Einrichtung abbrechen? Bisher Eingetragenes wird nicht gespeichert.', 'Abbrechen')) ende(); });
+  dlg.append(h('button', { class: 'gs-zu', title: 'Schließen (Esc)', onclick: () => dlg.dispatchEvent(new Event('cancel', { cancelable: true })) }, 'Schließen ✕'),
+    kopf, koerper, h('div', { class: 'assi-fuss' }, zurueck, weiter));
+  document.body.append(dlg);
+  dlg.showModal();
+  zeigen();
 }
 
 // Bereiche ein- und ausblenden. Daten ausgeblendeter Bereiche bleiben erhalten.
@@ -3917,7 +4042,7 @@ function bereicheKarte(st) {
   });
   const sepa = h('label', { class: 'bereich' }, sepaCb, h('span', null, h('b', null, 'Lastschrift'), h('small', null, 'SEPA-Mandate und Datei für das Online-Banking')));
   return h('div', { class: 'card' },
-    h('h3', null, 'Bereiche'),
+    h('div', { class: 'fs-kopf' }, h('h3', { style: 'margin:0' }, 'Bereiche'), h('button', { class: 'btn small', onclick: einrichtungsAssistent }, 'Einrichtungs-Assistent')),
     h('p', { class: 'hint' }, 'Was euer Verein nicht braucht, lässt sich ausblenden – Menü und Aufgaben bleiben dann übersichtlich. Eingetragene Daten bleiben erhalten und sind nach dem Einschalten wieder da.'),
     h('div', { class: 'bereiche' }, kaesten, sepa));
 }
@@ -3953,7 +4078,7 @@ function pachtgrenzeKarte() {
         : `Ihr nutzt ${nfFlex.format(d.auslastung)} % der zulässigen Pacht – bis zur Grenze sind noch ${fmt4(Math.round((d.hoechst - d.pachtJeQm) * 10000) / 10000)} €/m² Luft.`));
   }
   return h('div', { class: 'card', style: 'margin-top:14px' },
-    h('div', { class: 'section-title', style: 'margin-top:0' }, 'Pachtobergrenze (§ 5 Bundeskleingartengesetz)'),
+    h('div', { class: 'section-title', style: 'margin-top:0' }, 'Pachtobergrenze (§ 5 Bundeskleingartengesetz)', hilfe('Die Pacht für Kleingärten darf höchstens das Vierfache der ortsüblichen Pacht im erwerbsmäßigen Obst- und Gemüseanbau betragen. Den Wert erfahrt ihr beim Gutachterausschuss, der Gemeinde oder eurem Verband.')),
     h('p', { class: 'hint' }, 'Die Pacht darf höchstens das Vierfache der ortsüblichen Pacht im erwerbsmäßigen Obst- und Gemüseanbau betragen. Den Wert nennt der Gutachterausschuss der Gemeinde oder der Verband. Gemeinschaftsflächen dürfen anteilig mit umgelegt werden.'),
     h('div', { class: 'form' },
       h('div', { class: 'field' }, h('label', null, 'Ortsübliche Pacht Erwerbsobstbau'), h('div', { class: 'inputunit' }, wert, h('span', null, '€/m²'))),
@@ -4271,7 +4396,7 @@ function pruefungKarte() {
   const status = d.pruefung.ergebnis === 'ohne' ? ['ok', 'ohne Beanstandungen abgeschlossen'] : d.pruefung.ergebnis === 'mit' ? ['warn', 'mit Beanstandungen abgeschlossen']
     : erledigt ? ['neu', `${erledigt} von ${d.punkte.length} Punkten geprüft`] : ['', 'noch nicht begonnen'];
   return h('div', { class: 'card pruef-karte' },
-    h('div', null, h('b', null, `Kassenprüfung ${jahr}`), ' ', h('span', { class: 'badge ' + status[0] }, status[1]),
+    h('div', null, h('b', null, `Kassenprüfung ${jahr}`), hilfe('Die von der Mitgliederversammlung gewählten Kassenprüfer sehen Kassenbuch, Belege und Bestände durch und berichten der Versammlung. Ohne Beanstandungen empfehlen sie, den Vorstand zu entlasten.'), ' ', h('span', { class: 'badge ' + status[0] }, status[1]),
       h('div', { class: 'hint' }, 'Geführte Prüfung: Kontostand abgleichen, Belege und Stichprobe prüfen – am Ende steht der Bericht für die Mitgliederversammlung.')),
     h('div', { class: 'spacer' }),
     h('button', { class: 'btn primary', onclick: pruefungDialog }, erledigt || d.pruefung.ergebnis ? 'Prüfung fortsetzen' : 'Prüfung beginnen'),
@@ -5963,21 +6088,75 @@ async function loadAufgaben() {
   render();
 }
 
+// Ziel aus Cockpit oder Vereinsjahr öffnen: admin:<bereich>[:<unterseite>] oder tab:<reiter> bzw. eingabe:eichung
+function zielOeffnen(ziel) {
+  const [art, wohin, unter] = ziel.split(':');
+  if (art === 'admin') adminTabWaehlen(wohin); else S.tab = wohin;
+  if (wohin === 'inventar') S.invSeite = unter || 'schluessel';
+  if (wohin === 'verwaltung') S.verwSeite = unter || 'beschluesse';
+  if (wohin === 'kassenbericht') S.kasseNurOhneBeleg = unter === 'ohnebeleg';
+  if (wohin === 'maengel') S.maengelSeite = unter || 'maengel';
+  render();
+  window.scrollTo(0, 0);
+  if (unter === 'eichung') eichungDialog();
+}
+
+// ------------------------------------------------------------------ Übersicht: Vereinsjahr
+
+function vereinsjahrKarte(st, istAdmin) {
+  if (!istAdmin || st.leer) return null;
+  const jahr = S.vjJahr || new Date().getFullYear();
+  if (!S.vj || S.vj.jahr !== jahr) {
+    if (!S.vjLaedt) {
+      S.vjLaedt = true;
+      api('GET', `/api/admin/vereinsjahr?jahr=${jahr}`).then((d) => { S.vj = d; }).catch(() => { S.vj = { jahr, fehler: true }; })
+        .finally(() => { S.vjLaedt = false; render(); });
+    }
+    return null;
+  }
+  const d = S.vj;
+  if (d.fehler) return null;
+  const heuteJahr = Number(d.heute.slice(0, 4)), heuteMonat = Number(d.heute.slice(5, 7));
+  const vergangen = (m) => d.jahr < heuteJahr || (d.jahr === heuteJahr && m < heuteMonat);
+  const sel = S.vjMonat || (d.jahr === heuteJahr ? heuteMonat : 1);
+  const monat = d.monate[sel - 1];
+  const alle = d.monate.flatMap((m) => m.punkte), fertig = alle.filter((p) => p.erledigt).length;
+  const haken = async (p, an) => {
+    try { S.vj = await api('PUT', '/api/admin/vereinsjahr', { jahr: d.jahr, key: p.key, erledigt: an }); render(); } catch (e) { handleErr(e); }
+  };
+  const jahrWechseln = (n) => { S.vjJahr = d.jahr + n; S.vjMonat = null; render(); };
+  return h('div', { class: 'card vereinsjahr' },
+    h('div', { class: 'fs-kopf' },
+      h('b', null, 'Vereinsjahr ', h('button', { class: 'linkbtn', 'aria-label': 'Vorjahr', onclick: () => jahrWechseln(-1) }, '‹'), ` ${d.jahr} `,
+        h('button', { class: 'linkbtn', 'aria-label': 'Folgejahr', onclick: () => jahrWechseln(1) }, '›')),
+      h('span', { class: 'hint' }, `${fertig} von ${alle.length} erledigt`)),
+    h('div', { class: 'vj-monate', role: 'tablist' }, d.monate.map((m) => {
+      const offen = m.punkte.filter((p) => !p.erledigt).length;
+      const zustand = !m.punkte.length ? '' : offen === 0 ? ' fertig' : vergangen(m.monat) ? ' rueckstand' : '';
+      return h('button', { class: 'vj-monat' + zustand + (m.monat === sel ? ' an' : '') + (d.jahr === heuteJahr && m.monat === heuteMonat ? ' jetzt' : ''),
+        role: 'tab', 'aria-selected': m.monat === sel ? 'true' : 'false', title: `${MONATE[m.monat - 1]}: ${m.punkte.length ? (offen ? `${offen} offen` : 'alles erledigt') : 'nichts Besonderes'}`,
+        onclick: () => { S.vjMonat = m.monat; render(); } }, h('span', null, MONATE[m.monat - 1].slice(0, 3)), h('i', null));
+    })),
+    h('div', { class: 'vj-inhalt' },
+      h('h4', null, MONATE[sel - 1]),
+      monat.punkte.length ? h('ul', { class: 'vj-liste' }, monat.punkte.map((p) => {
+        const cb = h('input', { type: 'checkbox', checked: p.erledigt, disabled: p.erkannt, 'aria-label': `${p.titel} erledigt` });
+        cb.addEventListener('change', () => haken(p, cb.checked));
+        return h('li', { class: p.erledigt ? 'erledigt' : '' },
+          h('label', { class: 'vj-haken', title: p.erkannt ? 'Vom Programm erkannt' : 'Von Hand abhaken' }, cb),
+          h('div', { class: 'vj-text' }, h('b', null, p.titel), p.erkannt ? h('span', { class: 'badge ok', style: 'margin-left:6px' }, 'erledigt') : null, h('div', { class: 'hint' }, p.text)),
+          h('button', { class: 'btn small', onclick: () => zielOeffnen(p.ziel) }, p.knopf + ' →'));
+      })) : h('p', { class: 'hint' }, 'In diesem Monat steht nichts Besonderes an.'),
+      monat.termine.length ? h('div', { class: 'vj-termine' }, h('span', { class: 'hint' }, 'Termine: '),
+        monat.termine.map((t, i) => [i ? ' · ' : '', h('span', null, `${deDate(t.datum).slice(0, 6)} ${t.titel}`)])) : null));
+}
+
 const AUFGABE_ICON = { err: 'warnung', warn: 'uhr', info: 'bericht' };
 
 function cockpitKarte(st, istAdmin) {
   if (!istAdmin || st.leer) return null;
   if (S.aufgaben == null) { if (!S.aufgabenLoading) loadAufgaben(); return null; }
-  const geh = (ziel) => {
-    const [art, wohin, unter] = ziel.split(':');
-    if (art === 'admin') adminTabWaehlen(wohin); else S.tab = wohin;
-    if (wohin === 'inventar') S.invSeite = unter || 'schluessel';
-    if (wohin === 'verwaltung') S.verwSeite = unter || 'beschluesse';
-    if (wohin === 'kassenbericht') S.kasseNurOhneBeleg = unter === 'ohnebeleg';
-    if (wohin === 'maengel') S.maengelSeite = unter || 'maengel';
-    render();
-    if (unter === 'eichung') eichungDialog();
-  };
+  const geh = zielOeffnen;
   if (!S.aufgaben.length) {
     return h('div', { class: 'card cockpit cockpit-leer' }, h('span', { class: 'cockpit-ico ok' }, icon('fertig', 20)),
       h('div', null, h('b', null, 'Gerade steht nichts an'), h('div', { class: 'hint' }, 'Termine, Fristen, Zahlungen und Spenden sind im grünen Bereich.')));

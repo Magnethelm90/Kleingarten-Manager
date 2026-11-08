@@ -907,3 +907,56 @@ dialog.geschichte::backdrop { background: rgba(18, 38, 24, .55); backdrop-filter
 .bereich input { margin-top: 3px; }
 .bereich span { display: flex; flex-direction: column; }
 .bereich small { color: var(--muted); font-size: .85em; }
+
+/* Erklärung zum Aufklappen (»?«) */
+.hilfe { position: relative; display: inline-block; margin-left: 6px; vertical-align: middle; font-weight: 400; }
+.hilfe-i { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--card);
+  color: var(--muted); font: 600 11px/16px inherit; cursor: pointer; text-align: center; }
+.hilfe-i:hover, .hilfe.offen .hilfe-i { border-color: var(--green); color: var(--green); background: var(--green-tint); }
+.hilfe-i:focus-visible { outline: none; box-shadow: var(--ring); }
+.hilfe-box { display: none; position: absolute; z-index: 40; top: calc(100% + 6px); left: -10px; width: max-content; max-width: min(300px, 75vw);
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); box-shadow: var(--shadow-lg);
+  color: var(--text); font-size: 13px; line-height: 1.5; font-weight: 400; text-transform: none; letter-spacing: 0; white-space: normal; }
+.hilfe.offen .hilfe-box { display: block; }
+
+/* Vereinsjahr auf der Übersicht */
+.vereinsjahr .linkbtn { font-size: 16px; padding: 0 4px; }
+.vj-monate { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; margin: 10px 0 14px; }
+.vj-monat { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 7px 0 6px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--card); color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+.vj-monat i { width: 6px; height: 6px; border-radius: 50%; background: var(--line-strong); }
+.vj-monat.fertig i { background: var(--ok); }
+.vj-monat.rueckstand i { background: #d08a00; }
+.vj-monat.jetzt { color: var(--green-dark); font-weight: 650; }
+.vj-monat.an { border-color: var(--green); background: var(--green-soft); color: var(--green-dark); }
+.vj-monat:focus-visible { outline: none; box-shadow: var(--ring); }
+.vj-inhalt h4 { margin: 0 0 8px; }
+.vj-liste { list-style: none; margin: 0; padding: 0; }
+.vj-liste li { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+.vj-liste li:first-child { border-top: 0; }
+.vj-liste li.erledigt .vj-text > b { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+.vj-haken { padding-top: 2px; }
+.vj-text { flex: 1; min-width: 0; }
+.vj-termine { margin-top: 8px; font-size: 13px; }
+@media (max-width: 640px) { .vj-monate { grid-template-columns: repeat(6, 1fr); } .vj-liste li { flex-wrap: wrap; } .vj-text { flex-basis: calc(100% - 40px); } .vj-liste li .btn { margin-left: 28px; } }
+
+/* Einrichtungs-Assistent */
+dialog.assistent { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 40px); padding: 0; border: 0; border-radius: 18px; background: var(--card);
+  box-shadow: 0 30px 80px rgba(10, 30, 15, .35); display: flex; flex-direction: column; }
+dialog.assistent:not([open]) { display: none; }
+dialog.assistent::backdrop { background: rgba(18, 38, 24, .55); backdrop-filter: blur(3px); }
+.assi-kopf { padding: 22px 28px 6px; }
+.assi-kopf h2 { margin: 14px 0 6px; font-size: 22px; color: var(--green-dark); }
+.assi-schritte { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--muted); padding-right: 90px; }
+.assi-schritte .an { color: var(--green-dark); font-weight: 650; }
+.assi-schritte .fertig { color: var(--ok); }
+.assi-koerper { padding: 8px 28px 18px; overflow: auto; }
+.assi-fuss { display: flex; justify-content: space-between; padding: 14px 20px; border-top: 1px solid var(--line); }
+.assi-wahl { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.assi-option { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.assi-option svg { color: var(--green); }
+.assi-option span { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.assi-option:hover { border-color: var(--green); background: var(--green-tint); }
+.assi-option:focus-visible { outline: none; box-shadow: var(--ring); }
+@media (max-width: 640px) { .assi-wahl { grid-template-columns: 1fr; } .assi-kopf, .assi-koerper { padding-left: 18px; padding-right: 18px; } }
