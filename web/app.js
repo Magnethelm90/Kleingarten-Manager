@@ -897,7 +897,7 @@ function heroKarte(st) {
       h('div', { class: 'hero-fakten' },
         fakt(String(gaerten), gaerten === 1 ? 'Garten verpachtet' : 'Gärten verpachtet'),
         frei ? fakt(String(frei), frei === 1 ? 'Garten frei' : 'Gärten frei') : null,
-        st.wartelisteAnzahl ? fakt(String(st.wartelisteAnzahl), 'auf der Warteliste') : null,
+        st.wartelisteAnzahl && modulAn('warteliste') ? fakt(String(st.wartelisteAnzahl), 'auf der Warteliste') : null,
         naechster ? fakt(tageBis === 0 ? 'heute' : tageBis === 1 ? 'morgen' : `in ${tageBis} Tagen`, naechster.titel) : null)),
     bild);
 }
@@ -6088,7 +6088,7 @@ async function loadAufgaben() {
   render();
 }
 
-// Ziel aus Cockpit oder Vereinsjahr öffnen: admin:<bereich>[:<unterseite>] oder tab:<reiter> bzw. eingabe:eichung
+// Ziel aus Cockpit oder Vereinsjahr öffnen: admin:<bereich>[:<unterseite>] oder tab:<reiter>[:eichung]
 function zielOeffnen(ziel) {
   const [art, wohin, unter] = ziel.split(':');
   if (art === 'admin') adminTabWaehlen(wohin); else S.tab = wohin;

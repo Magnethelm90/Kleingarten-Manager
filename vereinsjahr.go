@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
@@ -15,8 +16,23 @@ import (
 
 type planVorlage struct {
 	key, titel, text, ziel, knopf, modul string
-	monat                                int
+	monat                                int // 0 = je nach Abrechnungsrhythmus (siehe rhythmusLocked)
 	erkannt                              func(s *Store, jahr int) bool
+}
+
+// rhythmusLocked: Wann rechnet der Verein ab? Aus den Einstellungen: Monat des Rechnungsdatums und des Zahlungsziels
+// sowie, ob die Rechnungen im Folgejahr des Abrechnungsjahres kommen (versatz 1, z. B. Januar 2026 für 2025) oder im
+// selben Jahr (versatz 0, z. B. November). Im Kalenderjahr j werden also die Rechnungen für j - versatz verschickt.
+func (s *Store) rhythmusLocked() (versatz, mRechnung, mZahlung int) {
+	versatz, mRechnung, mZahlung = 0, 11, 12
+	if d, err := parseDate(s.d.Settings.Rechnungsdatum); err == nil {
+		mRechnung, mZahlung = int(d.Month()), min(int(d.Month())+1, 12)
+		versatz = min(max(d.Year()-s.d.Settings.Jahr, 0), 1)
+	}
+	if d, err := parseDate(s.d.Settings.Zahlungsziel); err == nil && int(d.Month()) >= mRechnung {
+		mZahlung = int(d.Month())
+	}
+	return
 }
 
 type planPunkt struct {
@@ -87,7 +103,7 @@ var vereinsjahrVorlagen = []planVorlage{
 	{monat: 4, key: "wasseran", titel: "Wasser anstellen", text: "Leitungen auf Frostschäden prüfen, Stand der Hauptwasseruhr notieren und die Pächter vorher informieren.", ziel: "admin:rundschreiben", knopf: "Rundschreiben"},
 	{monat: 5, key: "begehung1", titel: "Gartenbegehung im Frühjahr", text: "Mängel und Nutzung (Drittelregelung) im Begehungsmodus direkt am Garten erfassen.", ziel: "admin:maengel", knopf: "Begehung"},
 	{monat: 6, key: "maengelfristen", titel: "Mängelfristen nachhalten", text: "Abgelaufene Fristen prüfen und bei Bedarf ein Mahnschreiben erstellen.", ziel: "admin:maengel", knopf: "Mängel"},
-	{monat: 6, key: "eichung", modul: "eichung", titel: "Zählertausch planen", text: "Zähler mit ablaufender Eichfrist rechtzeitig bestellen; getauscht wird am besten zur Ablesung im Herbst.", ziel: "eingabe:eichung", knopf: "Eichfristen"},
+	{monat: 6, key: "eichung", modul: "eichung", titel: "Zählertausch planen", text: "Zähler mit ablaufender Eichfrist rechtzeitig bestellen; getauscht wird am besten zur Ablesung im Herbst.", ziel: "tab:eingabe:eichung", knopf: "Eichfristen"},
 	{monat: 7, key: "sommerfest", modul: "barkasse", titel: "Sommerfest abrechnen", text: "Bargeld-Einnahmen und -Ausgaben mit Belegnummer ins Kassenbuch der Barkasse.", ziel: "admin:kassenbericht", knopf: "Barkasse"},
 	{monat: 7, key: "warteliste", modul: "warteliste", titel: "Warteliste durchsehen", text: "Nachfragen, ob noch Interesse besteht, und Besichtigungen für frei werdende Gärten vereinbaren.", ziel: "admin:warteliste", knopf: "Warteliste"},
 	{monat: 8, key: "kuendigung", titel: "Kündigungen zum 30. November", text: "Kündigt der Verein wegen Pflichtverletzungen, muss die Kündigung spätestens am dritten Werktag im August zugehen (§ 9 BKleingG).", ziel: "admin:kuendigungen", knopf: "Kündigungen"},
@@ -100,20 +116,24 @@ var vereinsjahrVorlagen = []planVorlage{
 			return ok && d.Gesamt > 0 && len(d.Fehlend) == 0
 		}},
 	{monat: 10, key: "wasserab", titel: "Wasser abstellen", text: "Leitungen entleeren und die Hauptwasseruhr ablesen. Der Wasserschwund im Kassenbericht zeigt, ob Leitungen undicht sind.", ziel: "admin:kassenbericht", knopf: "Kassenbericht"},
-	{monat: 11, key: "rechnungen", titel: "Jahresrechnungen erstellen und verschicken", text: "Arbeitsstunden eintragen, Rechnungen prüfen und ausstellen.", ziel: "tab:rechnungen", knopf: "Rechnungen",
+	{key: "rechnungen", titel: "Jahresrechnungen erstellen und verschicken", text: "Arbeitsstunden eintragen, Rechnungen prüfen und ausstellen.", ziel: "tab:rechnungen", knopf: "Rechnungen",
 		erkannt: func(s *Store, jahr int) bool {
+			versatz, _, _ := s.rhythmusLocked()
 			for _, r := range s.d.Rechnungen {
-				if r.Jahr == jahr && r.Status == statusGueltig {
+				if r.Jahr == jahr-versatz && r.Status == statusGueltig {
 					return true
 				}
 			}
 			return false
 		}},
 	{monat: 11, key: "wechsel", titel: "Pächterwechsel zum 30. November", text: "Übergabe, Wertermittlung und Schlussrechnung für gekündigte Gärten.", ziel: "admin:kuendigungen", knopf: "Kündigungen"},
-	{monat: 12, key: "zahlungen", titel: "Zahlungseingänge prüfen", text: "Kontoauszug einlesen; für offene Rechnungen Erinnerung oder Mahnung erstellen.", ziel: "tab:zahlungen", knopf: "Zahlungen"},
+	{key: "zahlungen", titel: "Zahlungseingänge prüfen", text: "Kontoauszug einlesen; für offene Rechnungen Erinnerung oder Mahnung erstellen.", ziel: "tab:zahlungen", knopf: "Zahlungen"},
 	{monat: 12, key: "sicherung", titel: "Sicherung außer Haus", text: "Eine Datensicherung auf USB-Stick oder Netzlaufwerk – getrennt vom Vereinsrechner aufbewahren.", ziel: "admin:daten", knopf: "Sicherung"},
-	{monat: 12, key: "jahreswechsel", titel: "Abrechnungsjahr abschließen", text: "Wenn alle Rechnungen raus sind, das neue Jahr im Programm beginnen.", ziel: "admin:jahreswechsel", knopf: "Jahreswechsel",
-		erkannt: func(s *Store, jahr int) bool { return s.d.Settings.Jahr > jahr }},
+	{key: "jahreswechsel", titel: "Abrechnungsjahr abschließen", text: "Wenn alle Rechnungen raus sind, das neue Jahr im Programm beginnen.", ziel: "admin:jahreswechsel", knopf: "Jahreswechsel",
+		erkannt: func(s *Store, jahr int) bool {
+			versatz, _, _ := s.rhythmusLocked()
+			return s.d.Settings.Jahr > jahr-versatz
+		}},
 }
 
 func planVorlageGueltig(key string) bool {
@@ -126,6 +146,7 @@ func (s *Store) vereinsjahrLocked(jahr int, heute time.Time) vereinsjahrAntwort 
 		a.Monate[i] = planMonat{Monat: i + 1, Punkte: []planPunkt{}, Termine: []planTermin{}}
 	}
 	haken := s.d.Vereinsjahr[yearKey(jahr)]
+	versatz, mRechnung, mZahlung := s.rhythmusLocked()
 	for _, v := range vereinsjahrVorlagen {
 		if v.modul != "" && !s.modulAn(v.modul) {
 			continue
@@ -134,12 +155,23 @@ func (s *Store) vereinsjahrLocked(jahr int, heute time.Time) vereinsjahrAntwort 
 		if p.Ziel == "admin:rundschreiben" && !s.modulAn("rundschreiben") {
 			p.Ziel, p.Knopf = "tab:termine", "Termine"
 		}
+		monat := v.monat
+		switch v.key {
+		case "rechnungen":
+			monat = mRechnung
+			p.Titel = fmt.Sprintf("Jahresrechnungen %d erstellen und verschicken", jahr-versatz)
+		case "jahreswechsel":
+			monat = mRechnung
+			p.Titel = fmt.Sprintf("Abrechnungsjahr %d abschließen", jahr-versatz)
+		case "zahlungen":
+			monat = mZahlung
+		}
 		if v.erkannt != nil && v.erkannt(s, jahr) {
 			p.Erledigt, p.Erkannt = true, true
 		} else {
 			p.Erledigt = slices.Contains(haken, v.key)
 		}
-		a.Monate[v.monat-1].Punkte = append(a.Monate[v.monat-1].Punkte, p)
+		a.Monate[monat-1].Punkte = append(a.Monate[monat-1].Punkte, p)
 	}
 	praefix := strconv.Itoa(jahr) + "-"
 	for _, t := range s.d.Termine {

@@ -50,6 +50,9 @@
   Bestand leer; auch über Karte »Bereiche«). Vereinsjahr (vereinsjahr.go, `vereinsjahrVorlagen` mit `erkannt`-Funktionen,
   Haken in Data.Vereinsjahr; Karte auf der Übersicht; Name »Jahresplan« ist schon der Termin-Aushang!). Hilfe-»?«:
   `hilfe(text)` in app.js, Texte für Einstellungen in `HILFE`. Ziele öffnet `zielOeffnen()`.
+- Prüfung Nov 2026 (2): zugriff_test.go prüft ALLE /api/admin-Routen automatisch (401 ohne Login, Prüfer nur
+  adminOrPruef); TestZielFormat prüft alle Cockpit-Ziele (Format `admin:`/`tab:`). Vereinsjahr richtet Rechnungen,
+  Zahlungen und Jahreswechsel nach Rechnungsdatum/Zahlungsziel (`rhythmusLocked`, versatz 0/1).
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

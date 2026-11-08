@@ -223,13 +223,13 @@ func (s *Store) eichungAufgabenLocked(heute time.Time, add func(stufe, titel, te
 	switch {
 	case ab > 0:
 		add("warn", fmt.Sprintf("%d Zähler mit abgelaufener Eichfrist", ab),
-			"Diese Zähler dürfen nicht mehr abgerechnet werden. Bitte tauschen lassen – die Tauschliste hilft dabei.", "eingabe:eichung", "Eichfristen")
+			"Diese Zähler dürfen nicht mehr abgerechnet werden. Bitte tauschen lassen – die Tauschliste hilft dabei.", "tab:eingabe:eichung", "Eichfristen")
 	case faellig > 0:
 		add("warn", fmt.Sprintf("%d Zähler müssen bis 31.12.%d getauscht werden", faellig, heute.Year()),
-			"Ihre Eichfrist endet in diesem Jahr. Am besten gleich zur nächsten Ablesung tauschen.", "eingabe:eichung", "Eichfristen")
+			"Ihre Eichfrist endet in diesem Jahr. Am besten gleich zur nächsten Ablesung tauschen.", "tab:eingabe:eichung", "Eichfristen")
 	case bald > 0 && heute.Month() >= time.September:
 		add("info", fmt.Sprintf("%d Zähler müssen nächstes Jahr getauscht werden", bald),
-			"Jetzt schon Zähler bestellen und den Tausch für das Frühjahr einplanen.", "eingabe:eichung", "Eichfristen")
+			"Jetzt schon Zähler bestellen und den Tausch für das Frühjahr einplanen.", "tab:eingabe:eichung", "Eichfristen")
 	}
 }
 
