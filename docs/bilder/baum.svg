@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 230" fill="none" stroke="#1f4f2b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<ellipse cx="150" cy="208" rx="120" ry="10" fill="#e9f3eb" stroke="none"/>
+<path d="M30 206 H270"/>
+<circle cx="132.0" cy="116.0" r="26.0" fill="#e9f3eb" stroke="none"/>
+<circle cx="140.0" cy="78.0" r="36.0" fill="#e9f3eb" stroke="none"/>
+<circle cx="166.0" cy="106.0" r="32.0" fill="#e9f3eb" stroke="none"/>
+<circle cx="110.0" cy="110.0" r="30.0" fill="#e9f3eb" stroke="none"/>
+<path d="M140 206 V128.0 M140 166.0 l-16.0 -18.0 M140 154.0 l14.0 -16.0"/>
+<path d="M82.0 114.0 a30 30 0 0 1 22 -40 a36 36 0 0 1 68 -6 a32 32 0 0 1 26 46 a26 26 0 0 1 -24 26 h-70 a26 26 0 0 1 -22 -26z" transform="translate(0,0)" fill="none"/>
+<rect x="196" y="190" width="60" height="16" rx="2" fill="#cfe3d3"/>
+<path d="M211.0 190 v-14 M211.0 184 q-9 -3 -10 -12 q9 1 10 12 M211.0 180 q9 -3 10 -12 q-9 1 -10 12" stroke="#3d8a50" stroke-width="1.6"/>
+<path d="M241.0 190 v-14 M241.0 184 q-9 -3 -10 -12 q9 1 10 12 M241.0 180 q9 -3 10 -12 q-9 1 -10 12" stroke="#3d8a50" stroke-width="1.6"/>
+</svg>

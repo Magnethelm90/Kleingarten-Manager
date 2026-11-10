@@ -7,8 +7,8 @@
 <meta name="description" content="Kostenloses Programm für Kleingartenvereine: Zählerstände, Jahresrechnungen mit QR-Code, Zahlungen, Kasse, Lageplan, Kündigungen und mehr. Für Windows und macOS, ohne Cloud und ohne Anmeldung.">
 <meta property="og:title" content="Kleingarten-Manager">
 <meta property="og:description" content="Das Vereinsbüro für euren Kleingartenverein – kostenlos, ohne Cloud, ohne Anmeldung.">
-<meta property="og:image" content="bilder/garten.webp">
-<link rel="icon" href="bilder/laube.webp">
+<meta property="og:image" content="bilder/uebersicht.png">
+<link rel="icon" type="image/svg+xml" href="bilder/laube.svg">
 <style>
   :root {
     --gruen: #2f6f3e; --gruen-dunkel: #1f4d2b; --gruen-hell: #e8f2e3; --gruen-zart: #f4f9f1; --linie: #dfe8da;
@@ -51,7 +51,7 @@
   .held .aktionen { display: flex; gap: 12px; flex-wrap: wrap; }
   .held .fakten { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 22px; color: var(--grau); font-size: 14.5px; }
   .held .fakten span::before { content: "✓ "; color: var(--gruen); font-weight: 800; }
-  .held-bild img { filter: drop-shadow(0 28px 40px rgba(30, 60, 30, .22)); animation: schweben 7s ease-in-out infinite; }
+  .held-bild img { width: 100%; height: auto; }
   @keyframes schweben { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
   @media (max-width: 860px) { .held .breit { grid-template-columns: 1fr; } .held-bild { order: -1; max-width: 520px; margin: 0 auto; } }
 
@@ -67,7 +67,7 @@
 
   .schritte { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
   .schritt { background: var(--karte); border: 1px solid var(--linie); border-radius: var(--rund); padding: 22px; box-shadow: var(--schatten); }
-  .schritt img { height: 150px; width: 100%; object-fit: contain; margin-bottom: 10px; filter: drop-shadow(0 12px 16px rgba(30, 60, 30, .16)); }
+  .schritt img { height: 150px; width: 100%; object-fit: contain; margin-bottom: 10px; }
   .schritt b { display: block; font-size: 19px; margin-bottom: 6px; }
   .schritt span.nr { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--gruen); color: #fff; font-weight: 750; font-size: 14px; margin-right: 8px; }
   .schritt p { color: var(--grau); margin: 0; }
@@ -104,7 +104,7 @@
   .faq { max-width: 780px; margin: 0 auto; }
 
   .schluss { text-align: center; }
-  .schluss img { width: 170px; margin: 0 auto 10px; filter: drop-shadow(0 16px 20px rgba(30, 60, 30, .2)); }
+  .schluss img { width: 170px; margin: 0 auto 10px; }
   footer { border-top: 1px solid var(--linie); padding: 26px 0 40px; color: var(--grau); font-size: 14px; }
   footer .breit { display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; }
 
@@ -122,7 +122,7 @@
 
 <header class="kopf">
   <div class="breit">
-    <a class="marke" href="#"><img src="bilder/laube.webp" alt="">Kleingarten-Manager</a>
+    <a class="marke" href="#"><img src="bilder/laube.svg" alt="">Kleingarten-Manager</a>
     <nav class="links"><a href="#so-gehts">So geht's</a><a href="#funktionen">Funktionen</a><a href="#ansehen">Ansehen</a><a href="#fragen">Fragen</a></nav>
     <a class="knopf klein" href="https://github.com/Magnethelm90/Kleingarten-Manager/releases/latest">Download</a>
   </div>
@@ -141,7 +141,7 @@
       </div>
       <div class="fakten"><span>ohne Anmeldung</span><span>ohne Cloud</span><span>ohne Installation</span></div>
     </div>
-    <div class="held-bild"><img src="bilder/garten.webp" width="1200" height="830" alt="Kleingarten mit Laube, Beeten, Obstbaum und Zaun"></div>
+    <div class="held-bild"><img src="bilder/garten.svg" width="640" height="400" alt="Kleingarten mit Laube, Beet, Obstbaum und Zaun"></div>
   </div>
 </div>
 
@@ -149,9 +149,9 @@
   <div class="breit">
     <div class="titel erscheint"><h2>In drei Schritten zur Jahresabrechnung</h2><p>Was früher ein Wochenende mit Excel war, ist jetzt ein Nachmittag.</p></div>
     <div class="schritte">
-      <div class="schritt erscheint"><img src="bilder/laube.webp" alt=""><b><span class="nr">1</span>Einmal einrichten</b><p>Verein, Preise und Pächter eintragen – oder die Pächterliste aus Excel übernehmen. Das bleibt für alle Folgejahre.</p></div>
-      <div class="schritt erscheint"><img src="bilder/beet.webp" alt=""><b><span class="nr">2</span>Zählerstände eintragen</b><p>Gartennummer tippen, Wasser und Strom eingeben. Vorjahresstände kennt das Programm, gerechnet wird automatisch.</p></div>
-      <div class="schritt erscheint"><img src="bilder/kanne.webp" alt=""><b><span class="nr">3</span>Rechnungen verschicken</b><p>Alle Rechnungen mit einem Klick als PDF, mit QR-Code zum Bezahlen – per Post oder vorbereitet für die E-Mail.</p></div>
+      <div class="schritt erscheint"><img src="bilder/laube.svg" alt=""><b><span class="nr">1</span>Einmal einrichten</b><p>Verein, Preise und Pächter eintragen – oder die Pächterliste aus Excel übernehmen. Das bleibt für alle Folgejahre.</p></div>
+      <div class="schritt erscheint"><img src="bilder/zaehler.svg" alt=""><b><span class="nr">2</span>Zählerstände eintragen</b><p>Gartennummer tippen, Wasser und Strom eingeben. Vorjahresstände kennt das Programm, gerechnet wird automatisch.</p></div>
+      <div class="schritt erscheint"><img src="bilder/rechnung.svg" alt=""><b><span class="nr">3</span>Rechnungen verschicken</b><p>Alle Rechnungen mit einem Klick als PDF, mit QR-Code zum Bezahlen – per Post oder vorbereitet für die E-Mail.</p></div>
     </div>
   </div>
 </section>
@@ -159,7 +159,7 @@
 <section style="padding-top:10px">
   <div class="breit erscheint">
     <div class="titel"><h2>Die ganze Anlage auf einen Blick</h2><p>Der Lageplan zeigt jeden Garten an seinem Platz – auf Wunsch als 3D-Modell zum Drehen. Die Farbe verrät den Abrechnungsstand.</p></div>
-    <div class="fenster"><div class="leiste"><i></i><i></i><i></i></div><img src="bilder/lageplan-3d-animation.webp" width="760" height="373" alt="Der Lageplan als 3D-Modell" loading="lazy" style="width:100%"></div>
+    <div class="fenster"><div class="leiste"><i></i><i></i><i></i></div><img src="bilder/lageplan-3d.png" width="1280" height="800" alt="Der Lageplan als 3D-Modell" loading="lazy" style="width:100%"></div>
   </div>
 </section>
 
@@ -219,7 +219,7 @@
 
 <section class="schluss">
   <div class="breit erscheint">
-    <img src="bilder/sonne.webp" alt="">
+    <img src="bilder/liste.svg" alt="">
     <h2 style="font-size:clamp(26px,3.4vw,36px);letter-spacing:-.5px;margin:0 0 10px">Bereit für die nächste Abrechnung?</h2>
     <p style="color:var(--grau);margin:0 0 22px">Kostenlos für Windows und macOS.</p>
     <a class="knopf" href="https://github.com/Magnethelm90/Kleingarten-Manager/releases/latest">⬇ Kleingarten-Manager herunterladen</a>

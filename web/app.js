@@ -72,10 +72,10 @@ const ICONS = {
 
 // Leerer Zustand: Symbol, kurze Überschrift, Erklärung und – wo sinnvoll – der Knopf zum nächsten Schritt.
 // Illustrationen (3D-Renderings aus Blender, siehe docs/blender) für leere Seiten, je nach Thema
-const ILLU = { personen: 'laube', karte: 'laube', kuendigung: 'laube', schluessel: 'laube', kalender: 'sonne', stern: 'sonne',
-  rechnung: 'kanne', euro: 'kanne', kasse: 'kanne', werkzeug: 'kanne', zaehler: 'kanne', warnung: 'beet', brief: 'baum', akte: 'baum', warteliste: 'baum' };
+const ILLU = { personen: 'laube', karte: 'laube', kuendigung: 'laube', schluessel: 'laube', kalender: 'liste', stern: 'liste',
+  rechnung: 'rechnung', euro: 'rechnung', kasse: 'rechnung', werkzeug: 'zaehler', zaehler: 'zaehler', warnung: 'baum', brief: 'liste', akte: 'liste', warteliste: 'liste' };
 function leer(ic, titel, text, knopf, onclick) {
-  const bild = ILLU[ic] ? h('img', { class: 'leer-bild', src: `/bilder/${ILLU[ic]}.webp`, alt: '', onerror: (e) => e.target.replaceWith(h('span', { class: 'leer-ico' }, icon(ic, 30))) }) : null;
+  const bild = ILLU[ic] ? h('img', { class: 'leer-bild', src: `/bilder/${ILLU[ic]}.svg`, alt: '', onerror: (e) => e.target.replaceWith(h('span', { class: 'leer-ico' }, icon(ic, 30))) }) : null;
   return h('div', { class: 'leer' }, bild || h('span', { class: 'leer-ico' }, icon(ic, 30)), h('b', null, titel), h('p', null, text),
     knopf ? h('button', { class: 'btn primary', onclick }, knopf) : null);
 }
@@ -376,6 +376,14 @@ function render() {
   const istVollAdmin = !st.hasPassword || st.loggedIn;
   if (S.pruefLoginMode && !istVollAdmin) { app.append(viewPruefLogin()); return; }
   if (st.pruefLoggedIn && !istVollAdmin) { app.append(viewPruefShell()); return; }
+  if (st.gesperrt) {
+    // »Alles nur mit Anmeldung«: ohne Sitzung gibt es nur die Anmeldeseite
+    app.append(h('header', { class: 'top' },
+      h('div', { class: 'brand' }, st.settings.logo ? h('span', { class: 'logo bild' }, h('img', { src: `/api/logo?v=${encodeURIComponent(st.settings.logo)}`, alt: '' })) : h('span', { class: 'logo' }, icon('blatt', 20)),
+        h('div', null, h('b', null, 'Kleingarten-Manager'), h('span', null, st.settings.vereinName)))),
+    h('main', { class: 'nur-anmeldung' }, viewLogin()));
+    return;
+  }
 
   const yearSel = h('select', {
     onchange: async (e) => { S.year = Number(e.target.value); await reload(); },
@@ -402,7 +410,7 @@ function render() {
     h('div', { class: 'shell' },
     seitenleiste(st),
     h('main', null,
-      st.sperrHinweis ? h('div', { class: 'banner err' }, '🔒 ', st.sperrHinweis) : null,
+      st.sperrHinweis ? h('div', { class: 'banner err' }, st.sperrHinweis) : null,
       demoBanner(st),
       sicherungBanner(st),
       openRechnungenBanner(st),
@@ -492,10 +500,10 @@ const TOUR = [
 // Willkommen: fünf Bilder mit kurzem Text, danach auf Wunsch der Rundgang durchs Programm.
 const GESCHICHTE = [
   { bild: 'garten', titel: 'Willkommen im Kleingarten-Manager', text: 'Das Vereinsbüro für euren Kleingartenverein: Abrechnung, Pächter, Kasse und alles drumherum. Alles liegt auf diesem Rechner – ohne Cloud, ohne Anmeldung.' },
-  { bild: 'beet', titel: 'Zählerstände in Minuten', text: 'Gartennummer eintippen, Wasser und Strom eingeben, fertig. Vorjahresstände kennt das Programm schon, gerechnet wird automatisch – auch Pacht, Beiträge und Stunden.' },
-  { bild: 'kanne', titel: 'Rechnungen, die bezahlt werden', text: 'Jede Rechnung als PDF mit QR-Code für die Banking-App, per Post oder E-Mail. Zahlungen hakst du ab oder liest sie aus dem Kontoauszug ein, Mahnungen gibt es auf Knopfdruck.' },
+  { bild: 'zaehler', titel: 'Zählerstände in Minuten', text: 'Gartennummer eintippen, Wasser und Strom eingeben, fertig. Vorjahresstände kennt das Programm schon, gerechnet wird automatisch – auch Pacht, Beiträge und Stunden.' },
+  { bild: 'rechnung', titel: 'Rechnungen, die bezahlt werden', text: 'Jede Rechnung als PDF mit QR-Code für die Banking-App, per Post oder E-Mail. Zahlungen hakst du ab oder liest sie aus dem Kontoauszug ein, Mahnungen gibt es auf Knopfdruck.' },
   { bild: 'laube', titel: 'Der ganze Verein an einem Ort', text: 'Lageplan, Warteliste, Kündigungen, Termine, Rundschreiben, Beschlüsse und Verträge. Was gerade ansteht, sagt dir die Übersicht von selbst.' },
-  { bild: 'sonne', titel: 'Bereit?', text: 'Der kurze Rundgang zeigt dir in fünf Schritten, wo was ist. Oder du schaust dich selbst um – ausprobieren geht gefahrlos mit den Beispieldaten.' },
+  { bild: 'liste', titel: 'Bereit?', text: 'Der kurze Rundgang zeigt dir in fünf Schritten, wo was ist. Oder du schaust dich selbst um – ausprobieren geht gefahrlos mit den Beispieldaten.' },
 ];
 
 function geschichteZeigen() {
@@ -513,7 +521,7 @@ function geschichteZeigen() {
     i = neu;
     const g = GESCHICHTE[i];
     const folie = h('div', { class: 'gs-folie' + (richtung ? ' rein-' + richtung : '') },
-      h('div', { class: 'gs-bild' }, h('img', { src: `/bilder/${g.bild}.webp`, alt: '' })),
+      h('div', { class: 'gs-bild' }, h('img', { src: `/bilder/${g.bild}.svg`, alt: '' })),
       h('div', { class: 'gs-text' }, h('span', { class: 'gs-schritt' }, `${i + 1} von ${GESCHICHTE.length}`), h('h2', null, g.titel), h('p', null, g.text)));
     const alt = buehne.firstChild;
     if (alt && richtung && !bewegungReduziert()) { alt.classList.add('raus-' + richtung); setTimeout(() => alt.remove(), 320); } else if (alt) alt.remove();
@@ -615,7 +623,7 @@ function globalSearchBox(st) {
         h('span', { class: 'hint' }, p.mitgliedsnr)));
   };
   const input = h('input', {
-    type: 'search', placeholder: '🔍 Suchen', title: 'Pächter suchen (Name, Mitglieds- oder Gartennummer)', class: 'gs-input', autocomplete: 'off',
+    type: 'search', placeholder: 'Suchen', title: 'Pächter suchen (Name, Mitglieds- oder Gartennummer)', class: 'gs-input', autocomplete: 'off',
     value: S.globalSearchQ,
     oninput: (e) => { S.globalSearchQ = e.target.value; draw(); },
     onkeydown: (e) => {
@@ -671,7 +679,7 @@ lesbarSetzen(lesbarLaden());
 function sicherungBanner(st) {
   if (S.sicherungDismissed || !st.sicherungFehler) return null;
   return h('div', { class: 'banner err' },
-    `⚠ ${st.sicherungFehler}.`, ' ',
+    `${st.sicherungFehler}.`, ' ',
     h('button', { class: 'btn small', onclick: () => { S.sicherungDismissed = true; render(); } }, 'Ausblenden'));
 }
 
@@ -756,7 +764,7 @@ function jubilaeumBanner(st, istAdmin) {
   }
   if (!treffer.length) return null;
   return h('div', { class: 'banner info' },
-    `🎉 ${treffer.length} Mitglied(er) haben ${jahr} ein rundes Jubiläum: ${treffer.join(', ')}.`, ' ',
+    `${treffer.length} Mitglied(er) haben ${jahr} ein rundes Jubiläum: ${treffer.join(', ')}.`, ' ',
     h('button', { class: 'btn small', onclick: () => { adminTabWaehlen('jubilaeen'); render(); } }, 'Zu den Jubiläen'), ' ',
     h('button', { class: 'btn small', onclick: () => { S.jubilaeumDismissed = true; render(); } }, 'Ausblenden'));
 }
@@ -786,7 +794,7 @@ function demoBanner(st) {
   if (!st.demo) return null;
   const istAdmin = !st.hasPassword || st.loggedIn;
   return h('div', { class: 'banner info' },
-    '🧪 Du siehst Beispieldaten: ein erfundener Verein mit erfundenen Namen und Zahlen zum Ausprobieren.',
+    'Du siehst Beispieldaten: ein erfundener Verein mit erfundenen Namen und Zahlen zum Ausprobieren.',
     istAdmin ? [' ', h('button', { class: 'btn small', onclick: beispieldatenEntfernen }, 'Beispieldaten entfernen und eigene Daten anlegen')] : null);
 }
 
@@ -821,13 +829,13 @@ function zweiteSicherungBanner(st, istAdmin) {
     h('button', { class: 'btn small', onclick: () => { S.zweiteDismissed = true; render(); } }, 'Ausblenden')];
   if (!z.eingerichtet) {
     return h('div', { class: 'banner info' },
-      '💾 Alle Sicherungen liegen bisher nur auf diesem Rechner. Geht die Festplatte kaputt, sind auch sie weg. Richte einen zweiten Sicherungsordner ein, zum Beispiel auf einem USB-Stick.', ...knoepfe(false));
+      'Alle Sicherungen liegen bisher nur auf diesem Rechner. Geht die Festplatte kaputt, sind auch sie weg. Richte einen zweiten Sicherungsordner ein, zum Beispiel auf einem USB-Stick.', ...knoepfe(false));
   }
-  if (z.fehler) return h('div', { class: 'banner warn' }, `💾 ${z.fehler}. Ist der USB-Stick eingesteckt?`, ...knoepfe(true));
+  if (z.fehler) return h('div', { class: 'banner warn' }, `${z.fehler}. Ist der USB-Stick eingesteckt?`, ...knoepfe(true));
   const tage = z.zuletzt ? Math.floor((Date.parse(todayIso()) - Date.parse(z.zuletzt)) / 86400000) : null;
   if (tage === null || tage > 30) {
     return h('div', { class: 'banner warn' },
-      `💾 ${tage === null ? 'Im zweiten Sicherungsordner liegt noch keine Kopie.' : `Die letzte Kopie im zweiten Sicherungsordner ist vom ${deDate(z.zuletzt)} (vor ${tage} Tagen).`} Einfach USB-Stick einstecken und »Jetzt sichern« wählen.`, ...knoepfe(true));
+      `${tage === null ? 'Im zweiten Sicherungsordner liegt noch keine Kopie.' : `Die letzte Kopie im zweiten Sicherungsordner ist vom ${deDate(z.zuletzt)} (vor ${tage} Tagen).`} Einfach USB-Stick einstecken und »Jetzt sichern« wählen.`, ...knoepfe(true));
   }
   return null;
 }
@@ -888,7 +896,7 @@ function heroKarte(st) {
   const naechster = (st.termine || []).find((t) => t.datum >= heute);
   const tageBis = naechster ? Math.round((isoDatum(naechster.datum) - isoDatum(heute)) / 86400000) : null;
   const fakt = (zahl, text) => h('div', { class: 'hero-fakt' }, h('b', null, zahl), h('span', null, text));
-  const bild = h('img', { class: 'hero-bild', src: '/bilder/garten.webp', alt: '', onerror: (e) => e.target.remove() });
+  const bild = h('img', { class: 'hero-bild', src: '/bilder/garten.svg', alt: '', onerror: (e) => e.target.remove() });
   return h('section', { class: 'hero' },
     h('div', { class: 'hero-text' },
       h('span', { class: 'hero-gruss' }, `${gruss} · ${datum}`),
@@ -960,7 +968,7 @@ function updateCalc(tr, res) {
   const hints = res.hinweise || ((S.state && S.state.hinweise) || {})[tr.dataset.id];
   tr.querySelector('.status').replaceChildren(...[statusBadge(res),
     inf ? h('span', { class: 'badge ' + (inf.geaendert ? 'warn' : 'neu'), title: inf.geaendert ? 'Rechnung wurde ausgestellt, danach wurden Werte geändert' : 'Rechnung ist ausgestellt' }, inf.geaendert ? '⚠ nach Ausstellung geändert' : 'ausgestellt') : null,
-    hints && hints.length ? h('span', { class: 'badge warn', title: hints.join('\n') }, '⚠ Verbrauch prüfen') : null].filter(Boolean));
+    hints && hints.length ? h('span', { class: 'badge warn', title: hints.join('\n') }, 'Verbrauch prüfen') : null].filter(Boolean));
 }
 
 // Nach einer Änderung neu vom Programm holen, ob eine ausgestellte Rechnung davon betroffen ist.
@@ -2110,7 +2118,7 @@ function viewAusstellen() {
         bar.append(h('button', { class: 'btn', disabled: !p.email,
           title: p.email ? `Öffnet das E-Mail-Programm mit einer fertigen Nachricht an ${p.email}; die PDF-Datei wird im Ordner markiert und muss nur noch angehängt werden`
             : 'Für diesen Pächter ist keine E-Mail-Adresse eingetragen (unter »Pächter«)',
-          onclick: () => emailVorbereiten(inf.id) }, inf.emailAm ? '✉ E-Mail erneut vorbereiten' : '✉ E-Mail vorbereiten'));
+          onclick: () => emailVorbereiten(inf.id) }, inf.emailAm ? 'E-Mail erneut vorbereiten' : 'E-Mail vorbereiten'));
       }
     }
     right.append(bar);
@@ -2147,7 +2155,7 @@ function viewAusstellen() {
       items.append(h('button', { class: 'item' + (p.id === S.selInvoice ? ' active' : ''), onclick: () => { S.selInvoice = p.id; S.invView = 'archiv'; drawList(); drawPreview(); } },
         h('span', { class: 'dot ' + cls, title: tip }),
         h('span', { class: 'nr' }, p.mitgliedsnr), h('span', null, p.name, schlussBadge(p)),
-        inf && inf.emailAm ? h('span', { title: `E-Mail vorbereitet am ${fmtWhen(inf.emailAm)}`, style: 'margin-left:auto' }, '✉') : null));
+        inf && inf.emailAm ? h('span', { title: `E-Mail vorbereitet am ${fmtWhen(inf.emailAm)}`, style: 'margin-left:auto' }, icon('brief', 15)) : null));
     }
     if (!list.length) items.append(h('div', { class: 'empty' }, 'Keine Pächter.'));
   };
@@ -2176,7 +2184,7 @@ function viewAusstellen() {
   const mailBtn = h('button', { class: 'btn', disabled: !mailOffen.length,
     title: `Bereitet die E-Mail für die nächste Rechnung mit Versandart Emailsendung vor${ohneAdresse ? ` (${ohneAdresse} ohne eingetragene E-Mail-Adresse)` : ''}`,
     onclick: async () => { const p = mailOffen[0]; S.selInvoice = p.id; S.invView = 'archiv'; await emailVorbereiten(issuedOf(p).id); } },
-  `✉ Nächste E-Mail (${mailOffen.length} offen)`);
+  `Nächste E-Mail (${mailOffen.length} offen)`);
 
   return h('div', null,
     h('p', { class: 'hint' }, 'Wähle links einen Pächter und prüfe die Rechnung. Mit »Ausstellen« wird sie festgeschrieben, als PDF gespeichert und ins Archiv gelegt. Punkte: grau = unvollständig, grün = bereit, blau = ausgestellt, orange = ausgestellt, danach geändert.'),
@@ -2327,7 +2335,7 @@ function viewZahlungen() {
     }
     if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 10, class: 'empty' },
       !all.length ? leer('euro', 'Noch nichts zu kassieren', `Für ${st.year} wurde noch keine Rechnung ausgestellt. Sobald das passiert ist, hakst du hier die Zahlungen ab.`, 'Zu den Rechnungen', () => { S.tab = 'rechnungen'; render(); })
-        : S.payFilter === 'offen' && !q ? leer('fertig', 'Alles bezahlt', 'Für dieses Jahr ist nichts mehr offen. 🎉') : 'Keine Treffer.')));
+        : S.payFilter === 'offen' && !q ? leer('fertig', 'Alles bezahlt', 'Für dieses Jahr ist nichts mehr offen.') : 'Keine Treffer.')));
   };
   draw();
 
@@ -2561,7 +2569,7 @@ async function rundschreibenDialog(x) {
   const kaesten = aktiv.map((p) => {
     const cb = h('input', { type: 'checkbox', checked: gewaehlt.has(p.id), onchange: (e) => { if (e.target.checked) gewaehlt.add(p.id); else gewaehlt.delete(p.id); zaehlen(); } });
     const mail = p.versand === 'Emailsendung' && p.email;
-    return { p, el: h('label', { class: 'rs-wahl' }, cb, ` ${p.gartennr ? 'Garten ' + p.gartennr + ' – ' : ''}${p.name} `, h('span', { class: 'hint' }, mail ? '✉ E-Mail' : 'Post')), cb };
+    return { p, el: h('label', { class: 'rs-wahl' }, cb, ` ${p.gartennr ? 'Garten ' + p.gartennr + ' – ' : ''}${p.name} `, h('span', { class: 'hint' }, mail ? 'E-Mail' : 'Post')), cb };
   });
   const filter = h('input', { type: 'search', placeholder: 'Name oder Garten suchen', oninput: () => {
     const q = filter.value.trim().toLowerCase();
@@ -3550,8 +3558,8 @@ function viewLogin() {
   };
   pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   setTimeout(() => pw.focus(), 50);
-  return h('div', { class: 'center card login' }, h('img', { class: 'login-bild', src: '/bilder/garten.webp', alt: '', onerror: (e) => e.target.remove() }), h('h2', null, 'Anmeldung zur Verwaltung'),
-    h('p', { class: 'hint' }, 'Dieser Bereich ist durch ein Passwort geschützt.'), pw,
+  return h('div', { class: 'center card login' }, h('img', { class: 'login-bild', src: '/bilder/garten.svg', alt: '', onerror: (e) => e.target.remove() }), h('h2', null, st.gesperrt ? 'Anmeldung' : 'Anmeldung zur Verwaltung'),
+    h('p', { class: 'hint' }, st.gesperrt ? 'Das Programm ist durch ein Passwort geschützt.' : 'Dieser Bereich ist durch ein Passwort geschützt.'), pw,
     h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: go }, 'Anmelden')),
     st.hasPruefPassword ? h('p', { style: 'margin-top:18px' },
       h('button', { class: 'btn', onclick: () => { S.pruefLoginMode = true; render(); } }, 'Als Kassenprüfer anmelden')) : null);
@@ -4834,7 +4842,7 @@ function adminJubilaeen() {
     h('td', null, r.p.mitgliedsnr), h('td', null, r.p.name), h('td', null, r.p.gartennr),
     h('td', null, deDate(r.seit)),
     h('td', { class: 'r' }, r.jahre > 0 && r.jahre % 5 === 0
-      ? h('b', { title: 'Jubiläum', style: 'color:var(--ok)' }, `🎉 ${r.jahre} Jahre`)
+      ? h('b', { title: 'Jubiläum', style: 'color:var(--ok)' }, `${r.jahre} Jahre`)
       : `${r.jahre} Jahre`))));
   return h('div', null,
     h('p', { class: 'hint' }, 'Mitglied-seit-Datum aus der Gartenhistorie (frühester Eintrag je Pächter). Nützlich für die Mitgliederversammlung, z. B. um langjährige Mitglieder zu ehren. Steht erst ab Einführung der Gartenhistorie-Funktion zur Verfügung – bei Pächtern von davor fehlt das Datum, sie stehen unten in einer eigenen Liste.'),
@@ -4872,6 +4880,19 @@ function adminProtokoll() {
 
 // ---- Passwort
 
+// »Alles nur mit Anmeldung«: für Rechner, an denen mehrere Personen arbeiten.
+function vollschutzCard(st) {
+  if (!st.hasPassword) return null;
+  const cb = h('input', { type: 'checkbox', checked: !!st.allesGeschuetzt });
+  cb.addEventListener('change', async () => {
+    try { await api('PUT', '/api/admin/vollschutz', { an: cb.checked }); toast(cb.checked ? 'Ohne Anmeldung ist jetzt nichts mehr sichtbar' : 'Abrechnung ist wieder ohne Anmeldung offen', 'ok'); await reload(); } catch (e) { handleErr(e); cb.checked = !cb.checked; }
+  });
+  return h('div', { class: 'card narrow' },
+    h('h3', { style: 'margin-top:0' }, 'Alles nur mit Anmeldung'),
+    h('p', { class: 'hint' }, 'Normalerweise sind Übersicht, Zählerstände, Rechnungen, Zahlungen, Lageplan und Termine ohne Passwort erreichbar. Nutzen mehrere Personen diesen Rechner, lässt sich das abstellen: Dann zeigt das Programm ohne Anmeldung nur noch die Anmeldeseite – keine Namen, keine Anschriften, keine Zahlen.'),
+    h('label', { class: 'check' }, cb, ' Ohne Anmeldung nichts anzeigen'));
+}
+
 function adminSecurity() {
   const st = S.state;
   const old = h('input', { type: 'password', autocomplete: 'current-password' });
@@ -4890,7 +4911,7 @@ function adminSecurity() {
   return h('div', null,
     h('div', { class: 'card narrow' },
       h('h3', { style: 'margin-top:0' }, st.hasPassword ? 'Admin-Passwort ändern oder entfernen' : 'Admin-Passwort festlegen'),
-      h('p', { class: 'hint' }, 'Das Passwort schützt Pächter, Preise, Jahreswechsel und Import. Die Zählerstände kann weiterhin jeder eintragen, der das Programm öffnet.'),
+      h('p', { class: 'hint' }, 'Das Passwort schützt die Verwaltung: Pächter, Preise, Kasse, Jahreswechsel und Import. Zählerstände, Rechnungen und Zahlungen bleiben offen, damit beim Ablesen jemand helfen kann – außer ihr schaltet unten »Alles nur mit Anmeldung« ein.'),
       h('div', { class: 'form', style: 'grid-template-columns:1fr' },
         st.hasPassword ? fld('Bisheriges Passwort', old) : null,
         fld('Neues Passwort', n1, st.hasPassword ? 'Leer lassen, um den Passwortschutz zu entfernen' : 'Mindestens 8 Zeichen'),
@@ -4899,6 +4920,7 @@ function adminSecurity() {
         h('button', { class: 'btn primary', onclick: save }, 'Speichern'),
         st.hasPassword ? h('button', { class: 'btn', onclick: async () => { try { await api('POST', '/api/admin/logout'); await reload(); } catch (e) { handleErr(e); } } }, 'Abmelden') : null),
       h('p', { class: 'hint', style: 'margin-top:16px' }, 'Passwort vergessen? Das Programm mit dem Zusatz "--reset-admin" starten (in der Eingabeaufforderung: Kleingarten-Manager.exe --reset-admin). Dann ist der Passwortschutz entfernt und du kannst ein neues Passwort festlegen.')),
+    vollschutzCard(st),
     pruefPasswortCard(),
     updateCheckCard());
 }

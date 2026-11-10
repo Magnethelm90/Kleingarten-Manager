@@ -20,7 +20,7 @@
 - Frontend: Vanilla JS in `web/app.js` (`h()`, `svgEl`, `modal`, `breiterDialog`, `api`, `leer`, `confirmBox`), Navigation über `NAV`-Array, `viewAdmin` dispatcht. Assets per `//go:embed web`. CSP: `default-src 'self'; img-src 'self' data:` – nichts von außen laden.
 - 3D-Lageplan: `web/lageplan3d.js` (three.js 0.170.0 lokal in `web/vendor/three/`, OrbitControls-Import auf relativen Pfad gepatcht).
 - Animationen: `prefers-reduced-motion` beachten; `animation-fill-mode: backwards` (nicht `both`, sonst verrutschen fixed-Elemente wie das Mehr-Menü).
-- Illustrationen: Blender-Skript `docs/blender/szene.py` (bpy 4.5.15 in Python-3.11-venv, Cycles CPU, AgX) → WebP in `web/bilder/`.
+- Illustrationen: sachliche Strichzeichnungen als SVG in `web/bilder/` (garten, laube, baum, zaehler, rechnung, liste; Kopien in `docs/bilder/`). Der Nutzer wollte die bunten Blender-Bilder NICHT (»kein Spielzeug«) – keine Knet-/3D-Optik, keine Emoji in der Oberfläche. 3D-Lageplan im Stil eines Planungsmodells (hell, gedeckt; Farbe nur für Status/Leitungen).
 - Projektseite: `docs/index.html` (GitHub Pages: Settings → Pages → main, /docs – erst nach Merge).
 
 ## Prüfen vor Push
@@ -31,7 +31,7 @@
 - Lageplan: eigenes Hintergrundbild, Parzellen-Umrisse, Leitungen/Einrichtungen, 3D-Ansicht (Plan/3D-Umschalter).
 - Rundschreiben (Brief/Aushang-PDF, Mail-Pakete), Schlüssel & Geräte (Ausgabe/Rückgabe, Wartung).
 - Wasserschwund-Kontrolle (Kassenbericht + Cockpit-Warnung), Kündigung mit Fahrplan, Pachtvertrag (+Vertragsbestimmungen), Beschlussbuch, Verträge & Versicherungen, Haushaltsplan.
-- Blender-Illustrationen, dezente Animationen, Erfolgsmeldung, Willkommensgeschichte (5 Bilder), neues README, Projektseite.
+- Dezente Animationen, Erfolgsmeldung, Willkommensgeschichte (5 Bilder), neues README, Projektseite.
 - Eichfristen (eichung.go, Dialog in Zählerstände), Kassenprüfung (pruefung.go, Karte im Kassenbericht, auch für
   Prüfer-Zugang), Ämter mit Amtswechsel-Checkliste (aemter.go, Unterseite in »Vereinsverwaltung«), Begehungsmodus
   (nur Frontend, Mängel-Seite), Pachtobergrenze § 5 BKleingG (pachtgrenze.go, Karte in Einstellungen),
@@ -53,6 +53,8 @@
 - Prüfung Nov 2026 (2): zugriff_test.go prüft ALLE /api/admin-Routen automatisch (401 ohne Login, Prüfer nur
   adminOrPruef); TestZielFormat prüft alle Cockpit-Ziele (Format `admin:`/`tab:`). Vereinsjahr richtet Rechnungen,
   Zahlungen und Jahreswechsel nach Rechnungsdatum/Zahlungsziel (`rhythmusLocked`, versatz 0/1).
+- »Alles nur mit Anmeldung« (Data.AllesGeschuetzt, Middleware `vollschutz` + `ohneAnmeldungErlaubt` in api.go, gekürzter
+  /api/state mit `gesperrt`, Karte auf der Passwort-Seite). Neue offene /api-Routen sind dadurch automatisch gesperrt.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

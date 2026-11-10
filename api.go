@@ -152,6 +152,62 @@ func (a *App) guard(next http.Handler) http.Handler {
 	})
 }
 
+// vollschutzAktiv: Der Vorstand hat festgelegt, dass ohne Anmeldung nichts sichtbar ist. Der Aufrufer hält s.mu.
+func (a *App) vollschutzAktiv() bool { return a.st.d.AllesGeschuetzt && a.hasPassword() }
+
+// ohneAnmeldungErlaubt: was bei »Alles nur mit Anmeldung« trotzdem ohne Sitzung erreichbar bleibt – die Oberfläche
+// selbst, Anmeldung, der (dann gekürzte) Zustand und das Vereinslogo. /api/admin/… prüft seine Rechte selbst.
+func ohneAnmeldungErlaubt(pfad string) bool {
+	if !strings.HasPrefix(pfad, "/api/") || strings.HasPrefix(pfad, "/api/admin/") {
+		return true
+	}
+	switch pfad {
+	case "/api/ping", "/api/state", "/api/logo", "/api/pruef/login", "/api/pruef/logout", "/api/quit":
+		return true
+	}
+	return false
+}
+
+// vollschutz sperrt bei »Alles nur mit Anmeldung« alle offenen Bereiche (Zählerstände, Rechnungen, Zahlungen,
+// Lageplan, Termine) für nicht angemeldete Besucher.
+func (a *App) vollschutz(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !ohneAnmeldungErlaubt(r.URL.Path) {
+			a.st.mu.Lock()
+			aktiv := a.vollschutzAktiv()
+			a.st.mu.Unlock()
+			if aktiv && !a.sessionValid(r) {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Bitte anmelden"})
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *App) handleVollschutz(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		An bool `json:"an"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	if in.An && !a.hasPassword() {
+		writeErr(w, bad("Bitte zuerst ein Admin-Passwort festlegen"))
+		return
+	}
+	a.st.d.AllesGeschuetzt = in.An
+	if in.An {
+		a.st.audit("Schutz: alles nur mit Anmeldung")
+	} else {
+		a.st.audit("Schutz: Abrechnung wieder ohne Anmeldung offen")
+	}
+	a.speichernUndAntworten(w, map[string]bool{"an": in.An})
+}
+
 // ---------------------------------------------------------------- Admin-Anmeldung
 
 func hashPassword(pw string, salt []byte, iter int) string {
@@ -474,6 +530,7 @@ func (a *App) handlePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.New == "" {
 		a.st.d.Admin = AdminAuth{}
+		a.st.d.AllesGeschuetzt = false
 	} else {
 		if len([]rune(in.New)) < 8 {
 			writeErr(w, bad("Das Passwort muss mindestens 8 Zeichen haben"))
@@ -519,15 +576,18 @@ type stateResp struct {
 	Year        int    `json:"year"`
 	ReadOnly    bool   `json:"readOnly"`
 	// SperrHinweis: Die Daten wurden auf einem anderen Rechner geöffnet, dieses Fenster speichert nicht mehr.
-	SperrHinweis string              `json:"sperrHinweis,omitempty"`
-	SepaAktiv    bool                `json:"sepaAktiv"`
-	Module       map[string]bool     `json:"module"`
-	Settings     Settings            `json:"settings"`
-	Paechter     []Paechter          `json:"paechter"`
-	Ablesungen   map[string]Ablesung `json:"ablesungen"`
-	Results      map[string]Result   `json:"results"`
-	HasPassword  bool                `json:"hasPassword"`
-	LoggedIn     bool                `json:"loggedIn"`
+	SperrHinweis string          `json:"sperrHinweis,omitempty"`
+	SepaAktiv    bool            `json:"sepaAktiv"`
+	Module       map[string]bool `json:"module"`
+	// AllesGeschuetzt: Einstellung »Alles nur mit Anmeldung«; Gesperrt: sie greift für diesen Besucher (Zustand gekürzt).
+	AllesGeschuetzt bool                `json:"allesGeschuetzt"`
+	Gesperrt        bool                `json:"gesperrt"`
+	Settings        Settings            `json:"settings"`
+	Paechter        []Paechter          `json:"paechter"`
+	Ablesungen      map[string]Ablesung `json:"ablesungen"`
+	Results         map[string]Result   `json:"results"`
+	HasPassword     bool                `json:"hasPassword"`
+	LoggedIn        bool                `json:"loggedIn"`
 	// Kassenprüfer-Zugang: eigenes, optionales Passwort mit Lesezugriff auf den
 	// Kassenbericht, getrennt vom Admin-Passwort.
 	HasPruefPassword bool                   `json:"hasPruefPassword"`
@@ -574,6 +634,18 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, notFound("Dieses Jahr gibt es nicht"))
 		return
 	}
+	if a.vollschutzAktiv() && !loggedIn {
+		// nur das Nötigste für die Anmeldeseite: keine Pächter, keine Zahlen, keine Termine
+		kurz := stateResp{Autor: appAutor, Version: appVersion, CurrentYear: a.st.d.Settings.Jahr, Years: []int{a.st.d.Settings.Jahr}, Year: a.st.d.Settings.Jahr,
+			Settings: Settings{VereinName: v.Settings.VereinName, Jahr: a.st.d.Settings.Jahr, Farbe: a.st.d.Settings.Farbe, Logo: a.st.d.Settings.Logo},
+			Paechter: []Paechter{}, Ablesungen: map[string]Ablesung{}, Results: map[string]Result{}, Issued: map[string]issuedInfo{}, Archive: []archiveEntry{},
+			History: map[string][]histEntry{}, Hinweise: map[string][]string{}, Lageplan: map[string]LagePos{}, OffeneVorjahre: []archiveEntry{}, Termine: []Termin{},
+			HasPassword: true, HasPruefPassword: hasPruef, PruefLoggedIn: pruefLoggedIn, TutorialGesehen: true, Module: a.st.moduleLocked(),
+			AllesGeschuetzt: true, Gesperrt: true}
+		a.st.mu.Unlock()
+		writeJSON(w, 200, kurz)
+		return
+	}
 	res := stateResp{
 		Autor: appAutor, Version: appVersion, DataDir: a.st.dir, CurrentYear: a.st.d.Settings.Jahr, Years: a.st.years(),
 		Year: year, ReadOnly: v.ReadOnly, Settings: v.Settings, Paechter: v.Paechter,
@@ -598,6 +670,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	res.SperrHinweis = a.st.sperrHinweisLocked()
 	res.SepaAktiv = a.st.sepaAktivLocked()
 	res.Module = a.st.moduleLocked()
+	res.AllesGeschuetzt = a.st.d.AllesGeschuetzt
 	res.Demo, res.Leer = a.st.d.Demo, a.st.datenbestandLeer()
 	res.Lageplan = a.st.d.Lageplan
 	if res.Lageplan == nil {
@@ -1742,6 +1815,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/aemter/{id}/wechsel", a.admin(a.handleAmtWechsel))
 	mux.HandleFunc("PUT /api/admin/aemter/{id}/checkliste", a.admin(a.handleAmtCheckliste))
 	mux.HandleFunc("PUT /api/admin/module", a.admin(a.handleModule))
+	mux.HandleFunc("PUT /api/admin/vollschutz", a.admin(a.handleVollschutz))
 	mux.HandleFunc("GET /api/admin/vereinsjahr", a.admin(a.handleVereinsjahr))
 	mux.HandleFunc("PUT /api/admin/vereinsjahr", a.admin(a.handleVereinsjahrHaken))
 	mux.HandleFunc("GET /api/admin/pachtgrenze", a.admin(a.handlePachtgrenze))
@@ -1907,7 +1981,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/termine-druck", a.handleJahresplan)
 	mux.HandleFunc("POST /api/termine-druck/oeffnen", a.handleJahresplanOeffnen)
 	mux.Handle("/", static)
-	return a.guard(mux)
+	return a.guard(a.vollschutz(mux))
 }
 
 // handleLageplan speichert die Anordnung der Gärten auf der Lageplan-Karte. Eine leere Liste setzt

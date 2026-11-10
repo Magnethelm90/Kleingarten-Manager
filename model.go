@@ -252,6 +252,10 @@ type Data struct {
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
 
+	// AllesGeschuetzt: mit Admin-Passwort ist ohne Anmeldung gar nichts sichtbar (auch keine Zählerstände und
+	// Rechnungen) – für Rechner, die mehrere Personen nutzen. Siehe vollschutz in api.go.
+	AllesGeschuetzt bool `json:"allesGeschuetzt,omitempty"`
+
 	// AusModule: ausgeblendete Bereiche (module.go); leer = alles sichtbar.
 	AusModule []string `json:"ausModule,omitempty"`
 

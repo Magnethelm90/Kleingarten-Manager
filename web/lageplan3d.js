@@ -9,7 +9,8 @@ const S3 = 0.1;
 const FARBE = {
   bezahlt: 0x3f9a4f, offen: 0xd9a227, unvollstaendig: 0xc8553d, berechnet: 0x7f8db0, frei: 0xd9d6c8,
 };
-const RASEN = [0xa8cf8c, 0x9fc884, 0xb1d494, 0xa3cb8a];
+// Darstellung wie ein Planungsmodell: helle, gedeckte Flächen – Farbe tragen nur Status, Leitungen und Einrichtungen.
+const RASEN = [0xdde7d6, 0xd8e3d1];
 const OBJEKT_FARBE = { wasserzaehler: 0x1d6ec4, absperr: 0x0e468c, schacht: 0x6e6e6e, strom: 0xd68c00, tor: 0x7d5028, vereinsheim: 0x2f6f3e, kompost: 0x5f7828, parkplatz: 0x3c3ca0, sonstiges: 0x963c78 };
 const LINIEN_FARBE = { wasser: 0x1d6ec4, strom: 0xd68c00, abwasser: 0x785028, weg: 0xbdb6a6 };
 
@@ -56,10 +57,10 @@ function laube(breite, holz, dach) {
   const dachM = new THREE.Mesh(dachGeo, new THREE.MeshStandardMaterial({ color: dach, roughness: 0.6 }));
   dachM.position.y = h; dachM.castShadow = true;
   g.add(dachM);
-  const tuer = new THREE.Mesh(new THREE.BoxGeometry(w * 0.22, h * 0.7, 0.02), new THREE.MeshStandardMaterial({ color: 0x8a5a33 }));
+  const tuer = new THREE.Mesh(new THREE.BoxGeometry(w * 0.22, h * 0.7, 0.02), new THREE.MeshStandardMaterial({ color: 0xcdc8bb, roughness: 0.8 }));
   tuer.position.set(-w * 0.2, h * 0.35, d / 2 + 0.01);
   g.add(tuer);
-  const fenster = new THREE.Mesh(new THREE.BoxGeometry(w * 0.26, h * 0.26, 0.02), new THREE.MeshStandardMaterial({ color: 0xbfe0ef, roughness: 0.2 }));
+  const fenster = new THREE.Mesh(new THREE.BoxGeometry(w * 0.26, h * 0.26, 0.02), new THREE.MeshStandardMaterial({ color: 0xd6e0e4, roughness: 0.3 }));
   fenster.position.set(w * 0.2, h * 0.55, d / 2 + 0.01);
   g.add(fenster);
   return g;
@@ -68,16 +69,14 @@ function laube(breite, holz, dach) {
 function baum(r, x, z, rnd) {
   const g = new THREE.Group();
   const s = 0.8 + rnd() * 0.6;
-  const stamm = new THREE.Mesh(new THREE.CylinderGeometry(0.12 * s, 0.16 * s, 1.4 * s, 8), new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.9 }));
+  const stamm = new THREE.Mesh(new THREE.CylinderGeometry(0.12 * s, 0.16 * s, 1.4 * s, 8), new THREE.MeshStandardMaterial({ color: 0xa39d90, roughness: 0.9 }));
   stamm.position.y = 0.7 * s; stamm.castShadow = true;
   g.add(stamm);
-  const gruen = [0x5f9a52, 0x4f8a48, 0x6aa65c][Math.floor(rnd() * 3)];
-  for (let i = 0; i < 3; i++) {
-    const k = new THREE.Mesh(new THREE.IcosahedronGeometry((0.9 - i * 0.15) * s * r, 1), new THREE.MeshStandardMaterial({ color: gruen, roughness: 0.85, flatShading: true }));
-    k.position.set((rnd() - 0.5) * 0.5 * s, (1.7 + i * 0.45) * s, (rnd() - 0.5) * 0.5 * s);
-    k.castShadow = true;
-    g.add(k);
-  }
+  const gruen = [0xa9bfa2, 0x9fb699, 0xb3c7ac][Math.floor(rnd() * 3)];
+  const k = new THREE.Mesh(new THREE.SphereGeometry(0.8 * s * r, 20, 14), new THREE.MeshStandardMaterial({ color: gruen, roughness: 0.95 }));
+  k.position.y = 1.9 * s;
+  k.castShadow = true;
+  g.add(k);
   g.position.set(x, 0, z);
   return g;
 }
@@ -104,7 +103,7 @@ export function erstelle(container, daten, opt) {
   container.append(tip);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xe9f0e6);
+  scene.background = new THREE.Color(0xf3f5f0);
   const camera = new THREE.PerspectiveCamera(38, breite() / hoehe(), 0.5, 2000);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -113,8 +112,8 @@ export function erstelle(container, daten, opt) {
   controls.minDistance = 8;
   controls.screenSpacePanning = false;
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8aa07a, 1.25));
-  const sonne = new THREE.DirectionalLight(0xfff3e0, 2.1);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xd9ddd2, 1.9));
+  const sonne = new THREE.DirectionalLight(0xffffff, 1.5);
   sonne.castShadow = true;
   sonne.shadow.mapSize.set(2048, 2048);
   sonne.shadow.bias = -0.0004;
@@ -153,11 +152,11 @@ export function erstelle(container, daten, opt) {
 
     // Boden (mit Plan als Textur, wenn vorhanden)
     const bw = maxX - minX + rand * 2, bt = maxZ - minZ + rand * 2;
-    const sockel = new THREE.Mesh(new THREE.BoxGeometry(bw, 1.2, bt), new THREE.MeshStandardMaterial({ color: 0x7a5a3e, roughness: 1 }));
-    sockel.position.set(mitte.x, -0.62, mitte.z);
+    const sockel = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.5, bt), new THREE.MeshStandardMaterial({ color: 0xd3d7ce, roughness: 1 }));
+    sockel.position.set(mitte.x, -0.27, mitte.z);
     sockel.receiveShadow = true;
     welt.add(sockel);
-    const rasen = new THREE.Mesh(new THREE.PlaneGeometry(bw, bt), new THREE.MeshStandardMaterial({ color: 0xbfd8ae, roughness: 0.95 }));
+    const rasen = new THREE.Mesh(new THREE.PlaneGeometry(bw, bt), new THREE.MeshStandardMaterial({ color: 0xeceee7, roughness: 0.95 }));
     rasen.rotation.x = -Math.PI / 2;
     rasen.position.set(mitte.x, 0, mitte.z);
     rasen.receiveShadow = true;
@@ -195,7 +194,7 @@ export function erstelle(container, daten, opt) {
     }
 
     // Parzellen
-    const holz = 0xc8956a, dach = d.dachfarbe || 0x2f6f3e;
+    const holz = 0xf3f1eb, dach = 0x6d7d71;
     for (const g of d.gaerten) {
       const form = new THREE.Shape();
       let cx, cz, w, t;
@@ -214,7 +213,7 @@ export function erstelle(container, daten, opt) {
       geo.rotateX(Math.PI / 2); // Form liegt in x/z, Höhe nach oben
       geo.translate(0, 0.34, 0);
       const farbe = FARBE[g.frei ? 'frei' : g.status] || FARBE.berechnet;
-      const mat = new THREE.MeshStandardMaterial({ color: g.frei ? 0xeceadf : RASEN[parzellen.length % RASEN.length], roughness: 0.95 });
+      const mat = new THREE.MeshStandardMaterial({ color: g.frei ? 0xf1f0ea : RASEN[parzellen.length % RASEN.length], roughness: 0.95 });
       const m = new THREE.Mesh(geo, mat);
       m.castShadow = m.receiveShadow = true;
       const gruppe = new THREE.Group();
@@ -230,13 +229,6 @@ export function erstelle(container, daten, opt) {
         lb.position.set(cx - w * 0.25, 0.34, cz - t * 0.12);
         lb.rotation.y = 0.05;
         gruppe.add(lb);
-        // zwei Beete
-        for (let i = 0; i < 2; i++) {
-          const beet = new THREE.Mesh(new THREE.BoxGeometry(w * 0.32, 0.18, t * 0.14), new THREE.MeshStandardMaterial({ color: 0x8a6244, roughness: 1 }));
-          beet.position.set(cx + w * 0.2, 0.43, cz - t * 0.15 + i * t * 0.28);
-          beet.castShadow = beet.receiveShadow = true;
-          gruppe.add(beet);
-        }
       }
       const sp = schild(g.nr, g.frei ? '#7a857a' : '#24402c', 1.7);
       sp.position.set(cx, 3.6, cz);
@@ -270,18 +262,18 @@ export function erstelle(container, daten, opt) {
       else if (u < bw + bt) { x = mitte.x + bw / 2 - 1.6; z = mitte.z - bt / 2 + (u - bw); }
       else if (u < 2 * bw + bt) { x = mitte.x + bw / 2 - (u - bw - bt); z = mitte.z + bt / 2 - 1.6; }
       else { x = mitte.x - bw / 2 + 1.6; z = mitte.z + bt / 2 - (u - 2 * bw - bt); }
-      if (rnd() < 0.35) continue;
+      if (rnd() < 0.55) continue;
       welt.add(baum(0.9 + rnd() * 0.5, x, z, rnd));
     }
 
     // Licht passend zur Größe
     const r = groesse;
-    sonne.position.set(mitte.x - r * 0.4, r * 0.9, mitte.z - r * 0.55);
+    sonne.position.set(mitte.x - r * 0.45, r * 0.9, mitte.z + r * 0.5);
     sonne.target.position.copy(mitte);
     const sc = sonne.shadow.camera;
     sc.left = -r * 0.75; sc.right = r * 0.75; sc.top = r * 0.75; sc.bottom = -r * 0.75; sc.near = 1; sc.far = r * 3;
     sc.updateProjectionMatrix();
-    scene.fog = new THREE.Fog(0xe9f0e6, r * 1.6, r * 3.2);
+    scene.fog = new THREE.Fog(0xf3f5f0, r * 1.6, r * 3.2);
     controls.maxDistance = r * 2.2;
   }
 

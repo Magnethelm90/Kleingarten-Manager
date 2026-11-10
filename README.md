@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/bilder/garten.webp" width="620" alt="Kleingarten mit Laube, Beeten, Obstbaum und Zaun – 3D-Illustration">
+  <img src="docs/bilder/garten.svg" width="560" alt="Kleingarten mit Laube, Beet, Obstbaum und Zaun">
 </p>
 
 <h1 align="center">Kleingarten-Manager</h1>
@@ -27,7 +27,7 @@
 ![Übersicht mit Begrüßung, Jahresfortschritt und dem, was gerade ansteht](docs/bilder/uebersicht.png)
 
 <p align="center">
-  <img src="docs/bilder/lageplan-3d-animation.webp" width="760" alt="Der Lageplan als 3D-Modell: drehen, zoomen, Gärten anklicken">
+  <img src="docs/bilder/lageplan-3d.png" width="760" alt="Der Lageplan als 3D-Modell: drehen, zoomen, Gärten anklicken">
   <br><sub><b>Der Lageplan in 3D</b> – die Anlage zum Drehen und Zoomen, jeder Garten in der Farbe seines Abrechnungsstands</sub>
 </p>
 
@@ -260,6 +260,8 @@ Start meldet macOS „nicht verifizierter Entwickler“: mit Rechtsklick auf die
 - Die **Verwaltung** (Pächter, Warteliste, Kasse, Berichte, Einstellungen) lässt sich mit einem Passwort schützen.
   Übersicht, Zählerstände, Rechnungen, Zahlungen, Lageplan und Termine bleiben für alle am Rechner offen, damit
   zum Beispiel beim Ablesen jemand helfen kann.
+- Nutzen mehrere Personen den Rechner, lässt sich unter *Passwort* **»Alles nur mit Anmeldung«** einschalten: Dann
+  zeigt das Programm ohne Anmeldung nur die Anmeldeseite – keine Namen, Anschriften oder Zahlen.
 - Wer sich am Rechner anmelden kann, kommt auch an die Datendatei. Sie ist nicht verschlüsselt. Deshalb gehört
   das Programm auf einen Rechner mit eigenem Benutzerkennwort und eingeschalteter Festplattenverschlüsselung
   (Windows: BitLocker bzw. Geräteverschlüsselung, macOS: FileVault).

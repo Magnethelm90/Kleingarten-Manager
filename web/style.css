@@ -642,13 +642,13 @@ table.meldung td.num { text-align: right; white-space: nowrap; }
 .hero-fakt { background: rgba(255,255,255,.82); border: 1px solid var(--green-line); border-radius: 12px; padding: 8px 12px; min-width: 110px; box-shadow: var(--shadow-sm); }
 .hero-fakt b { display: block; font-size: 19px; color: var(--green-dark); line-height: 1.2; }
 .hero-fakt span { font-size: 12.5px; color: var(--muted); display: block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hero-bild { width: 100%; height: 100%; max-height: 300px; padding: 14px 14px 0 0; object-fit: contain; object-position: right center; align-self: end; filter: drop-shadow(0 10px 18px rgba(30, 60, 30, .18)); }
+.hero-bild { width: 100%; height: 100%; max-height: 300px; padding: 14px 14px 0 0; object-fit: contain; object-position: right bottom; align-self: end; }
 @media (max-width: 1000px) {
   .hero { grid-template-columns: 1fr; }
   .hero-bild { max-height: 190px; order: -1; object-position: center; margin-top: 10px; }
 }
 .card.login { text-align: center; padding-top: 0; overflow: hidden; }
-.card.login .login-bild { display: block; width: calc(100% + 40px); margin: 0 -20px 6px; height: 170px; object-fit: cover; background: linear-gradient(115deg, var(--green-soft), #eef5fb); }
+.card.login .login-bild { display: block; width: calc(100% + 40px); margin: 0 -20px 6px; height: 170px; padding-top: 10px; object-fit: contain; object-position: center bottom; background: var(--green-tint); border-bottom: 1px solid var(--line); }
 .card.login input { text-align: left; }
 
 /* Aufklappmenü »Mehr« */
@@ -785,7 +785,7 @@ polyline.lage-vorschau { fill: none; stroke-width: 3.5; }
 tr.summe td { border-top: 2px solid var(--line); }
 
 /* ---------------------------------------------------------------- Illustrationen und Bewegung (dezent) */
-.leer-bild { width: 132px; height: 112px; object-fit: contain; margin-bottom: 2px; filter: drop-shadow(0 8px 14px rgba(30, 60, 30, .14)); }
+.leer-bild { width: 132px; height: 102px; object-fit: contain; margin-bottom: 2px; }
 td .leer-bild { width: 104px; height: 88px; }
 
 @keyframes einblenden { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -826,8 +826,8 @@ dialog.geschichte::backdrop { background: rgba(18, 38, 24, .55); backdrop-filter
 .gs-buehne { position: relative; height: 400px; overflow: hidden; }
 .gs-folie { position: absolute; inset: 0; display: grid; grid-template-columns: 1.1fr 1fr; align-items: center; }
 .gs-bild { height: 100%; display: grid; place-items: center; padding: 34px 10px 24px 34px;
-  background: radial-gradient(ellipse at 45% 60%, var(--green-tint) 0%, rgba(255,255,255,0) 70%), linear-gradient(160deg, #f3f8ef, #e7f1e3); }
-.gs-bild img { max-width: 100%; max-height: 330px; object-fit: contain; filter: drop-shadow(0 18px 24px rgba(30, 60, 30, .2)); }
+  background: var(--green-tint); border-right: 1px solid var(--line); }
+.gs-bild img { width: 100%; max-width: 340px; max-height: 300px; object-fit: contain; }
 .gs-text { padding: 30px 36px 20px 30px; }
 .gs-schritt { font-size: 12px; font-weight: 650; color: var(--green); letter-spacing: .3px; text-transform: uppercase; }
 .gs-text h2 { margin: 8px 0 10px; font-size: 25px; letter-spacing: -.3px; color: var(--green-dark); line-height: 1.2; }
@@ -960,3 +960,4 @@ dialog.assistent::backdrop { background: rgba(18, 38, 24, .55); backdrop-filter:
 .assi-option:hover { border-color: var(--green); background: var(--green-tint); }
 .assi-option:focus-visible { outline: none; box-shadow: var(--ring); }
 @media (max-width: 640px) { .assi-wahl { grid-template-columns: 1fr; } .assi-kopf, .assi-koerper { padding-left: 18px; padding-right: 18px; } }
+main.nur-anmeldung { margin: 0 auto; padding-top: 48px; max-width: 520px; }
