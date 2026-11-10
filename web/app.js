@@ -328,6 +328,7 @@ const navEintrag = (tab, adminTab) => NAV.flatMap((g) => g.items).find((x) => (x
 function adminTabWaehlen(id) {
   S.tab = 'admin'; S.adminTab = id; S.importPreview = null;
   if (id === 'protokoll') S.protokoll = null;
+  if (id === 'jahreswechsel') S.abschluss = null;
   if (id === 'jubilaeen') S.jubilaeen = null;
   if (id === 'datenschutz') S.datenschutz = null;
   if (id === 'warteliste') S.warteliste = null;
@@ -870,17 +871,10 @@ function viewUebersicht() {
     beispieldatenKarte(st, istAdmin),
     jubilaeumBanner(st, istAdmin),
     st.demo ? null : zweiteSicherungBanner(st, istAdmin),
-    cockpitKarte(st, istAdmin),
-    vereinsjahrKarte(st, istAdmin),
+    anstehendKarte(st, istAdmin),
     st.paechter.length ? jahresFortschritt(st, istAdmin) : null,
     h('div', { class: 'zwei-spalten' }, naechsteTermine(st), besichtigungenKarte(st, istAdmin)),
-    h('div', { class: 'cards' }, cards),
-    h('h3', { class: 'sect' }, 'Schnellzugriff'),
-    h('div', { class: 'quicklinks' },
-      quicklink('zaehler', 'Zu den Zählerständen', 'Nummer eintippen, neue Stände eingeben', () => { S.tab = 'eingabe'; render(); }, true),
-      quicklink('rechnung', 'Zu den Rechnungen', 'prüfen, ausstellen, drucken oder per E-Mail', () => { S.tab = 'rechnungen'; render(); }),
-      quicklink('euro', 'Zu den Zahlungen', 'bezahlt abhaken, Mahnungen', () => { S.tab = 'zahlungen'; render(); }),
-      istAdmin ? quicklink('kasse', 'Zum Kassenbericht', 'Kassenbestand, Ausgaben, Belege', () => { adminTabWaehlen('kassenbericht'); render(); }) : null));
+    h('div', { class: 'cards' }, cards));
 }
 
 // Wo steht das Abrechnungsjahr? Vier Stationen mit Balken und dem nächsten sinnvollen Schritt.
@@ -945,10 +939,6 @@ function jahresFortschritt(st, istAdmin) {
     })));
 }
 
-function quicklink(ic, titel, text, onclick, primary) {
-  return h('button', { class: 'quicklink' + (primary ? ' primary' : ''), onclick, title: text },
-    h('span', { class: 'qlico' }, icon(ic, 24)), h('span', { class: 'qltext' }, h('b', null, titel), h('span', null, text)));
-}
 
 // ------------------------------------------------------------------ Tab: Zählerstände
 
@@ -1284,7 +1274,7 @@ function viewSchnell() {
     card.append(
       h('div', { class: 'qhead' },
         h('div', null, h('h3', null, `${p.mitgliedsnr} – ${p.name}`, schlussBadge(p)), h('div', { class: 'hint' }, [p.strasse, p.plzOrt].filter(Boolean).join(', ')),
-          p.notiz ? h('div', { class: 'hint', style: 'margin-top:2px' }, '📝 ', p.notiz) : null),
+          p.notiz ? h('div', { class: 'hint', style: 'margin-top:2px' }, 'Notiz: ', p.notiz) : null),
         h('div', { class: 'chips' }, info('Garten', p.gartennr), info('Größe', p.gartengroesse ? `${nfFlex.format(p.gartengroesse)} m²` : ''),
           info('Umlage', eur(p.umlageAbweichend != null ? p.umlageAbweichend : st.settings.umlageStandard)))),
       h('div', { class: 'qgrid' },
@@ -1446,7 +1436,7 @@ function viewLageplan() {
   const counts = { unvollstaendig: 0, berechnet: 0, offen: 0, bezahlt: 0, frei: 0 };
   const status = new Map(list.map((p) => { const x = statusOf(p); counts[x]++; return [p.id, x]; }));
   const edit = !!S.lageEntwurf && istAdmin && !st.readOnly;
-  const kachel = (p, extra) => h('div', { class: 'kachel kachel-' + status.get(p.id) + (edit ? ' ziehbar' : ''), title: `${p.name}${p.notiz ? ' · 📝 ' + p.notiz : ''} – ${labels[status.get(p.id)]}`,
+  const kachel = (p, extra) => h('div', { class: 'kachel kachel-' + status.get(p.id) + (edit ? ' ziehbar' : ''), title: `${p.name}${p.notiz ? ' · Notiz: ' + p.notiz : ''} – ${labels[status.get(p.id)]}`,
     onclick: edit ? null : () => { S.tab = 'eingabe'; S.eingabeMode = 'schnell'; S.quickId = p.id; render(); }, ...(extra || {}) },
     p.gartennr && !edit ? h('button', { class: 'kachel-hist', title: istAdmin ? `Gartenakte von Garten ${p.gartennr}` : `Verlauf von Garten ${p.gartennr}`,
       onclick: (e) => { e.stopPropagation(); if (istAdmin) gartenakteDialog(p.gartennr.trim()); else gartenHistorieDialog(p.gartennr); } }, icon(istAdmin ? 'akte' : 'uhr', 14)) : null,
@@ -1588,7 +1578,7 @@ function viewLageplan() {
   if (istAdmin && !st.readOnly && list.length) {
     leiste = edit
       ? (S.lageWerkzeug ? werkzeugLeiste() : h('div', null, h('div', { class: 'banner info lage-leiste' },
-        h('span', null, '✋ Ziehe die Gärten an ihren Platz. ⬠ auf einer Kachel zeichnet den Umriss der Parzelle nach. Gespeichert wird erst mit »Anordnung speichern«.'),
+        h('span', null, 'Ziehe die Gärten an ihren Platz. ⬠ auf einer Kachel zeichnet den Umriss der Parzelle nach. Gespeichert wird erst mit »Anordnung speichern«.'),
         h('div', { class: 'spacer' }),
         h('button', { class: 'btn small', title: 'Einen Garten ohne Pächter auf die Karte setzen, z. B. nach einer Kündigung', onclick: freienGartenHinzufuegen }, '+ Freier Garten'), ' ',
         h('button', { class: 'btn small', onclick: () => { S.lageEntwurf = null; S.lageKarteEntwurf = null; render(); } }, 'Abbrechen'), ' ',
@@ -1841,7 +1831,7 @@ function werkzeugLeiste() {
   const text = wz.art === 'objekt' ? `Klicke auf die Karte, um »${LP_OBJEKTE[wz.typ][1]}« zu setzen. Mehrere nacheinander gehen auch.`
     : wz.art === 'linie' ? `${LP_LINIEN[wz.typ][0]}: Punkt für Punkt auf die Karte klicken. Mit Doppelklick oder »Fertig« abschließen.`
       : `Umriss von Garten ${wz.nr}: die Ecken der Parzelle nacheinander anklicken. Ecken benachbarter Umrisse rasten ein. Klick auf die erste Ecke, Doppelklick oder »Fertig« schließt den Umriss.`;
-  return h('div', { class: 'banner info lage-leiste' }, h('span', null, '✏️ ' + text), h('div', { class: 'spacer' }),
+  return h('div', { class: 'banner info lage-leiste' }, h('span', null, text), h('div', { class: 'spacer' }),
     wz.art !== 'objekt' ? h('button', { class: 'btn small', onclick: () => { wz.punkte.pop(); if (S.lageVorschau) S.lageVorschau(); } }, 'Letzten Punkt zurück') : null, ' ',
     wz.art !== 'objekt' ? h('button', { class: 'btn small', onclick: () => { S.lageWerkzeug = null; render(); } }, 'Abbrechen') : null, ' ',
     h('button', { class: 'btn small primary', onclick: werkzeugFertig }, 'Fertig'));
@@ -3057,7 +3047,7 @@ function verwaltungBeschluesse() {
     l.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
       h('thead', null, h('tr', null, ['Nr.', 'Datum', 'Beschluss', 'Ergebnis', ''].map((t) => h('th', null, t)))),
       h('tbody', null, l.map((b) => h('tr', null, h('td', null, b.nummer), h('td', null, deDate(b.datum), h('div', { class: 'hint' }, b.gremium)),
-        h('td', { class: 'wrap' }, h('b', null, b.titel), b.text ? h('div', { class: 'hint' }, b.text) : null, b.stichworte ? h('div', { class: 'hint' }, '🏷 ' + b.stichworte) : null),
+        h('td', { class: 'wrap' }, h('b', null, b.titel), b.text ? h('div', { class: 'hint' }, b.text) : null, b.stichworte ? h('div', { class: 'hint' }, 'Stichworte: ' + b.stichworte) : null),
         h('td', null, h('span', { class: 'badge ' + (b.ergebnis === 'angenommen' ? 'ok' : b.ergebnis === 'abgelehnt' ? 'err' : 'neu') }, b.ergebnis),
           b.ja + b.nein + b.enthaltung ? h('div', { class: 'hint' }, `${b.ja} : ${b.nein} : ${b.enthaltung}`) : null),
         h('td', { class: 'aktionen' }, h('button', { class: 'btn small', onclick: () => nachher(beschlussDialog(b)) }, 'Bearbeiten'), ' ',
@@ -3661,7 +3651,7 @@ function adminPaechter() {
     for (const p of shown) {
       tbody.append(h('tr', null,
         h('td', null, p.mitgliedsnr), h('td', null, p.gartennr),
-        h('td', { class: 'name', title: p.name }, p.name, p.notiz ? h('span', { title: p.notiz, style: 'margin-left:4px;cursor:help' }, '📝') : null, schlussBadge(p)),
+        h('td', { class: 'name', title: p.name }, p.name, p.notiz ? h('span', { title: p.notiz, style: 'margin-left:4px;cursor:help', class: 'notiz-zeichen' }, icon('bericht', 14)) : null, schlussBadge(p)),
         h('td', { class: 'wrap' }, [p.strasse, p.plzOrt].filter(Boolean).join(', ')),
         h('td', null, [p.telefon, p.email].filter(Boolean).map((x, i) => [i ? h('br') : null, x])),
         h('td', { class: 'num' }, nfFlex.format(p.gartengroesse) + ' m²'),
@@ -3822,7 +3812,7 @@ async function loadPapierkorb() {
 function papierkorbCard() {
   if (!S.papierkorbOffen) {
     return h('div', { style: 'margin-top:14px' },
-      h('button', { class: 'btn', onclick: () => { S.papierkorbOffen = true; S.papierkorb = null; render(); } }, '🗑 Papierkorb'));
+      h('button', { class: 'btn', onclick: () => { S.papierkorbOffen = true; S.papierkorb = null; render(); } }, 'Papierkorb'));
   }
   if (!S.papierkorb) {
     if (!S.papierkorbLoading) loadPapierkorb();
@@ -4133,52 +4123,34 @@ function aussehenKarte(st) {
 
 // ---- Jahreswechsel
 
-async function loadAbschlussCheck(year) {
-  if (S.abschlussLoading) return;
-  S.abschlussLoading = true;
-  try { S.abschlussCheck = await api('GET', `/api/admin/kassenbericht?year=${year}`); } catch (e) { S.abschlussCheck = false; }
-  S.abschlussLoading = false;
-  render();
-}
-
-// Geführter Überblick vor dem Jahreswechsel: zeigt, was noch offen ist. Ist
-// nur ein Hinweis, blockiert den Jahreswechsel nicht (wie die übrigen
-// Plausibilitätshinweise im Programm auch).
-function abschlussChecklist(st) {
-  if (S.abschlussCheck == null || (S.abschlussCheck && S.abschlussCheck.jahr !== st.currentYear)) {
-    if (!S.abschlussLoading) loadAbschlussCheck(st.currentYear);
+// Ampel vor dem Jahreswechsel (abschluss.go): Rot sollte vorher erledigt sein, Gelb bitte ansehen. Blockiert nichts.
+function abschlussPruefung() {
+  if (S.abschluss == null) {
+    if (!S.abschlussLaedt) {
+      S.abschlussLaedt = true;
+      api('GET', '/api/admin/abschlusspruefung').then((d) => { S.abschluss = d; }).catch(() => { S.abschluss = false; }).finally(() => { S.abschlussLaedt = false; render(); });
+    }
+    return h('div', { class: 'card narrow', style: 'max-width:760px;margin-bottom:16px' }, h('p', { class: 'hint', style: 'margin:0' }, 'Wird geprüft …'));
   }
-  const total = st.paechter.length;
-  const done = st.paechter.filter((p) => st.results[p.id] && st.results[p.id].vollstaendig).length;
-  const issued = Object.keys(st.issued || {}).length;
-  const offenePosten = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt >= 0 && payIsOpen(e)).length;
-  const k = S.abschlussCheck || null;
-  const ungeprueft = k ? k.ausgaben.filter((x) => !x.geprueft).length : null;
-
-  const item = (ok, label) => h('li', { class: ok ? 'ok' : 'warn' }, ok ? '✓ ' : '⚠ ', label);
-  const items = [
-    item(done === total, `Zählerstände vollständig: ${done} von ${total} Pächtern`),
-    item(issued >= done, `Rechnungen ausgestellt: ${issued} von ${done} vollständigen Pächtern`),
-    item(offenePosten === 0, offenePosten === 0 ? 'Keine offenen Zahlungen mehr' : `${offenePosten} Rechnung(en) noch offen`),
-  ];
-  if (k) {
-    items.push(item(ungeprueft === 0, ungeprueft === 0 ? 'Alle sonstigen Ausgaben sind geprüft' : `${ungeprueft} sonstige Ausgabe(n) noch ohne Geprüft-Haken`));
-    items.push(item(k.kassenbestand >= 0, k.kassenbestand >= 0 ? `Kassenbestand positiv (${eur(k.kassenbestand)})` : `Kassenbestand negativ (${eur(k.kassenbestand)})`));
-    const wk = k.ausgaben.filter((x) => x.wiederkehrend).length;
-    if (wk > 0) items.push(h('li', null, '🔁 ', `${wk} wiederkehrende Ausgabe(n) werden automatisch als Vorschlag fürs neue Jahr übernommen`));
-  }
-  return h('div', { class: 'card narrow', style: 'max-width:760px;margin-bottom:16px' },
-    h('h3', { style: 'margin-top:0' }, 'Vor dem Abschluss prüfen'),
-    h('ul', { class: 'checklist' }, items),
-    h('p', { class: 'hint', style: 'margin-bottom:0' }, 'Nur ein Hinweis – der Jahreswechsel lässt sich trotzdem durchführen, offene Punkte bleiben danach weiter bearbeitbar.'));
+  const d = S.abschluss;
+  if (!d) return null;
+  const gesamt = d.rot ? ['err', `${d.rot} ${d.rot === 1 ? 'Punkt sollte' : 'Punkte sollten'} vor dem Abschluss erledigt sein`]
+    : d.gelb ? ['warn', `Abschluss möglich – ${d.gelb} ${d.gelb === 1 ? 'Hinweis' : 'Hinweise'} bitte ansehen`] : ['ok', 'Alles in Ordnung – das Jahr kann abgeschlossen werden'];
+  return h('div', { class: 'card narrow abschluss', style: 'max-width:760px;margin-bottom:16px' },
+    h('div', { class: 'fs-kopf' }, h('h3', { style: 'margin:0' }, `Prüfung vor dem Abschluss ${d.jahr}`),
+      h('button', { class: 'btn small', onclick: () => { S.abschluss = null; render(); } }, 'Neu prüfen')),
+    h('div', { class: 'ampel-gesamt ' + gesamt[0] }, h('i', null), gesamt[1]),
+    h('ul', { class: 'ampel-liste' }, d.punkte.map((x) => h('li', null,
+      h('i', { class: 'ampel ' + x.stufe, title: x.stufe === 'err' ? 'Vorher erledigen' : x.stufe === 'warn' ? 'Bitte ansehen' : 'In Ordnung' }),
+      h('div', { class: 'ampel-text' }, h('b', null, x.titel), x.text ? h('div', { class: 'hint' }, x.text) : null),
+      x.ziel ? h('button', { class: 'btn small', onclick: () => zielOeffnen(x.ziel) }, x.knopf + ' →') : null))),
+    h('p', { class: 'hint', style: 'margin-bottom:0' }, 'Die Prüfung ist ein Hinweis: Der Jahreswechsel lässt sich trotzdem durchführen, offene Punkte bleiben danach bearbeitbar.'));
 }
 
 function adminYear() {
   const st = S.state;
-  const total = st.paechter.length;
-  const done = st.paechter.filter((p) => st.results[p.id] && st.results[p.id].vollstaendig).length;
   return h('div', null,
-    abschlussChecklist(st),
+    abschlussPruefung(),
     h('div', { class: 'card narrow', style: 'max-width:760px' },
       h('h3', { style: 'margin-top:0' }, `Abrechnungsjahr ${st.currentYear} abschließen`),
       h('p', null, 'Am Ende der Abrechnung schließt du das Jahr ab. Dabei passiert Folgendes:'),
@@ -4187,20 +4159,15 @@ function adminYear() {
         h('li', null, `Es startet das Jahr ${st.currentYear + 1}: Die aktuellen Zählerstände werden zu den Vorjahresständen. Stunden, Abschlagszahlungen und weitere Angaben sind wieder leer.`),
         h('li', null, 'Rechnungsdatum und Zahlungsziel rücken um ein Jahr weiter. Prüfe sie danach unter »Preise & Einstellungen«.'),
         h('li', null, 'Vorher wird automatisch eine Sicherung angelegt.')),
-      done < total ? h('div', { class: 'banner warn', style: 'margin-top:12px' }, `Achtung: Bei ${total - done} von ${total} Pächtern fehlen noch Angaben.`) : null,
       h('p', { class: 'hint', style: 'margin-top:12px' }, 'Tipp: Vor dem Abschluss den ',
         h('button', { class: 'btn small', onclick: () => jahresberichtDrucken(st.currentYear) }, `Jahresbericht ${st.currentYear}`),
         ' für die Mitgliederversammlung drucken (später geht das auch noch im Kassenbericht).'),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: async () => {
-        const offen = [];
-        if (done < total) offen.push(`bei ${total - done} Pächter(n) fehlen Angaben`);
-        const nIssued = Object.keys(st.issued || {}).length;
-        if (nIssued < done) offen.push(`${done - nIssued} Rechnung(en) sind noch nicht ausgestellt`);
-        const nOffen = offenePosten(st).jetzt.length;
-        if (nOffen) offen.push(`${nOffen} Rechnung(en) sind noch nicht bezahlt`);
-        const warnung = offen.length ? ` Achtung: ${offen.join(', ')}.` : '';
+        let offen = [];
+        try { S.abschluss = await api('GET', '/api/admin/abschlusspruefung'); offen = S.abschluss.punkte.filter((x) => x.stufe === 'err').map((x) => x.titel); } catch (e) { /* Prüfung ist nur ein Hinweis */ }
+        const warnung = offen.length ? ` Achtung, noch offen: ${offen.join('; ')}.` : '';
         if (!(await confirmBox(`Jahr ${st.currentYear} jetzt abschließen und ${st.currentYear + 1} beginnen?${warnung} Das kann nicht rückgängig gemacht werden (die Sicherung vorher bleibt aber erhalten).`, 'Jahr abschließen', true))) return;
-        try { await api('POST', '/api/admin/jahreswechsel'); toast('Neues Jahr gestartet', 'ok'); S.year = null; S.dashKasse = null; S.kasse = null; S.kasseVerlauf = null; S.abschlussCheck = null; await reload(); } catch (e) { handleErr(e); }
+        try { await api('POST', '/api/admin/jahreswechsel'); toast('Neues Jahr gestartet', 'ok'); S.year = null; S.dashKasse = null; S.kasse = null; S.kasseVerlauf = null; S.abschluss = null; S.vj = null; await reload(); } catch (e) { handleErr(e); }
       } }, `Jahr ${st.currentYear} abschließen`))));
 }
 
@@ -4525,10 +4492,10 @@ function adminKassenbericht(pruefMode) {
   const tbody = h('tbody');
   for (const x of gezeigt) {
     tbody.append(h('tr', null, h('td', null, deDate(x.datum)),
-      h('td', null, x.beschreibung, x.wiederkehrend ? h('span', { title: 'Jährlich wiederkehrend', style: 'margin-left:4px;cursor:help' }, '🔁') : null),
+      h('td', null, x.beschreibung, x.wiederkehrend ? h('span', { title: 'Jährlich wiederkehrend', style: 'margin-left:4px;cursor:help', class: 'notiz-zeichen' }, '↻') : null),
       h('td', null, x.kategorie),
       h('td', { class: 'r' }, eur(x.betrag)),
-      h('td', null, x.belege && x.belege.length ? h('a', { href: `/api/admin/beleg/${x.id}?year=${S.kasseYear}&idx=0`, target: '_blank', title: `${x.belege.length} Beleg(e) ansehen` }, `📎${x.belege.length > 1 ? ' ' + x.belege.length : ''}`) : null),
+      h('td', null, x.belege && x.belege.length ? h('a', { href: `/api/admin/beleg/${x.id}?year=${S.kasseYear}&idx=0`, target: '_blank', title: `${x.belege.length} Beleg(e) ansehen` }, x.belege.length > 1 ? `${x.belege.length} Belege` : 'Beleg') : null),
       h('td', { title: x.geprueft ? `Geprüft am ${deDate(x.geprueftAm)}` : 'Von der Kassenprüfung abhaken' },
         h('input', { type: 'checkbox', checked: x.geprueft, onchange: (e) => toggleGeprueft(x, e.target.checked) })),
       h('td', null, pruefMode ? null : h('button', { class: 'btn small', onclick: async () => { const r = await ausgabeDialog(x); if (r !== false && r !== undefined) await refreshKasse(); } }, 'Bearbeiten'))));
@@ -4752,7 +4719,7 @@ async function loadSicherungen() {
 
 // Sicherung wiederherstellen: Liste der vorhandenen Sicherungen, Auswahl mit deutlicher Rückfrage.
 function sicherungenCard() {
-  const kopf = h('h3', { style: 'margin-top:0' }, 'Sicherung wiederherstellen');
+  const kopf = h('h3', { style: 'margin-top:0' }, 'Sicherung ansehen oder wiederherstellen');
   if (!S.sicherungenZeigen) {
     return h('div', { class: 'card', style: 'margin-top:14px' }, kopf,
       h('p', { class: 'hint' }, 'Hat sich etwas versehentlich verändert oder ist die Datendatei beschädigt? Hier siehst du alle vorhandenen Sicherungen und kannst eine davon einspielen. Der aktuelle Stand wird vorher selbst gesichert, auch das lässt sich also rückgängig machen.'),
@@ -4771,11 +4738,27 @@ function sicherungenCard() {
       location.reload();
     } catch (e) { handleErr(e); }
   };
+  const ansehen = async (x) => {
+    let d;
+    try { d = await api('POST', '/api/admin/sicherungen/ansehen', { name: x.name }); } catch (e) { handleErr(e); return; }
+    const anders = (i) => d.zahlen[i][1] !== d.heute[i][1];
+    await breiterDialog(`Sicherung vom ${fmtWhen(x.zeit)}`, h('div', null,
+      h('p', { class: 'hint' }, 'Nur zum Ansehen – am heutigen Stand ändert sich nichts. So siehst du, ob die Sicherung vollständig ist, bevor du sie brauchst.'),
+      h('p', null, h('b', null, d.verein || '–'), d.jahre.length ? ` · Jahre ${d.jahre[0]}–${d.jahre[d.jahre.length - 1]}` : '',
+        d.letzteAenderung ? h('span', { class: 'hint' }, ` · letzte Änderung ${fmtWhen(d.letzteAenderung)}: ${d.letzteAktion}`) : null),
+      h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, h('th', null, ''), h('th', { class: 'num' }, 'In der Sicherung'), h('th', { class: 'num' }, 'Heute'))),
+        h('tbody', null, d.zahlen.map((z, i) => h('tr', null, h('td', null, z[0]), h('td', { class: 'num' }, h('b', null, z[1])),
+          h('td', { class: 'num' + (anders(i) ? ' warn-text' : '') }, d.heute[i][1])))))),
+      h('details', { style: 'margin-top:12px' }, h('summary', null, `Pächter in dieser Sicherung (${d.paechter.length})`),
+        h('div', { class: 'sich-paechter' }, d.paechter.map((p) => h('span', null, h('b', null, p[0] || '–'), ' ', p[1]))))),
+    [{ label: 'Schließen', cls: 'primary', value: true }]);
+  };
   const rows = S.sicherungen.map((x) => h('tr', null,
     h('td', null, fmtWhen(x.zeit)), h('td', null, x.art),
     h('td', { class: 'num' }, x.lesbar ? x.paechter : '–'), h('td', { class: 'num' }, x.lesbar ? x.rechnungen : '–'),
     h('td', null, x.lesbar
-      ? h('button', { class: 'btn small danger', onclick: () => wiederherstellen(x) }, 'Wiederherstellen')
+      ? [h('button', { class: 'btn small', onclick: () => ansehen(x) }, 'Ansehen'), ' ', h('button', { class: 'btn small danger', onclick: () => wiederherstellen(x) }, 'Wiederherstellen')]
       : h('span', { class: 'hint' }, x.hinweis || 'nicht lesbar'))));
   return h('div', { class: 'card', style: 'margin-top:14px' },
     h('div', { class: 'toolbar' }, kopf, h('div', { class: 'spacer' }),
@@ -5200,7 +5183,7 @@ function adminWarteliste() {
       h('thead', null, h('tr', null, ['Platz', 'Name und Wunsch', 'Kontakt', 'Angemeldet', 'Besichtigung', ''].map((x) => h('th', null, x)))),
       h('tbody', null, l.map((b) => h('tr', null,
         h('td', { class: 'num' }, `${b.platz}.`),
-        h('td', { class: 'wrap' }, h('b', null, [b.anrede, b.name].filter(Boolean).join(' ')), b.notiz ? h('span', { title: b.notiz, style: 'margin-left:4px;cursor:help' }, '📝') : null,
+        h('td', { class: 'wrap' }, h('b', null, [b.anrede, b.name].filter(Boolean).join(' ')), b.notiz ? h('span', { title: b.notiz, style: 'margin-left:4px;cursor:help', class: 'notiz-zeichen' }, icon('bericht', 14)) : null,
           b.wunsch ? h('div', { class: 'hint' }, b.wunsch) : null),
         h('td', { class: 'wrap klein' }, [b.telefon, b.email, [b.strasse, b.plzOrt].filter(Boolean).join(', ')].filter(Boolean).map((x, i) => [i ? h('br') : null, x])),
         h('td', { class: 'klein' }, deDate(b.seit), h('div', { class: 'hint' }, b.bestaetigtAm ? `bestätigt ${deDate(b.bestaetigtAm)}` : 'nicht bestätigt'),
@@ -6147,9 +6130,9 @@ function vereinsjahrKarte(st, istAdmin) {
     try { S.vj = await api('PUT', '/api/admin/vereinsjahr', { jahr: d.jahr, key: p.key, erledigt: an }); render(); } catch (e) { handleErr(e); }
   };
   const jahrWechseln = (n) => { S.vjJahr = d.jahr + n; S.vjMonat = null; render(); };
-  return h('div', { class: 'card vereinsjahr' },
+  return h('div', { class: 'vereinsjahr' },
     h('div', { class: 'fs-kopf' },
-      h('b', null, 'Vereinsjahr ', h('button', { class: 'linkbtn', 'aria-label': 'Vorjahr', onclick: () => jahrWechseln(-1) }, '‹'), ` ${d.jahr} `,
+      h('b', null, h('button', { class: 'linkbtn', 'aria-label': 'Vorjahr', onclick: () => jahrWechseln(-1) }, '‹'), ` ${d.jahr} `,
         h('button', { class: 'linkbtn', 'aria-label': 'Folgejahr', onclick: () => jahrWechseln(1) }, '›')),
       h('span', { class: 'hint' }, `${fertig} von ${alle.length} erledigt`)),
     h('div', { class: 'vj-monate', role: 'tablist' }, d.monate.map((m) => {
@@ -6175,25 +6158,36 @@ function vereinsjahrKarte(st, istAdmin) {
 
 const AUFGABE_ICON = { err: 'warnung', warn: 'uhr', info: 'bericht' };
 
+// Eine Karte, zwei Sichten: was jetzt ansteht (Fristen, Zahlungen, Warnungen) und der Fahrplan durchs Vereinsjahr.
+function anstehendKarte(st, istAdmin) {
+  if (!istAdmin || st.leer) return null;
+  const jahr = S.ueberSeite === 'jahr';
+  const inhalt = jahr ? vereinsjahrKarte(st, istAdmin) : cockpitKarte(st, istAdmin);
+  const n = S.aufgaben ? S.aufgaben.length : 0;
+  return h('div', { class: 'card anstehend' },
+    h('div', { class: 'subtabs' },
+      h('button', { class: jahr ? '' : 'active', onclick: () => { S.ueberSeite = 'jetzt'; render(); } }, 'Was steht an?', n ? h('span', { class: 'zahl' }, String(n)) : null),
+      h('button', { class: jahr ? 'active' : '', onclick: () => { S.ueberSeite = 'jahr'; render(); } }, 'Vereinsjahr')),
+    inhalt || h('p', { class: 'hint', style: 'margin:0' }, 'Wird geladen …'));
+}
+
 function cockpitKarte(st, istAdmin) {
   if (!istAdmin || st.leer) return null;
   if (S.aufgaben == null) { if (!S.aufgabenLoading) loadAufgaben(); return null; }
   const geh = zielOeffnen;
   if (!S.aufgaben.length) {
-    return h('div', { class: 'card cockpit cockpit-leer' }, h('span', { class: 'cockpit-ico ok' }, icon('fertig', 20)),
+    return h('div', { class: 'cockpit-leer' }, h('span', { class: 'cockpit-ico ok' }, icon('fertig', 20)),
       h('div', null, h('b', null, 'Gerade steht nichts an'), h('div', { class: 'hint' }, 'Termine, Fristen, Zahlungen und Spenden sind im grünen Bereich.')));
   }
   const alle = S.aufgabenAlle || S.aufgaben.length <= 5;
   const l = alle ? S.aufgaben : S.aufgaben.slice(0, 5);
-  return h('div', { class: 'card cockpit' },
-    h('div', { class: 'fs-kopf' }, h('b', null, 'Was steht an?'), h('span', { class: 'hint' }, mehrzahlText(S.aufgaben.length, 'Punkt', 'Punkte'))),
+  return h('div', null,
     h('ul', { class: 'cockpit-liste' }, l.map((a) => h('li', { class: 'cockpit-' + a.stufe },
       h('span', { class: 'cockpit-ico ' + a.stufe }, icon(AUFGABE_ICON[a.stufe] || 'fertig', 18)),
       h('div', { class: 'cockpit-text' }, h('b', null, a.titel), a.text ? h('div', { class: 'hint' }, a.text) : null),
       h('button', { class: 'btn small', onclick: () => geh(a.ziel) }, a.knopf + ' →')))),
     alle ? null : h('button', { class: 'btn small', style: 'margin-top:6px', onclick: () => { S.aufgabenAlle = true; render(); } }, `Alle ${S.aufgaben.length} anzeigen`));
 }
-const mehrzahlText = (n, eins, viele) => `${n} ${n === 1 ? eins : viele}`;
 
 // ------------------------------------------------------------------ Übersicht: Besichtigungen
 

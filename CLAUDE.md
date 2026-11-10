@@ -55,6 +55,9 @@
   Zahlungen und Jahreswechsel nach Rechnungsdatum/Zahlungsziel (`rhythmusLocked`, versatz 0/1).
 - »Alles nur mit Anmeldung« (Data.AllesGeschuetzt, Middleware `vollschutz` + `ohneAnmeldungErlaubt` in api.go, gekürzter
   /api/state mit `gesperrt`, Karte auf der Passwort-Seite). Neue offene /api-Routen sind dadurch automatisch gesperrt.
+- Übersicht gestrafft: Karte `anstehendKarte` mit Reitern »Was steht an?« / »Vereinsjahr« (S.ueberSeite), Schnellzugriff
+  entfernt. Abschlussprüfung (abschluss.go, Ampel ok/warn/err auf der Jahreswechsel-Seite, blockiert nichts). Sicherung
+  ansehen (sicherung.go `handleSicherungAnsehen`, nur lesen, Vergleich mit heute).
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

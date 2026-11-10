@@ -134,7 +134,7 @@ button.btn, a.btn {
 }
 button.btn:hover, a.btn:hover { background: #f4f7f1; border-color: #b3bcab; }
 button.btn:active, a.btn:active { transform: translateY(1px); }
-button.btn:focus-visible, a.btn:focus-visible, .subtabs button:focus-visible, .quicklink:focus-visible {
+button.btn:focus-visible, a.btn:focus-visible, .subtabs button:focus-visible {
   outline: none; box-shadow: var(--ring);
 }
 button.btn.primary {
@@ -398,18 +398,6 @@ aside.sidebar {
 @media (max-width: 900px) { .fs-stationen { grid-template-columns: repeat(2, 1fr); } }
 
 /* Schnellzugriff auf der Übersicht */
-.quicklinks { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; max-width: 1100px; }
-.quicklink {
-  display: flex; gap: 12px; align-items: center; text-align: left; font: inherit; color: var(--text); cursor: pointer;
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow);
-  transition: transform .12s, box-shadow .15s, border-color .15s;
-}
-.quicklink:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(20, 35, 22, .12); border-color: var(--green-line); }
-.quicklink .qlico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--green-soft); color: var(--green); }
-.quicklink.primary .qlico { background: linear-gradient(160deg, var(--green-mid), var(--green-dark)); color: #fff; }
-.quicklink .qltext { display: flex; flex-direction: column; }
-.quicklink .qltext b { font-weight: 650; }
-.quicklink .qltext span { color: var(--muted); font-size: 12.5px; }
 
 tr.late td { background: #fdf2f0; }
 td.paycell { white-space: nowrap; }
@@ -476,7 +464,7 @@ td.diffwarn { color: var(--err); font-weight: 650; }
 @keyframes tourpulse { 0%, 100% { outline-color: #ffc83d; } 50% { outline-color: #fff0b3; } }
 @media (prefers-reduced-motion: reduce) {
   .tour-hl, dialog, .toast, .tour { animation: none; }
-  .quicklink, .kachel, button.btn, .nav-item { transition: none; }
+  .kachel, button.btn, .nav-item { transition: none; }
 }
 
 /* Schriftgröße */
@@ -693,7 +681,9 @@ td.wrap .hint { font-size: 12.5px; }
 .nutzung-legende span { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-left: 8px; }
 
 /* Was steht an? */
-.cockpit { margin-bottom: 14px; }
+.anstehend { margin-bottom: 14px; }
+.anstehend > .subtabs { margin-bottom: 10px; }
+.subtabs .zahl { display: inline-block; min-width: 20px; margin-left: 7px; padding: 0 6px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); font-size: 12px; font-weight: 650; line-height: 20px; text-align: center; }
 .cockpit-leer { display: flex; align-items: center; gap: 12px; }
 .cockpit-liste { list-style: none; margin: 8px 0 0; padding: 0; }
 .cockpit-liste li { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
@@ -799,7 +789,7 @@ main.ansicht-neu > :nth-child(n+5) { animation-delay: .16s; }
 main.ansicht-neu .fs-balken i, main.ansicht-neu .hh-balken span { transform-origin: left center; animation: balken-wachsen .9s .15s cubic-bezier(.2, .7, .2, 1) backwards; }
 @keyframes bild-schweben { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
 main.ansicht-neu .hero-bild { animation: bild-schweben .8s .1s cubic-bezier(.2, .7, .2, 1) backwards; }
-.card.stat, .quicklink, .rs-karte, .kd-karte { transition: box-shadow .2s, transform .2s; }
+.card.stat, .rs-karte, .kd-karte { transition: box-shadow .2s, transform .2s; }
 .card.stat:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(20, 35, 22, .09); }
 
 /* Erfolgsmoment */
@@ -961,3 +951,18 @@ dialog.assistent::backdrop { background: rgba(18, 38, 24, .55); backdrop-filter:
 .assi-option:focus-visible { outline: none; box-shadow: var(--ring); }
 @media (max-width: 640px) { .assi-wahl { grid-template-columns: 1fr; } .assi-kopf, .assi-koerper { padding-left: 18px; padding-right: 18px; } }
 main.nur-anmeldung { margin: 0 auto; padding-top: 48px; max-width: 520px; }
+
+/* Ampel: Prüfung vor dem Jahreswechsel */
+.ampel { flex: none; width: 12px; height: 12px; margin-top: 5px; border-radius: 50%; background: var(--ok); }
+.ampel.warn { background: #d08a00; }
+.ampel.err { background: var(--err); }
+.ampel-gesamt { display: flex; align-items: center; gap: 10px; margin: 12px 0 6px; padding: 10px 14px; border-radius: var(--radius-sm); font-weight: 600; background: var(--ok-bg); color: var(--ok); }
+.ampel-gesamt i { width: 12px; height: 12px; border-radius: 50%; background: currentColor; }
+.ampel-gesamt.warn { background: var(--warn-bg); color: var(--warn); }
+.ampel-gesamt.err { background: var(--err-bg); color: var(--err); }
+.ampel-liste { list-style: none; margin: 0; padding: 0; }
+.ampel-liste li { display: flex; align-items: flex-start; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.ampel-liste li:first-child { border-top: 0; }
+.ampel-text { flex: 1; min-width: 0; }
+.sich-paechter { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 16px; margin-top: 8px; font-size: 13.5px; }
+.notiz-zeichen { color: var(--muted); vertical-align: -2px; }

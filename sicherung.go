@@ -2,10 +2,12 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -100,6 +102,88 @@ func (a *App) handleSicherungen(w http.ResponseWriter, r *http.Request) {
 	list := a.st.sicherungen()
 	a.st.mu.Unlock()
 	writeJSON(w, 200, list)
+}
+
+// sicherungInhalt: was in einer Sicherung steckt – zum Ansehen, ohne etwas zu verändern.
+type sicherungInhalt struct {
+	Name            string      `json:"name"`
+	Verein          string      `json:"verein"`
+	Jahr            int         `json:"jahr"`
+	Jahre           []int       `json:"jahre"`
+	LetzteAenderung string      `json:"letzteAenderung,omitempty"`
+	LetzteAktion    string      `json:"letzteAktion,omitempty"`
+	Zahlen          [][2]string `json:"zahlen"` // Bezeichnung, Wert in der Sicherung
+	Heute           [][2]string `json:"heute"`  // dieselben Zahlen im aktuellen Bestand
+	Paechter        [][2]string `json:"paechter"`
+}
+
+func bestandsZahlen(d *Data) [][2]string {
+	aktiv := 0
+	for _, p := range d.Paechter {
+		if !p.Geloescht && p.AusgeschiedenAm == "" {
+			aktiv++
+		}
+	}
+	ausgaben, ablesungen := 0, 0
+	if j := d.Jahre[yearKey(d.Settings.Jahr)]; j != nil {
+		ausgaben, ablesungen = len(j.Ausgaben), len(j.Ablesungen)
+	}
+	z := func(n int) string { return fmt.Sprint(n) }
+	return [][2]string{{"Abrechnungsjahr", z(d.Settings.Jahr)}, {"Jahre im Bestand", z(len(d.Jahre))}, {"Aktive Pächter", z(aktiv)},
+		{"Zählerstände im laufenden Jahr", z(ablesungen)}, {"Rechnungen im Archiv", z(len(d.Rechnungen))}, {"Ausgaben im laufenden Jahr", z(ausgaben)},
+		{"Termine", z(len(d.Termine))}, {"Dokumente in Gartenakten", z(len(d.Dokumente))}}
+}
+
+// handleSicherungAnsehen öffnet eine Sicherung nur zum Lesen: So lässt sich prüfen, ob sie vollständig ist,
+// ohne den heutigen Stand anzutasten.
+func (a *App) handleSicherungAnsehen(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	name := ""
+	for _, n := range a.st.sicherungsNamen() { // nur Namen aus dem Ordner, nie ein frei angegebener Pfad
+		if n == in.Name {
+			name = n
+			break
+		}
+	}
+	if name == "" {
+		writeErr(w, notFound("Sicherung nicht gefunden"))
+		return
+	}
+	raw, err := os.ReadFile(filepath.Join(a.st.backupDir(), name))
+	if err != nil {
+		writeErr(w, bad("Die Sicherung lässt sich nicht lesen"))
+		return
+	}
+	d, err := parseDaten(raw)
+	if err != nil {
+		writeErr(w, bad("Diese Sicherung ist beschädigt oder stammt aus einer neueren Programmversion"))
+		return
+	}
+	out := sicherungInhalt{Name: name, Verein: d.Settings.VereinName, Jahr: d.Settings.Jahr, Jahre: []int{}, Zahlen: bestandsZahlen(d), Heute: bestandsZahlen(a.st.d), Paechter: [][2]string{}}
+	for k := range d.Jahre {
+		if j, err := strconv.Atoi(k); err == nil {
+			out.Jahre = append(out.Jahre, j)
+		}
+	}
+	sort.Ints(out.Jahre)
+	if n := len(d.AuditLog); n > 0 {
+		out.LetzteAenderung, out.LetzteAktion = d.AuditLog[n-1].Zeit, d.AuditLog[n-1].Aktion
+	}
+	for _, p := range d.Paechter {
+		if !p.Geloescht && p.AusgeschiedenAm == "" {
+			out.Paechter = append(out.Paechter, [2]string{p.Gartennr, p.Name})
+		}
+	}
+	sort.SliceStable(out.Paechter, func(i, j int) bool { return naturalLess(out.Paechter[i][0], out.Paechter[j][0]) })
+	writeJSON(w, 200, out)
 }
 
 // handleSicherungWiederherstellen ersetzt den Datenbestand durch eine Sicherung. Vorher wird der aktuelle

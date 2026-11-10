@@ -1776,6 +1776,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/admin/paechter/{id}/auskunft", a.admin(a.handleAuskunft))
 	mux.HandleFunc("GET /api/admin/sicherungen", a.admin(a.handleSicherungen))
 	mux.HandleFunc("POST /api/admin/sicherungen/wiederherstellen", a.admin(a.handleSicherungWiederherstellen))
+	mux.HandleFunc("POST /api/admin/sicherungen/ansehen", a.admin(a.handleSicherungAnsehen))
+	mux.HandleFunc("GET /api/admin/abschlusspruefung", a.admin(a.handleAbschlussPruefung))
 	mux.HandleFunc("POST /api/admin/sicherung-jetzt", a.admin(a.handleSicherungJetzt))
 	mux.HandleFunc("POST /api/admin/beispieldaten", a.admin(a.handleDemoLaden))
 	mux.HandleFunc("PUT /api/admin/lageplan", a.admin(a.handleLageplan))

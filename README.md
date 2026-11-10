@@ -196,6 +196,9 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Vereinsjahr** auf der Übersicht: was wann ansteht, von der Kassenprüfung bis zum Jahresabschluss; Erledigtes
   erkennt das Programm selbst oder wird abgehakt
 - **Erklärungen zum Aufklappen** (»?«) an Preisen, Beiträgen und Abrechnungsfeldern
+- **Prüfung vor dem Jahreswechsel** als Ampel: fehlende Zählerstände, nicht ausgestellte oder offene Rechnungen,
+  Ausgaben ohne Beleg, Kassen- und Barbestand, Sicherung außer Haus
+- **Sicherung ansehen**, ohne sie einzuspielen – mit Vergleich zum heutigen Stand
 - **Bereiche ein- und ausblenden:** Was der Verein nicht braucht (z. B. Barkasse, Laubenkataster, Spenden), verschwindet
   aus Menü und Aufgaben; die Daten bleiben erhalten. Neue Installationen starten mit dem Grundpaket
 - **Vereinsfarbe und Logo** für Programm und Rechnungen; Modus **»Gut lesbar«** und einstellbare Schriftgröße
