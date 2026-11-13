@@ -299,7 +299,7 @@ export function erstelle(container, daten, opt) {
 
   // Maus: Garten hervorheben, Tooltip, Klick
   const ray = new THREE.Raycaster(), maus = new THREE.Vector2();
-  let ueber = null, flug = null, laeuft = false, gedrueckt = null;
+  let ueber = null, flug = null, laeuft = false, gedrueckt = null, unruhig = 3;
   function treffer(ev) {
     const r = renderer.domElement.getBoundingClientRect();
     maus.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
@@ -308,6 +308,7 @@ export function erstelle(container, daten, opt) {
     return hit ? parzellen.find((p) => p.mesh === hit.object) : null;
   }
   function markieren(p, ev) {
+    weiter();
     if (ueber && ueber !== p) { ueber.gruppe.position.y = 0; ueber.gruppe.userData.mat.emissive.setHex(0x000000); }
     ueber = p;
     renderer.domElement.style.cursor = p ? 'pointer' : 'grab';
@@ -321,6 +322,7 @@ export function erstelle(container, daten, opt) {
     tip.style.top = (ev.clientY - r.top + 14) + 'px';
     tip.style.opacity = '1';
   }
+  controls.addEventListener('change', () => weiter());
   renderer.domElement.addEventListener('pointermove', (ev) => markieren(treffer(ev), ev));
   renderer.domElement.addEventListener('pointerleave', () => markieren(null));
   renderer.domElement.addEventListener('pointerdown', (ev) => { gedrueckt = { x: ev.clientX, y: ev.clientY }; });
@@ -334,6 +336,7 @@ export function erstelle(container, daten, opt) {
     renderer.setSize(breite(), hoehe());
     camera.aspect = breite() / hoehe();
     camera.updateProjectionMatrix();
+    weiter();
   });
   ro.observe(container);
 
@@ -341,11 +344,14 @@ export function erstelle(container, daten, opt) {
   function schleife(jetzt) {
     if (!container.isConnected) { laeuft = false; return; }
     if (flug) flug(jetzt);
-    controls.update();
-    zeichnen();
+    const bewegt = controls.update();
+    // Nur zeichnen, solange sich etwas ändert (Flug, Drehen, Ausrollen, Hervorheben) – sonst ruht die Grafikkarte.
+    if (bewegt || flug || unruhig > 0) { zeichnen(); unruhig = bewegt || flug ? 3 : unruhig - 1; }
+    else { laeuft = false; return; }
     requestAnimationFrame(schleife);
   }
   function weiter() {
+    unruhig = Math.max(unruhig, 3);
     if (laeuft) return;
     laeuft = true;
     requestAnimationFrame(schleife);
