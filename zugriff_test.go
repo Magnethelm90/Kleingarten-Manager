@@ -60,3 +60,50 @@ func TestAlleAdminRoutenGeschuetzt(t *testing.T) {
 	}
 	t.Logf("%d Admin-Routen geprüft, davon %d für Kassenprüfer freigegeben", len(treffer), fuerPruefer)
 }
+
+// TestAlleLeseRoutenOhneFehler ruft jede lesende Admin-Route ohne Pfadparameter mit Beispieldaten auf – bei allen
+// Bereichen an, bei allen aus und bei jedem Bereich einzeln. Erwartet wird nie ein Serverfehler (5xx).
+func TestAlleLeseRoutenOhneFehler(t *testing.T) {
+	src, err := os.ReadFile("api.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	re := regexp.MustCompile(`HandleFunc\("GET (/api/admin/[^"{}]+)",`)
+	treffer := re.FindAllStringSubmatch(string(src), -1)
+	if len(treffer) < 20 {
+		t.Fatalf("nur %d Lese-Routen gefunden", len(treffer))
+	}
+	_, h := newTestApp(t)
+	if rec := do(h, "POST", "/api/admin/beispieldaten", map[string]any{}); rec.Code >= 300 {
+		t.Fatalf("Beispieldaten: %d %s", rec.Code, rec.Body.String())
+	}
+	konfig := []map[string]bool{{}}
+	alleAn, alleAus := map[string]bool{}, map[string]bool{}
+	for _, m := range module {
+		alleAn[m], alleAus[m] = true, false
+	}
+	konfig = append(konfig, alleAn, alleAus)
+	for _, m := range module {
+		k := map[string]bool{}
+		for _, x := range module {
+			k[x] = x == m
+		}
+		konfig = append(konfig, k)
+	}
+	for i, k := range konfig {
+		if len(k) > 0 {
+			if rec := do(h, "PUT", "/api/admin/module", k); rec.Code != 200 {
+				t.Fatalf("Module setzen: %d", rec.Code)
+			}
+		}
+		for _, m := range treffer {
+			rec := do(h, "GET", m[1], nil)
+			if rec.Code >= 500 {
+				t.Errorf("Konfiguration %d: GET %s -> %d %s", i, m[1], rec.Code, rec.Body.String())
+			}
+			if strings.Contains(rec.Body.String(), "NaN") || strings.Contains(rec.Body.String(), "+Inf") {
+				t.Errorf("Konfiguration %d: GET %s enthält NaN/Inf", i, m[1])
+			}
+		}
+	}
+}
