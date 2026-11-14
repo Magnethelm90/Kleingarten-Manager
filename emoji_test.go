@@ -24,3 +24,13 @@ func TestEmojiInTextenUndPDF(t *testing.T) {
 		t.Errorf("bereinigt: %+v %+v %+v", d.Paechter, d.Haushalt, d.Jahre["2025"].Ablesungen)
 	}
 }
+
+// Kaputte Bytefolgen (etwa aus einer Datei in anderer Kodierung) werden wie Emoji beim Speichern entfernt.
+func TestKaputtesUTF8WirdBereinigt(t *testing.T) {
+	if got := nurDruckbar("M\xfcller \xd3"); got != "Mller " {
+		t.Errorf("%q", got)
+	}
+	if got := trim("Gärtner\xff", 50); got != "Gärtner" {
+		t.Errorf("%q", got)
+	}
+}

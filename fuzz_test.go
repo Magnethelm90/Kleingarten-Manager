@@ -155,6 +155,8 @@ func FuzzUebergabeprotokoll(f *testing.F) {
 	f.Add("Alt", "Neu", "Schlüssel", "Bemerkung")
 	f.Add(strings.Repeat("W", 500), "\u202e\x00", strings.Repeat("S", 400), strings.Repeat("Zeile\n", 400))
 	f.Fuzz(func(t *testing.T, alt, neu, schluessel, bem string) {
+		// Namen und Anschriften kommen im Programm immer aus dem gespeicherten Bestand, der beim Speichern bereinigt wird
+		alt, neu = nurDruckbar(alt), nurDruckbar(neu)
 		u := Uebergabe{Datum: "2025-06-15", Gartennr: "7", AltName: alt, NeuName: neu, AltAnschrift: alt, NeuAnschrift: neu,
 			Schluessel: trim(schluessel, 200), Bemerkungen: trim(bem, 1500)}
 		pdf, err := buildUebergabeprotokoll(defaultSettings(), u)
@@ -171,16 +173,17 @@ func FuzzVersammlungUndMaengel(f *testing.F) {
 	f.Add("\u202eexe.fdp", strings.Repeat("x\n", 50), "", "\x00\r\n", "../5")
 	f.Fuzz(func(t *testing.T, titel, tops, notiz, beschreibung, garten string) {
 		s := defaultSettings()
+		pName, pStrasse := nurDruckbar(titel), nurDruckbar(notiz) // Pächterdaten stammen aus dem bereinigten Bestand
 		if tr, err := cleanTermin(Termin{Datum: "2027-03-20", Von: "10:00", Titel: titel, Art: "Versammlung", Tops: tops, Notiz: notiz}); err == nil {
 			if _, err := buildEinladung(s, tr); err != nil {
 				t.Fatalf("Einladung: %v", err)
 			}
-			if _, err := buildAnwesenheit(s, tr, []anwesenheitZeile{{garten, "1", titel}}, len(tops)%2 == 0); err != nil {
+			if _, err := buildAnwesenheit(s, tr, []anwesenheitZeile{{nurDruckbar(garten), "1", pName}}, len(tops)%2 == 0); err != nil {
 				t.Fatalf("Anwesenheitsliste: %v", err)
 			}
 		}
 		if m, err := cleanMangel(Mangel{Gartennr: garten, Datum: "2026-05-01", Beschreibung: beschreibung}); err == nil {
-			p := Paechter{Gartennr: m.Gartennr, Name: titel, Strasse: notiz}
+			p := Paechter{Gartennr: m.Gartennr, Name: pName, Strasse: pStrasse}
 			if _, err := buildMaengelschreiben(s, p, []Mangel{m}, "2026-06-01"); err != nil {
 				t.Fatalf("Mängel-Schreiben: %v", err)
 			}

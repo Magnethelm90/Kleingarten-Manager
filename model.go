@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Settings enthält alle Preise und Regeln eines Abrechnungsjahres.
@@ -414,6 +415,10 @@ func fmtFlex(x float64) string {
 // nurDruckbar entfernt Zeichen jenseits von U+FFFF (z. B. Emoji): Die PDF-Bibliothek kann sie nicht setzen und
 // bricht sonst beim Erzeugen jeder Rechnung oder Liste ab, in der der Text vorkommt.
 func nurDruckbar(s string) string {
+	if !utf8.ValidString(s) {
+		// kaputte Bytefolgen (z. B. aus einer Datei in anderer Kodierung) bringen die PDF-Bibliothek zum Absturz
+		s = strings.ToValidUTF8(s, "")
+	}
 	for _, r := range s {
 		if r > 0xFFFF {
 			return strings.Map(func(r rune) rune {
