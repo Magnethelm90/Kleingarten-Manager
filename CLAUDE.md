@@ -58,6 +58,9 @@
 - Übersicht gestrafft: Karte `anstehendKarte` mit Reitern »Was steht an?« / »Vereinsjahr« (S.ueberSeite), Schnellzugriff
   entfernt. Abschlussprüfung (abschluss.go, Ampel ok/warn/err auf der Jahreswechsel-Seite, blockiert nichts). Sicherung
   ansehen (sicherung.go `handleSicherungAnsehen`, nur lesen, Vergleich mit heute).
+- Prüfung Nov 2026 (3): Tests `TestAlleLeseRoutenOhneFehler` (jede Bereichs-Konfiguration), `TestKeinDatenverlust`,
+  `TestLoeschungInAllenBereichen`; 3D-Lageplan zeichnet nur bei Bewegung; Toolchain in go.mod aktuell halten
+  (govulncheck in CI); MIT-Lizenz (LICENSE), Haftungsausschluss und »Rechtliche Hinweise« im README.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

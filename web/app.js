@@ -420,7 +420,7 @@ function render() {
         : null,
       S.tab === 'uebersicht' ? viewUebersicht() : S.tab === 'eingabe' ? viewEingabe() : S.tab === 'lageplan' ? viewLageplan()
         : S.tab === 'rechnungen' ? viewRechnungen() : S.tab === 'zahlungen' ? viewZahlungen() : S.tab === 'termine' ? viewTermine() : viewAdmin(),
-      h('div', { class: 'footer' }, `Kleingarten-Manager ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir), ' · ', zoomKnoepfe()),
+      h('div', { class: 'footer' }, `Kleingarten-Manager ${st.version} · Copyright © ${new Date().getFullYear()} ${st.autor || ''} · MIT-Lizenz, ohne Gewähr · Daten liegen in: `, h('span', { class: 'mono' }, st.dataDir), ' · ', zoomKnoepfe()),
     )),
   );
   const tour = tourCard();
@@ -3952,7 +3952,8 @@ async function einrichtungsAssistent() {
   const dlg = h('dialog', { class: 'assistent', 'aria-label': 'Einrichtung' });
   const kopf = h('div', { class: 'assi-kopf' }), koerper = h('div', { class: 'assi-koerper' });
   const zurueck = h('button', { class: 'btn' }, 'Zurück'), weiter = h('button', { class: 'btn primary' });
-  const ende = (danach) => { dlg.close(); dlg.remove(); if (danach) danach(); S.aufgaben = null; reload(); };
+  let beendet = false, fragt = false;
+  const ende = (danach) => { if (beendet) return; beendet = true; if (dlg.open) dlg.close(); dlg.remove(); if (danach) danach(); S.aufgaben = null; reload(); };
   const zeigen = () => {
     const sch = schritte[i];
     kopf.replaceChildren(h('div', { class: 'assi-schritte' }, schritte.map((x, k) => h('span', { class: k === i ? 'an' : k < i ? 'fertig' : '' }, `${k + 1}. ${x.titel}`))),
@@ -3993,7 +3994,14 @@ async function einrichtungsAssistent() {
     if (i === 3) { ende(); return; }
     i++; zeigen();
   });
-  dlg.addEventListener('cancel', async (e) => { e.preventDefault(); if (i === 3 || await confirmBox('Einrichtung abbrechen? Bisher Eingetragenes wird nicht gespeichert.', 'Abbrechen')) ende(); });
+  dlg.addEventListener('cancel', async (e) => {
+    e.preventDefault();
+    if (fragt) return;
+    fragt = true;
+    try { if (i === 3 || await confirmBox('Einrichtung abbrechen? Bisher Eingetragenes wird nicht gespeichert.', 'Abbrechen')) ende(); } finally { fragt = false; }
+  });
+  // Zweimal Esc hintereinander schließt den Dialog am Programm vorbei (Browser-Verhalten): dann sauber aufräumen.
+  dlg.addEventListener('close', () => ende());
   dlg.append(h('button', { class: 'gs-zu', title: 'Schließen (Esc)', onclick: () => dlg.dispatchEvent(new Event('cancel', { cancelable: true })) }, 'Schließen ✕'),
     kopf, koerper, h('div', { class: 'assi-fuss' }, zurueck, weiter));
   document.body.append(dlg);

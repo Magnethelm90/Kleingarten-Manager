@@ -303,4 +303,14 @@ Wie man das Programm selbst baut, testet und eine neue Version veröffentlicht, 
 - [three.js](https://threejs.org) (MIT, siehe `web/vendor/three/LICENSE`) für den 3D-Lageplan
 - Liberation Sans (SIL Open Font License, siehe `fonts/LICENSE-Liberation.txt`) als eingebettete Schrift
 
-Copyright © Derek
+## Lizenz und Haftungsausschluss
+
+Der Kleingarten-Manager steht unter der [MIT-Lizenz](LICENSE): Jeder Verein darf das Programm kostenlos nutzen,
+weitergeben und anpassen, solange der Lizenztext erhalten bleibt.
+
+Das Programm wird ohne Gewähr bereitgestellt. Es gibt keine Zusage, dass es fehlerfrei ist oder sich für einen
+bestimmten Zweck eignet. Der Autor haftet nicht für Schäden aus der Nutzung, zum Beispiel durch falsche
+Abrechnungen, Datenverlust oder fehlerhafte Schreiben, soweit das gesetzlich zulässig ist. Bitte Rechnungen vor dem
+Versand prüfen und regelmäßig eine Sicherung außer Haus aufbewahren.
+
+Copyright © 2026 Derek
