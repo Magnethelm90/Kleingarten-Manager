@@ -273,6 +273,23 @@ Start meldet macOS „nicht verifizierter Entwickler“: mit Rechtsklick auf die
 
 Sicherheitslücken bitte nicht öffentlich melden, sondern direkt an den Autor.
 
+## Rechtliche Hinweise
+
+Das Programm ist ein Werkzeug und ersetzt keine Rechts- oder Steuerberatung. Verantwortlich für Abrechnung,
+Datenschutz und alle Schreiben bleibt der Verein.
+
+- **Vorlagen:** Pachtvertrag, Kündigungsbestätigung, Mahnschreiben, Einladungen und Protokolle sind Muster. Bitte
+  vor der ersten Verwendung mit dem Verband oder einer Rechtsberatung abstimmen und an Satzung und
+  Gartenordnung anpassen.
+- **Gesetzliche Werte:** Hinweise wie die Laubengröße von 24 m² (§ 3 BKleingG), die Pachtobergrenze (§ 5 BKleingG),
+  Kündigungsfristen und Eichfristen sind Rechenhilfen. Maßgeblich sind das Gesetz, euer Pachtvertrag und die
+  Auskunft der zuständigen Stelle.
+- **Spenden:** Zuwendungsbestätigungen folgen dem amtlichen Muster, setzen aber einen gültigen
+  Freistellungsbescheid voraus. Der Verein haftet für falsche Bestätigungen.
+- **Aufbewahrung:** Das Programm rechnet für Rechnungsunterlagen mit 10 Jahren. Ob für euch eine andere Frist gilt,
+  klärt ihr mit Steuerberatung oder Kassenprüfern.
+- **Datenschutz:** siehe [DATENSCHUTZ.md](DATENSCHUTZ.md).
+
 ## Für Entwickler
 
 Wie man das Programm selbst baut, testet und eine neue Version veröffentlicht, steht in
@@ -283,6 +300,7 @@ Wie man das Programm selbst baut, testet und eine neue Version veröffentlicht, 
 - [go-pdf/fpdf](https://github.com/go-pdf/fpdf) (MIT) für die PDF-Erzeugung
 - [skip2/go-qrcode](https://github.com/skip2/go-qrcode) (MIT) für den GiroCode auf der Rechnung
 - [webview/webview_go](https://github.com/webview/webview_go) (MIT) für das Programmfenster
+- [three.js](https://threejs.org) (MIT, siehe `web/vendor/three/LICENSE`) für den 3D-Lageplan
 - Liberation Sans (SIL Open Font License, siehe `fonts/LICENSE-Liberation.txt`) als eingebettete Schrift
 
 Copyright © Derek

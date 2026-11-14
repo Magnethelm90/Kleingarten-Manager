@@ -112,6 +112,12 @@ werden. Die Kassenprüfung speichert nur die Namen der Prüfer und ihre Feststel
 Namen von Mitgliedern dort sparsam verwenden. Das Laubenkataster gehört zum Garten, nicht zur Person, und enthält
 außer der Anzeige des aktuellen Pächters keine Personendaten.
 
+**Barkasse:** Das Kassenbuch enthält Datum, Betrag und einen frei eingegebenen Text. Namen dort nur eintragen, wenn
+der Beleg es verlangt; die Einträge sind Buchungsbelege und bleiben mit dem Jahr erhalten.
+
+**Sicherung ansehen:** Die Vorschau einer Sicherung zeigt Pächternamen des damaligen Stands. Endgültig gelöschte
+Personen sind auch aus den Sicherungen entfernt und erscheinen dort nicht mehr.
+
 **Begehungen:** Geschätzte Flächenanteile (Drittelregelung) gehören zum Pächter, der den Garten damals hatte; sie
 stehen in der Auskunft und werden mit der Person gelöscht.
 
@@ -134,6 +140,8 @@ Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 - Server lauscht nur auf `127.0.0.1`, Schutz gegen fremde Webseiten (Host-/Origin-Prüfung, Pflicht-Header,
   Content-Security-Policy ohne Inline-Skripte)
 - Admin-Passwort optional, nur als PBKDF2-Hash gespeichert, Sperre nach Fehlversuchen
+- Schalter »Alles nur mit Anmeldung«: ohne Anmeldung zeigt das Programm dann nur die Anmeldeseite, auch keine
+  Zählerstände und Rechnungen (für Rechner, die mehrere Personen nutzen)
 - getrennter Kassenprüfer-Zugang: Lesezugriff auf die Kasse, schreiben nur Geprüft-Haken und Kassenprüfung
 - Änderungsprotokoll, automatische Sicherungen (im Programm wiederherstellbar), Papierkorb statt sofortigem Löschen
 - Dateien werden nur für den Benutzer lesbar angelegt (Rechte 0600/0700; wirksam unter macOS und Linux, unter Windows
