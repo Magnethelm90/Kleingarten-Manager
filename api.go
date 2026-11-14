@@ -25,7 +25,7 @@ import (
 )
 
 // appVersion wird beim Release-Build über -ldflags "-X main.appVersion=..." gesetzt.
-var appVersion = "1.1"
+var appVersion = "1.5.1"
 
 // appAutor erscheint in der Fußzeile der Oberfläche und im Konsolenfenster.
 const appAutor = "Derek"
@@ -152,6 +152,62 @@ func (a *App) guard(next http.Handler) http.Handler {
 	})
 }
 
+// vollschutzAktiv: Der Vorstand hat festgelegt, dass ohne Anmeldung nichts sichtbar ist. Der Aufrufer hält s.mu.
+func (a *App) vollschutzAktiv() bool { return a.st.d.AllesGeschuetzt && a.hasPassword() }
+
+// ohneAnmeldungErlaubt: was bei »Alles nur mit Anmeldung« trotzdem ohne Sitzung erreichbar bleibt – die Oberfläche
+// selbst, Anmeldung, der (dann gekürzte) Zustand und das Vereinslogo. /api/admin/… prüft seine Rechte selbst.
+func ohneAnmeldungErlaubt(pfad string) bool {
+	if !strings.HasPrefix(pfad, "/api/") || strings.HasPrefix(pfad, "/api/admin/") {
+		return true
+	}
+	switch pfad {
+	case "/api/ping", "/api/state", "/api/logo", "/api/pruef/login", "/api/pruef/logout", "/api/quit":
+		return true
+	}
+	return false
+}
+
+// vollschutz sperrt bei »Alles nur mit Anmeldung« alle offenen Bereiche (Zählerstände, Rechnungen, Zahlungen,
+// Lageplan, Termine) für nicht angemeldete Besucher.
+func (a *App) vollschutz(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !ohneAnmeldungErlaubt(r.URL.Path) {
+			a.st.mu.Lock()
+			aktiv := a.vollschutzAktiv()
+			a.st.mu.Unlock()
+			if aktiv && !a.sessionValid(r) {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Bitte anmelden"})
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *App) handleVollschutz(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		An bool `json:"an"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	if in.An && !a.hasPassword() {
+		writeErr(w, bad("Bitte zuerst ein Admin-Passwort festlegen"))
+		return
+	}
+	a.st.d.AllesGeschuetzt = in.An
+	if in.An {
+		a.st.audit("Schutz: alles nur mit Anmeldung")
+	} else {
+		a.st.audit("Schutz: Abrechnung wieder ohne Anmeldung offen")
+	}
+	a.speichernUndAntworten(w, map[string]bool{"an": in.An})
+}
+
 // ---------------------------------------------------------------- Admin-Anmeldung
 
 func hashPassword(pw string, salt []byte, iter int) string {
@@ -184,8 +240,8 @@ func (a *App) sessionValid(r *http.Request) bool {
 
 // ---------------------------------------------------------------- Kassenprüfer-Anmeldung
 //
-// Eigener, optionaler Zugang mit Lesezugriff auf den Kassenbericht (inkl. des
-// Geprüft-Hakens), aber ohne die übrigen Admin-Rechte. Ist kein Kassenprüfer-
+// Eigener, optionaler Zugang mit Lesezugriff auf den Kassenbericht, dem Geprüft-Haken
+// und der geführten Kassenprüfung (siehe pruefung.go), aber ohne die übrigen Admin-Rechte. Ist kein Kassenprüfer-
 // Passwort eingerichtet (Standard), gibt es diesen Zugang schlicht nicht.
 
 func (a *App) hasPruefPassword() bool { return a.st.d.PruefAuth.Hash != "" }
@@ -474,6 +530,7 @@ func (a *App) handlePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.New == "" {
 		a.st.d.Admin = AdminAuth{}
+		a.st.d.AllesGeschuetzt = false
 	} else {
 		if len([]rune(in.New)) < 8 {
 			writeErr(w, bad("Das Passwort muss mindestens 8 Zeichen haben"))
@@ -511,19 +568,26 @@ func (a *App) handlePassword(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- Zustand
 
 type stateResp struct {
-	Autor       string              `json:"autor"`
-	Version     string              `json:"version"`
-	DataDir     string              `json:"dataDir"`
-	CurrentYear int                 `json:"currentYear"`
-	Years       []int               `json:"years"`
-	Year        int                 `json:"year"`
-	ReadOnly    bool                `json:"readOnly"`
-	Settings    Settings            `json:"settings"`
-	Paechter    []Paechter          `json:"paechter"`
-	Ablesungen  map[string]Ablesung `json:"ablesungen"`
-	Results     map[string]Result   `json:"results"`
-	HasPassword bool                `json:"hasPassword"`
-	LoggedIn    bool                `json:"loggedIn"`
+	Autor       string `json:"autor"`
+	Version     string `json:"version"`
+	DataDir     string `json:"dataDir"`
+	CurrentYear int    `json:"currentYear"`
+	Years       []int  `json:"years"`
+	Year        int    `json:"year"`
+	ReadOnly    bool   `json:"readOnly"`
+	// SperrHinweis: Die Daten wurden auf einem anderen Rechner geöffnet, dieses Fenster speichert nicht mehr.
+	SperrHinweis string          `json:"sperrHinweis,omitempty"`
+	SepaAktiv    bool            `json:"sepaAktiv"`
+	Module       map[string]bool `json:"module"`
+	// AllesGeschuetzt: Einstellung »Alles nur mit Anmeldung«; Gesperrt: sie greift für diesen Besucher (Zustand gekürzt).
+	AllesGeschuetzt bool                `json:"allesGeschuetzt"`
+	Gesperrt        bool                `json:"gesperrt"`
+	Settings        Settings            `json:"settings"`
+	Paechter        []Paechter          `json:"paechter"`
+	Ablesungen      map[string]Ablesung `json:"ablesungen"`
+	Results         map[string]Result   `json:"results"`
+	HasPassword     bool                `json:"hasPassword"`
+	LoggedIn        bool                `json:"loggedIn"`
 	// Kassenprüfer-Zugang: eigenes, optionales Passwort mit Lesezugriff auf den
 	// Kassenbericht, getrennt vom Admin-Passwort.
 	HasPruefPassword bool                   `json:"hasPruefPassword"`
@@ -543,7 +607,8 @@ type stateResp struct {
 	Demo bool `json:"demo"`
 	Leer bool `json:"leer"`
 	// Lageplan: Positionen der Gärten auf der Karte (leer = Raster).
-	Lageplan map[string]LagePos `json:"lageplan"`
+	Lageplan  map[string]LagePos `json:"lageplan"`
+	LageKarte LageKarte          `json:"lageKarte"`
 	// OffeneVorjahre: noch nicht (voll) bezahlte, gültige Rechnungen aus allen anderen Jahren als dem
 	// angezeigten, damit sie nach einem Jahreswechsel nicht aus dem Blick geraten.
 	OffeneVorjahre []archiveEntry `json:"offeneVorjahre"`
@@ -569,6 +634,18 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, notFound("Dieses Jahr gibt es nicht"))
 		return
 	}
+	if a.vollschutzAktiv() && !loggedIn {
+		// nur das Nötigste für die Anmeldeseite: keine Pächter, keine Zahlen, keine Termine
+		kurz := stateResp{Autor: appAutor, Version: appVersion, CurrentYear: a.st.d.Settings.Jahr, Years: []int{a.st.d.Settings.Jahr}, Year: a.st.d.Settings.Jahr,
+			Settings: Settings{VereinName: v.Settings.VereinName, Jahr: a.st.d.Settings.Jahr, Farbe: a.st.d.Settings.Farbe, Logo: a.st.d.Settings.Logo},
+			Paechter: []Paechter{}, Ablesungen: map[string]Ablesung{}, Results: map[string]Result{}, Issued: map[string]issuedInfo{}, Archive: []archiveEntry{},
+			History: map[string][]histEntry{}, Hinweise: map[string][]string{}, Lageplan: map[string]LagePos{}, OffeneVorjahre: []archiveEntry{}, Termine: []Termin{},
+			HasPassword: true, HasPruefPassword: hasPruef, PruefLoggedIn: pruefLoggedIn, TutorialGesehen: true, Module: a.st.moduleLocked(),
+			AllesGeschuetzt: true, Gesperrt: true}
+		a.st.mu.Unlock()
+		writeJSON(w, 200, kurz)
+		return
+	}
 	res := stateResp{
 		Autor: appAutor, Version: appVersion, DataDir: a.st.dir, CurrentYear: a.st.d.Settings.Jahr, Years: a.st.years(),
 		Year: year, ReadOnly: v.ReadOnly, Settings: v.Settings, Paechter: v.Paechter,
@@ -590,11 +667,16 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	res.SicherungFehler = a.st.pruefeSicherung()
 	res.TutorialGesehen = a.st.d.TutorialGesehen
 	res.ZweiteSicherung = a.st.zweiteSicherungLocked()
+	res.SperrHinweis = a.st.sperrHinweisLocked()
+	res.SepaAktiv = a.st.sepaAktivLocked()
+	res.Module = a.st.moduleLocked()
+	res.AllesGeschuetzt = a.st.d.AllesGeschuetzt
 	res.Demo, res.Leer = a.st.d.Demo, a.st.datenbestandLeer()
 	res.Lageplan = a.st.d.Lageplan
 	if res.Lageplan == nil {
 		res.Lageplan = map[string]LagePos{}
 	}
+	res.LageKarte = a.st.d.LageKarte
 	res.OffeneVorjahre = a.st.offeneAndererJahreLocked(year)
 	res.Termine = append([]Termin{}, a.st.d.Termine...)
 	res.WartelisteAnzahl = len(a.st.d.Warteliste)
@@ -679,9 +761,15 @@ func (a *App) handleAblesung(w http.ResponseWriter, r *http.Request) {
 	}
 	// Bei einem Zählerwechsel wandert die neue Nummer automatisch in die Stammdaten.
 	if in.WasserWechsel != nil && in.WasserWechsel.NeueNr != "" {
+		if pa.WasserzaehlerNr != in.WasserWechsel.NeueNr {
+			pa.WasserEichjahr = time.Now().Year() // neuer Zähler: frisch geeicht
+		}
 		pa.WasserzaehlerNr = in.WasserWechsel.NeueNr
 	}
 	if in.StromWechsel != nil && in.StromWechsel.NeueNr != "" {
+		if pa.StromzaehlerNr != in.StromWechsel.NeueNr {
+			pa.StromEichjahr = time.Now().Year()
+		}
 		pa.StromzaehlerNr = in.StromWechsel.NeueNr
 	}
 	j := a.st.ensureYear(year)
@@ -760,6 +848,12 @@ func cleanPaechter(p Paechter) (Paechter, error) {
 	p.WasserzaehlerNr = trim(p.WasserzaehlerNr, 40)
 	p.StromzaehlerNr = trim(p.StromzaehlerNr, 40)
 	p.Notiz = trim(p.Notiz, 300)
+	if j := time.Now().Year() + 1; p.WasserEichjahr < 1950 || p.WasserEichjahr > j {
+		p.WasserEichjahr = 0
+	}
+	if j := time.Now().Year() + 1; p.StromEichjahr < 1950 || p.StromEichjahr > j {
+		p.StromEichjahr = 0
+	}
 	if p.Mitgliedsnr == "" {
 		return p, bad("Bitte eine Mitgliedsnummer eintragen")
 	}
@@ -842,6 +936,7 @@ func (a *App) handlePaechterUpdate(w http.ResponseWriter, r *http.Request) {
 			alt := a.st.d.Paechter[i]
 			in.ID = id
 			in.AusgeschiedenAm = alt.AusgeschiedenAm // wird nur über den Pächterwechsel gesetzt
+			in.WasserEichjahr, in.StromEichjahr = alt.WasserEichjahr, alt.StromEichjahr
 			a.st.d.Paechter[i] = in
 			a.st.gartenWechsel(id, alt.Gartennr, in.Gartennr, in.Mitgliedsnr, in.Name)
 			if alt.Gartengroesse != in.Gartengroesse {
@@ -967,7 +1062,8 @@ func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, err)
 			return
 		}
-		a.st.leereDruckOrdner() // abgeleitete Druckdateien (z. B. Sammel-PDF) enthalten den Namen noch
+		a.st.leereDruckOrdner()     // abgeleitete Druckdateien (z. B. Sammel-PDF) enthalten den Namen noch
+		a.st.entferneVereinsakten() // ebenso ältere Vereinsakten (Momentaufnahmen des ganzen Datenordners)
 		sicherungen := a.st.bereinigeSicherungen(func(d *Data) bool { return d.entfernePerson(id) })
 		writeJSON(w, 200, map[string]int{"sicherungenBereinigt": sicherungen})
 		return
@@ -1167,6 +1263,9 @@ func (a *App) handleNextYear(w http.ResponseWriter, r *http.Request) {
 	}
 	d.Jahre[yearKey(next)] = nj
 	d.Settings.Jahr = next
+	if n := d.vorgemerkteBuchen(next); n > 0 {
+		a.st.audit("Jahreswechsel: %d vorgemerkte Vorauszahlung(en) für %d gebucht", n, next)
+	}
 	d.Settings.Rechnungsdatum = addYear(d.Settings.Rechnungsdatum)
 	d.Settings.Zahlungsziel = addYear(d.Settings.Zahlungsziel)
 	if wiederkehrend > 0 {
@@ -1301,6 +1400,12 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 			}
 			p.Notiz = old.Notiz // gibt es in keiner Importdatei, darf beim Aktualisieren nicht verloren gehen
 			p.AusgeschiedenAm = old.AusgeschiedenAm
+			if p.WasserzaehlerNr == old.WasserzaehlerNr {
+				p.WasserEichjahr = old.WasserEichjahr
+			}
+			if p.StromzaehlerNr == old.StromzaehlerNr {
+				p.StromEichjahr = old.StromEichjahr
+			}
 			a.st.d.Paechter[idx] = p
 			a.st.gartenWechsel(p.ID, old.Gartennr, p.Gartennr, p.Mitgliedsnr, p.Name)
 			updated++
@@ -1309,6 +1414,7 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 			if p.Versand == "" {
 				p.Versand = "Emailsendung" // wie beim Anlegen im Formular
 			}
+			a.st.eichjahrUebernehmenLocked(&p)
 			a.st.d.Paechter = append(a.st.d.Paechter, p)
 			a.st.gartenOeffnen(p.ID, p.Gartennr, p.Mitgliedsnr, p.Name)
 			added++
@@ -1620,6 +1726,7 @@ func (a *App) handleQuit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]bool{"ok": true})
 	go func() {
 		time.Sleep(300 * time.Millisecond)
+		a.st.sperreFreigeben()
 		os.Exit(0)
 	}()
 }
@@ -1669,9 +1776,94 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/admin/paechter/{id}/auskunft", a.admin(a.handleAuskunft))
 	mux.HandleFunc("GET /api/admin/sicherungen", a.admin(a.handleSicherungen))
 	mux.HandleFunc("POST /api/admin/sicherungen/wiederherstellen", a.admin(a.handleSicherungWiederherstellen))
+	mux.HandleFunc("POST /api/admin/sicherungen/ansehen", a.admin(a.handleSicherungAnsehen))
+	mux.HandleFunc("GET /api/admin/abschlusspruefung", a.admin(a.handleAbschlussPruefung))
 	mux.HandleFunc("POST /api/admin/sicherung-jetzt", a.admin(a.handleSicherungJetzt))
 	mux.HandleFunc("POST /api/admin/beispieldaten", a.admin(a.handleDemoLaden))
 	mux.HandleFunc("PUT /api/admin/lageplan", a.admin(a.handleLageplan))
+	mux.HandleFunc("POST /api/admin/lageplan/bild", a.admin(a.handleKarteHochladen))
+	mux.HandleFunc("DELETE /api/admin/lageplan/bild", a.admin(a.handleKarteEntfernen))
+	mux.HandleFunc("GET /api/lageplan-bild", a.handleKarteBild)
+	mux.HandleFunc("GET /api/admin/kuendigungen", a.admin(a.handleKuendigungen))
+	mux.HandleFunc("POST /api/admin/kuendigungen", a.admin(a.handleKuendigungSpeichern))
+	mux.HandleFunc("PUT /api/admin/kuendigungen/regel", a.admin(a.handleKuendigungsRegel))
+	mux.HandleFunc("DELETE /api/admin/kuendigungen/{id}", a.admin(a.handleKuendigungLoeschen))
+	mux.HandleFunc("POST /api/admin/kuendigungen/{id}/schritt", a.admin(a.handleKuendigungSchritt))
+	mux.HandleFunc("GET /api/admin/kuendigungen/{id}/bestaetigung", a.admin(a.pdfAnzeigen(a.kuendigungBestaetigungPDF)))
+	mux.HandleFunc("POST /api/admin/kuendigungen/{id}/bestaetigung/oeffnen", a.admin(a.pdfOeffnen(a.kuendigungBestaetigungPDF)))
+	mux.HandleFunc("GET /api/admin/pachtvertrag", a.admin(a.pdfAnzeigen(a.pachtvertragPDF)))
+	mux.HandleFunc("POST /api/admin/pachtvertrag/oeffnen", a.admin(a.pdfOeffnen(a.pachtvertragPDF)))
+	mux.HandleFunc("POST /api/admin/pachtvertrag/ablegen", a.admin(a.handlePachtvertragAblegen))
+	mux.HandleFunc("GET /api/admin/vertragsbestimmungen", a.admin(a.handleVertragsbestimmungen))
+	mux.HandleFunc("PUT /api/admin/vertragsbestimmungen", a.admin(a.handleVertragsbestimmungen))
+	mux.HandleFunc("GET /api/admin/beschluesse", a.admin(a.handleBeschluesse))
+	mux.HandleFunc("POST /api/admin/beschluesse", a.admin(a.handleBeschlussSpeichern))
+	mux.HandleFunc("DELETE /api/admin/beschluesse/{id}", a.admin(a.handleBeschlussLoeschen))
+	mux.HandleFunc("GET /api/admin/beschlussbuch", a.admin(a.pdfAnzeigen(a.beschlussbuchPDF)))
+	mux.HandleFunc("POST /api/admin/beschlussbuch/oeffnen", a.admin(a.pdfOeffnen(a.beschlussbuchPDF)))
+	mux.HandleFunc("GET /api/admin/eichung", a.admin(a.handleEichung))
+	mux.HandleFunc("PUT /api/admin/eichung/fristen", a.admin(a.handleEichfristen))
+	mux.HandleFunc("PUT /api/admin/eichung/{id}", a.admin(a.handleEichjahr))
+	mux.HandleFunc("GET /api/admin/eichung/tauschliste", a.admin(a.pdfAnzeigen(a.tauschlistePDF)))
+	mux.HandleFunc("POST /api/admin/eichung/tauschliste/oeffnen", a.admin(a.pdfOeffnen(a.tauschlistePDF)))
+	mux.HandleFunc("GET /api/admin/kassenpruefung", a.adminOrPruef(a.handlePruefung))
+	mux.HandleFunc("PUT /api/admin/kassenpruefung", a.adminOrPruef(a.handlePruefungSpeichern))
+	mux.HandleFunc("POST /api/admin/kassenpruefung/stichprobe", a.adminOrPruef(a.handleStichprobe))
+	mux.HandleFunc("GET /api/admin/kassenpruefung/bericht", a.adminOrPruef(a.pdfAnzeigen(a.pruefberichtPDF)))
+	mux.HandleFunc("POST /api/admin/kassenpruefung/bericht/oeffnen", a.adminOrPruef(a.pdfOeffnen(a.pruefberichtPDF)))
+	mux.HandleFunc("GET /api/admin/aemter", a.admin(a.handleAemter))
+	mux.HandleFunc("POST /api/admin/aemter", a.admin(a.handleAmtSpeichern))
+	mux.HandleFunc("DELETE /api/admin/aemter/{id}", a.admin(a.handleAmtLoeschen))
+	mux.HandleFunc("POST /api/admin/aemter/{id}/wechsel", a.admin(a.handleAmtWechsel))
+	mux.HandleFunc("PUT /api/admin/aemter/{id}/checkliste", a.admin(a.handleAmtCheckliste))
+	mux.HandleFunc("PUT /api/admin/module", a.admin(a.handleModule))
+	mux.HandleFunc("PUT /api/admin/vollschutz", a.admin(a.handleVollschutz))
+	mux.HandleFunc("GET /api/admin/vereinsjahr", a.admin(a.handleVereinsjahr))
+	mux.HandleFunc("PUT /api/admin/vereinsjahr", a.admin(a.handleVereinsjahrHaken))
+	mux.HandleFunc("GET /api/admin/pachtgrenze", a.admin(a.handlePachtgrenze))
+	mux.HandleFunc("PUT /api/admin/pachtgrenze", a.admin(a.handlePachtgrenze))
+	mux.HandleFunc("GET /api/admin/barkasse", a.adminOrPruef(a.handleBarkasse))
+	mux.HandleFunc("POST /api/admin/barkasse", a.admin(a.handleBarbuchung))
+	mux.HandleFunc("PUT /api/admin/barkasse/anfang", a.admin(a.handleBarAnfang))
+	mux.HandleFunc("DELETE /api/admin/barkasse/{id}", a.admin(a.handleBarbuchungLoeschen))
+	mux.HandleFunc("GET /api/admin/barkasse/kassenbuch", a.adminOrPruef(a.pdfAnzeigen(a.kassenbuchPDF)))
+	mux.HandleFunc("POST /api/admin/barkasse/kassenbuch/oeffnen", a.adminOrPruef(a.pdfOeffnen(a.kassenbuchPDF)))
+	mux.HandleFunc("GET /api/admin/bauten", a.admin(a.handleBauten))
+	mux.HandleFunc("POST /api/admin/bauten", a.admin(a.handleBauwerkSpeichern))
+	mux.HandleFunc("DELETE /api/admin/bauten/{id}", a.admin(a.handleBauwerkLoeschen))
+	mux.HandleFunc("GET /api/admin/bauten/liste", a.admin(a.pdfAnzeigen(a.laubenlistePDF)))
+	mux.HandleFunc("POST /api/admin/bauten/liste/oeffnen", a.admin(a.pdfOeffnen(a.laubenlistePDF)))
+	mux.HandleFunc("GET /api/admin/termine/{id}/protokoll", a.admin(a.handleSitzung))
+	mux.HandleFunc("PUT /api/admin/termine/{id}/protokoll", a.admin(a.handleSitzungSpeichern))
+	mux.HandleFunc("GET /api/admin/termine/{id}/protokoll/pdf", a.admin(a.pdfAnzeigen(a.sitzungPDF)))
+	mux.HandleFunc("POST /api/admin/termine/{id}/protokoll/pdf/oeffnen", a.admin(a.pdfOeffnen(a.sitzungPDF)))
+	mux.HandleFunc("GET /api/admin/vertraege", a.admin(a.handleVertraege))
+	mux.HandleFunc("POST /api/admin/vertraege", a.admin(a.handleVertragSpeichern))
+	mux.HandleFunc("DELETE /api/admin/vertraege/{id}", a.admin(a.handleVertragLoeschen))
+	mux.HandleFunc("GET /api/admin/haushalt", a.adminOrPruef(a.handleHaushalt))
+	mux.HandleFunc("PUT /api/admin/haushalt", a.admin(a.handleHaushaltSpeichern))
+	mux.HandleFunc("GET /api/admin/haushalt/pdf", a.adminOrPruef(a.pdfAnzeigen(a.haushaltPDF)))
+	mux.HandleFunc("POST /api/admin/haushalt/pdf/oeffnen", a.adminOrPruef(a.pdfOeffnen(a.haushaltPDF)))
+	mux.HandleFunc("GET /api/admin/schwund", a.adminOrPruef(a.handleSchwund))
+	mux.HandleFunc("GET /api/admin/rundschreiben", a.admin(a.handleRundschreibenListe))
+	mux.HandleFunc("POST /api/admin/rundschreiben", a.admin(a.handleRundschreibenSpeichern))
+	mux.HandleFunc("DELETE /api/admin/rundschreiben/{id}", a.admin(a.handleRundschreibenLoeschen))
+	mux.HandleFunc("GET /api/admin/rundschreiben/{id}/briefe", a.admin(a.pdfAnzeigen(a.rundschreibenBriefePDF)))
+	mux.HandleFunc("POST /api/admin/rundschreiben/{id}/briefe/oeffnen", a.admin(a.pdfOeffnen(a.rundschreibenBriefePDF)))
+	mux.HandleFunc("GET /api/admin/rundschreiben/{id}/aushang", a.admin(a.pdfAnzeigen(a.rundschreibenAushangPDF)))
+	mux.HandleFunc("POST /api/admin/rundschreiben/{id}/aushang/oeffnen", a.admin(a.pdfOeffnen(a.rundschreibenAushangPDF)))
+	mux.HandleFunc("POST /api/admin/rundschreiben/{id}/mail", a.admin(a.handleRundschreibenMail))
+	mux.HandleFunc("GET /api/admin/schluessel", a.admin(a.handleSchluesselListe))
+	mux.HandleFunc("POST /api/admin/schluessel", a.admin(a.handleSchluesselSpeichern))
+	mux.HandleFunc("DELETE /api/admin/schluessel/{id}", a.admin(a.handleSchluesselLoeschen))
+	mux.HandleFunc("POST /api/admin/schluessel/{id}/ausgabe", a.admin(a.handleSchluesselAusgabe))
+	mux.HandleFunc("POST /api/admin/schluessel/{id}/rueckgabe", a.admin(a.handleSchluesselRueckgabe))
+	mux.HandleFunc("GET /api/admin/geraete", a.admin(a.handleGeraeteListe))
+	mux.HandleFunc("POST /api/admin/geraete", a.admin(a.handleGeraetSpeichern))
+	mux.HandleFunc("DELETE /api/admin/geraete/{id}", a.admin(a.handleGeraetLoeschen))
+	mux.HandleFunc("POST /api/admin/geraete/{id}/verleihen", a.admin(a.handleGeraetVorgang("verliehen")))
+	mux.HandleFunc("POST /api/admin/geraete/{id}/zurueck", a.admin(a.handleGeraetVorgang("zurück")))
+	mux.HandleFunc("POST /api/admin/geraete/{id}/wartung", a.admin(a.handleGeraetVorgang("Wartung")))
 	mux.HandleFunc("POST /api/admin/logo", a.admin(a.handleLogoHochladen))
 	mux.HandleFunc("DELETE /api/admin/logo", a.admin(a.handleLogoEntfernen))
 	mux.HandleFunc("GET /api/logo", a.handleLogo)
@@ -1715,6 +1907,51 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/termine/{id}/einladung/oeffnen", a.admin(a.pdfOeffnen(a.einladungPDF)))
 	mux.HandleFunc("GET /api/admin/termine/{id}/anwesenheit", a.admin(a.pdfAnzeigen(a.anwesenheitPDF)))
 	mux.HandleFunc("POST /api/admin/termine/{id}/anwesenheit/oeffnen", a.admin(a.pdfOeffnen(a.anwesenheitPDF)))
+	mux.HandleFunc("GET /api/admin/termine/{id}/stundenliste", a.admin(a.pdfAnzeigen(a.stundenlistePDF)))
+	mux.HandleFunc("POST /api/admin/termine/{id}/stundenliste/oeffnen", a.admin(a.pdfOeffnen(a.stundenlistePDF)))
+	mux.HandleFunc("GET /api/admin/termine/{id}/stunden", a.admin(a.handleEinsatzAnsicht))
+	mux.HandleFunc("PUT /api/admin/termine/{id}/stunden", a.admin(a.handleEinsatzSpeichern))
+	mux.HandleFunc("POST /api/admin/kontoauszug", a.admin(a.handleKontoauszugVorschau))
+	mux.HandleFunc("POST /api/admin/kontoauszug/buchen", a.admin(a.handleKontoauszugBuchen))
+	mux.HandleFunc("GET /api/admin/spenden", a.admin(a.handleSpendenListe))
+	mux.HandleFunc("PUT /api/admin/spenden/gemeinnuetzigkeit", a.admin(a.handleGemeinnuetzigkeit))
+	mux.HandleFunc("POST /api/admin/spenden", a.admin(a.handleSpendeSpeichern(true)))
+	mux.HandleFunc("PUT /api/admin/spenden/{id}", a.admin(a.handleSpendeSpeichern(false)))
+	mux.HandleFunc("DELETE /api/admin/spenden/{id}", a.admin(a.handleSpendeLoeschen))
+	mux.HandleFunc("POST /api/admin/spenden/bestaetigen", a.admin(a.handleSpendenBestaetigen))
+	mux.HandleFunc("GET /api/admin/zuwendungsbestaetigung", a.admin(a.pdfAnzeigen(a.zuwendungsbestaetigungPDF)))
+	mux.HandleFunc("POST /api/admin/zuwendungsbestaetigung/oeffnen", a.admin(a.pdfOeffnen(a.zuwendungsbestaetigungPDF)))
+	mux.HandleFunc("GET /api/admin/vereinsinfo", a.admin(a.handleVereinsinfo))
+	mux.HandleFunc("PUT /api/admin/vereinsinfo", a.admin(a.handleVereinsinfo))
+	mux.HandleFunc("GET /api/admin/paechter/{id}/willkommen", a.admin(a.pdfAnzeigen(a.willkommenPDF)))
+	mux.HandleFunc("POST /api/admin/paechter/{id}/willkommen/oeffnen", a.admin(a.pdfOeffnen(a.willkommenPDF)))
+	mux.HandleFunc("GET /api/admin/expose", a.admin(a.pdfAnzeigen(a.exposePDF)))
+	mux.HandleFunc("POST /api/admin/expose/oeffnen", a.admin(a.pdfOeffnen(a.exposePDF)))
+	mux.HandleFunc("GET /api/admin/nutzung", a.admin(a.handleNutzungListe))
+	mux.HandleFunc("POST /api/admin/nutzung", a.admin(a.handleNutzungSpeichern))
+	mux.HandleFunc("DELETE /api/admin/nutzung/{id}", a.admin(a.handleNutzungLoeschen))
+	mux.HandleFunc("GET /api/admin/aufgaben", a.admin(a.handleAufgaben))
+	mux.HandleFunc("POST /api/admin/vereinsakte", a.admin(a.handleVereinsakte))
+	mux.HandleFunc("GET /api/admin/sepa", a.admin(a.handleSepaAnsicht))
+	mux.HandleFunc("PUT /api/admin/sepa/einstellungen", a.admin(a.handleSepaEinstellungen))
+	mux.HandleFunc("POST /api/admin/sepa/mandate", a.admin(a.handleMandatSpeichern(true)))
+	mux.HandleFunc("PUT /api/admin/sepa/mandate/{id}", a.admin(a.handleMandatSpeichern(false)))
+	mux.HandleFunc("DELETE /api/admin/sepa/mandate/{id}", a.admin(a.handleMandatLoeschen))
+	mux.HandleFunc("GET /api/admin/sepa/vorschau", a.admin(a.handleLaufVorschau))
+	mux.HandleFunc("POST /api/admin/sepa/lauf", a.admin(a.handleLaufErstellen))
+	mux.HandleFunc("GET /api/admin/sepa/lauf/{id}/xml", a.admin(a.handleLaufXML))
+	mux.HandleFunc("POST /api/admin/sepa/lauf/{id}/datei", a.admin(a.handleLaufDatei))
+	mux.HandleFunc("POST /api/admin/sepa/lauf/{id}/rueck", a.admin(a.handleRuecklastschrift))
+	mux.HandleFunc("GET /api/admin/sepa/formular", a.admin(a.pdfAnzeigen(a.mandatsformularPDF)))
+	mux.HandleFunc("POST /api/admin/sepa/formular/oeffnen", a.admin(a.pdfOeffnen(a.mandatsformularPDF)))
+	mux.HandleFunc("GET /api/admin/sepa/vorab", a.admin(a.pdfAnzeigen(a.vorabankuendigungPDF)))
+	mux.HandleFunc("POST /api/admin/sepa/vorab/oeffnen", a.admin(a.pdfOeffnen(a.vorabankuendigungPDF)))
+	mux.HandleFunc("GET /api/admin/vorauszahlungen", a.admin(a.handleVzAnsicht))
+	mux.HandleFunc("PUT /api/admin/vorauszahlungen/soll", a.admin(a.handleVzSoll))
+	mux.HandleFunc("POST /api/admin/vorauszahlungen", a.admin(a.handleVzNeu))
+	mux.HandleFunc("DELETE /api/admin/vorauszahlungen/{id}", a.admin(a.handleVzLoeschen))
+	mux.HandleFunc("GET /api/admin/vorauszahlungen/erinnerung", a.admin(a.pdfAnzeigen(a.vzErinnerungPDF)))
+	mux.HandleFunc("POST /api/admin/vorauszahlungen/erinnerung/oeffnen", a.admin(a.pdfOeffnen(a.vzErinnerungPDF)))
 	mux.HandleFunc("GET /api/admin/maengel", a.admin(a.handleMaengelListe))
 	mux.HandleFunc("POST /api/admin/maengel", a.admin(a.handleMangelSpeichern(true)))
 	mux.HandleFunc("PUT /api/admin/maengel/{id}", a.admin(a.handleMangelSpeichern(false)))
@@ -1746,7 +1983,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/termine-druck", a.handleJahresplan)
 	mux.HandleFunc("POST /api/termine-druck/oeffnen", a.handleJahresplanOeffnen)
 	mux.Handle("/", static)
-	return a.guard(mux)
+	return a.guard(a.vollschutz(mux))
 }
 
 // handleLageplan speichert die Anordnung der Gärten auf der Lageplan-Karte. Eine leere Liste setzt
@@ -1754,6 +1991,14 @@ func (a *App) routes(static http.Handler) http.Handler {
 func (a *App) handleLageplan(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Positionen map[string]LagePos `json:"positionen"`
+		// Karte: nur gesetzt, wenn das Programm Leitungen, Einrichtungen, Größe oder Deckkraft mitschickt
+		Karte *struct {
+			Massstab  float64      `json:"massstab"`
+			Deckkraft float64      `json:"deckkraft"`
+			Quelle    *string      `json:"quelle"`
+			Objekte   []LageObjekt `json:"objekte"`
+			Leitungen []LageLinie  `json:"leitungen"`
+		} `json:"karte"`
 	}
 	if err := readJSON(w, r, &in); err != nil {
 		writeErr(w, err)
@@ -1766,11 +2011,29 @@ func (a *App) handleLageplan(w http.ResponseWriter, r *http.Request) {
 	pos := map[string]LagePos{}
 	for nr, p := range in.Positionen {
 		nr = trim(nr, 20)
-		if nr == "" || p.X < 0 || p.Y < 0 || p.X > 20000 || p.Y > 20000 {
+		if nr == "" || !koordOK(p.X, p.Y) {
 			writeErr(w, bad("Ungültige Position im Lageplan"))
 			return
 		}
+		p, err := bereinigeUmriss(p)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
 		pos[nr] = p
+	}
+	var objekte []LageObjekt
+	var leitungen []LageLinie
+	if in.Karte != nil {
+		var err error
+		if objekte, leitungen, err = bereinigeKarte(in.Karte.Objekte, in.Karte.Leitungen); err != nil {
+			writeErr(w, err)
+			return
+		}
+		if in.Karte.Massstab < 0.02 || in.Karte.Massstab > 20 || in.Karte.Deckkraft < 0.1 || in.Karte.Deckkraft > 1 {
+			writeErr(w, bad("Ungültige Bildgröße oder Deckkraft"))
+			return
+		}
 	}
 	a.st.mu.Lock()
 	defer a.st.mu.Unlock()
@@ -1780,6 +2043,16 @@ func (a *App) handleLageplan(w http.ResponseWriter, r *http.Request) {
 	} else {
 		a.st.d.Lageplan = pos
 		a.st.audit("Lageplan angeordnet (%d Gärten)", len(pos))
+	}
+	if in.Karte != nil {
+		k := &a.st.d.LageKarte
+		k.Objekte, k.Leitungen = objekte, leitungen
+		if k.Bild != "" {
+			k.Massstab, k.Deckkraft = round4(in.Karte.Massstab), round4(in.Karte.Deckkraft)
+			if in.Karte.Quelle != nil {
+				k.Quelle = trim(*in.Karte.Quelle, 200)
+			}
+		}
 	}
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)

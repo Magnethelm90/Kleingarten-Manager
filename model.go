@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"math"
+	"reflect"
+	"slices"
 	"strings"
 	"time"
 )
@@ -85,6 +87,10 @@ type Paechter struct {
 	UmlageAbweichend *float64 `json:"umlageAbweichend"`
 	WasserzaehlerNr  string   `json:"wasserzaehlerNr"`
 	StromzaehlerNr   string   `json:"stromzaehlerNr"`
+	// Eichjahr der Zähler (0 = unbekannt), für die Eichfristen (siehe eichung.go). Wird nur über die
+	// Eichfristen-Liste oder automatisch beim Zählerwechsel gesetzt.
+	WasserEichjahr int `json:"wasserEichjahr,omitempty"`
+	StromEichjahr  int `json:"stromEichjahr,omitempty"`
 	// Notiz: interner Vermerk, erscheint nirgends auf der Rechnung.
 	Notiz string `json:"notiz,omitempty"`
 
@@ -148,6 +154,10 @@ type Jahr struct {
 	// Wird beim Jahreswechsel automatisch aus dem Kassenbestand des Vorjahres
 	// vorbelegt, kann aber jederzeit von Hand angepasst werden.
 	Anfangsbestand *float64 `json:"anfangsbestand,omitempty"`
+	// Barkasse: Kassenbuch für Bargeld (siehe barkasse.go); BarAnfang leer = Endbestand des Vorjahres
+	Barkasse    []Barbuchung `json:"barkasse,omitempty"`
+	BarAnfang   *float64     `json:"barAnfang,omitempty"`
+	BarLetzteNr int          `json:"barLetzteNr,omitempty"` // zuletzt vergebene Belegnummer (wird nie neu vergeben)
 }
 
 // AdminAuth speichert ein Passwort nur als Hash (für Admin und Kassenprüfer).
@@ -173,7 +183,7 @@ type Data struct {
 	Jahre    map[string]*Jahr `json:"jahre"`
 	Admin    AdminAuth        `json:"admin"`
 	// PruefAuth: eigenes, optionales Passwort für einen Kassenprüfer-Zugang mit
-	// Lesezugriff auf den Kassenbericht (inkl. Geprüft-Haken), aber ohne die
+	// Lesezugriff auf den Kassenbericht (inkl. Geprüft-Haken und Kassenprüfung), aber ohne die
 	// übrigen Admin-Rechte. Leer = Rolle nicht eingerichtet.
 	PruefAuth AdminAuth `json:"pruefAuth,omitempty"`
 	// Rechnungen ist das Archiv aller ausgestellten Rechnungen. Jeder Eintrag
@@ -192,22 +202,76 @@ type Data struct {
 	// Lageplan: Position jedes Gartens (Schlüssel Gartennummer) auf der Karte im Lageplan, in Bildpunkten.
 	// Leer = Gärten erscheinen als Raster, nach Gartennummer sortiert.
 	Lageplan map[string]LagePos `json:"lageplan,omitempty"`
+	// LageKarte: Hintergrundbild (eigener Plan), Leitungen und Einrichtungen (siehe lagekarte.go)
+	LageKarte LageKarte `json:"lageKarte"`
 	// Warteliste: Interessenten für einen Garten, in der Reihenfolge ihrer Anmeldung.
 	Warteliste []Bewerber `json:"warteliste,omitempty"`
 	// Termine: Jahresplaner des Vereins (Arbeitseinsätze, Versammlungen, Ablesung, ...).
 	Termine []Termin `json:"termine,omitempty"`
 	Maengel []Mangel `json:"maengel,omitempty"`
+	// Einsatzstunden: wer bei welchem Arbeitseinsatz wie viele Stunden geleistet hat (siehe einsatz.go)
+	Einsatzstunden []EinsatzStunden `json:"einsatzstunden,omitempty"`
+	// KontoFingerprints: gekürzte Hashes bereits übernommener Kontobuchungen (kein Klartext), gegen doppeltes Buchen
+	KontoFingerprints []string `json:"kontoFingerprints,omitempty"`
+	// Spenden und Angaben zur Gemeinnützigkeit für Zuwendungsbestätigungen (siehe spenden.go)
+	Spenden           []Spende          `json:"spenden,omitempty"`
+	Gemeinnuetzigkeit Gemeinnuetzigkeit `json:"gemeinnuetzigkeit"`
+	// Vereinsinfo: Ansprechpartner und Hinweise für Willkommensmappe, Exposé und Amtsübergabe
+	Vereinsinfo Vereinsinfo `json:"vereinsinfo"`
+	// Nutzungen: geschätzte Flächenanteile bei Begehungen (Drittelregelung, siehe nutzung.go)
+	Nutzungen []Nutzung `json:"nutzungen,omitempty"`
+	// SEPA-Lastschrift: Einstellungen, Mandate und Läufe (siehe sepa.go)
+	Sepa          SepaEinstellungen `json:"sepa"`
+	Mandate       []Mandat          `json:"mandate,omitempty"`
+	Lastschriften []LastschriftLauf `json:"lastschriften,omitempty"`
+	// Vorauszahlungen per Überweisung: Monatsbetrag je Pächter und eingegangene Zahlungen (siehe vorauszahlung.go)
+	VorauszahlungSoll map[string]float64 `json:"vorauszahlungSoll,omitempty"`
+	Vorauszahlungen   []Vorauszahlung    `json:"vorauszahlungen,omitempty"`
+	// Rundschreiben des Vorstands (siehe rundschreiben.go), Schlüssel und Geräte des Vereins (siehe inventar.go)
+	Rundschreiben []Rundschreiben `json:"rundschreiben,omitempty"`
+	Schluessel    []Schluessel    `json:"schluessel,omitempty"`
+	Geraete       []Geraet        `json:"geraete,omitempty"`
+	// Vertragsbestimmungen für den Pachtvertrag (leer = Standardtext, siehe pachtvertrag.go)
+	Vertragsbestimmungen string `json:"vertragsbestimmungen,omitempty"`
+	// Beschlussbuch, Verträge des Vereins und Haushaltspläne je Jahr (siehe verwaltung.go)
+	Beschluesse []Beschluss              `json:"beschluesse,omitempty"`
+	Vertraege   []Vertrag                `json:"vertraege,omitempty"`
+	Haushalt    map[string]Haushaltsplan `json:"haushalt,omitempty"`
+	// Kündigungen mit Fahrplan bis zur Übergabe (siehe kuendigung.go)
+	KuendigungsRegel KuendigungsRegel `json:"kuendigungsRegel"`
+	Kuendigungen     []Kuendigung     `json:"kuendigungen,omitempty"`
+	// Eichfristen der Zähler (siehe eichung.go), Kassenprüfungen je Jahr (siehe pruefung.go),
+	// Ämter des Vereins (siehe aemter.go) und die Pachtobergrenze nach § 5 BKleingG (siehe pachtgrenze.go)
+	Eichfristen      Eichfristen               `json:"eichfristen"`
+	Kassenpruefungen map[string]Kassenpruefung `json:"kassenpruefungen,omitempty"`
+	Aemter           []Amt                     `json:"aemter,omitempty"`
+	Pachtgrenze      Pachtgrenze               `json:"pachtgrenze"`
+	// Bauwerke je Garten (Laubenkataster, siehe bauten.go) und Protokolle von Versammlungen (siehe sitzung.go)
+	Bauwerke  []Bauwerk                    `json:"bauwerke,omitempty"`
+	Sitzungen map[string]Sitzungsprotokoll `json:"sitzungen,omitempty"`
 	// Uebergaben: durchgeführte Pächterwechsel, für das Übergabeprotokoll.
 	Uebergaben []Uebergabe `json:"uebergaben,omitempty"`
+
+	// AllesGeschuetzt: mit Admin-Passwort ist ohne Anmeldung gar nichts sichtbar (auch keine Zählerstände und
+	// Rechnungen) – für Rechner, die mehrere Personen nutzen. Siehe vollschutz in api.go.
+	AllesGeschuetzt bool `json:"allesGeschuetzt,omitempty"`
+
+	// AusModule: ausgeblendete Bereiche (module.go); leer = alles sichtbar.
+	AusModule []string `json:"ausModule,omitempty"`
+
+	// Vereinsjahr: von Hand abgehakte Punkte im Vereinsjahr (vereinsjahr.go), je Kalenderjahr.
+	Vereinsjahr map[string][]string `json:"vereinsjahr,omitempty"`
 	// Dokumente und Wertermittlungen der Gartenakte (je Garten).
 	Dokumente        []GartenDokument `json:"dokumente,omitempty"`
 	Wertermittlungen []Wertermittlung `json:"wertermittlungen,omitempty"`
 }
 
-// LagePos ist die Position eines Gartens im Lageplan (linke obere Ecke der Kachel).
+// LagePos ist die Position eines Gartens im Lageplan (linke obere Ecke der Kachel). Mit Umriss ist der Garten
+// eine Fläche auf der Karte; X/Y ist dann die linke obere Ecke des Umrisses.
 type LagePos struct {
-	X int `json:"x"`
-	Y int `json:"y"`
+	X      int     `json:"x"`
+	Y      int     `json:"y"`
+	Umriss []Punkt `json:"umriss,omitempty"`
 }
 
 func defaultSettings() Settings {
@@ -243,10 +307,11 @@ func defaultSettings() Settings {
 func newData() *Data {
 	s := defaultSettings()
 	return &Data{
-		Version:  datenVersion,
-		Settings: s,
-		Paechter: []Paechter{},
-		Jahre:    map[string]*Jahr{yearKey(s.Jahr): {Ablesungen: map[string]Ablesung{}}},
+		Version:   datenVersion,
+		Settings:  s,
+		Paechter:  []Paechter{},
+		Jahre:     map[string]*Jahr{yearKey(s.Jahr): {Ablesungen: map[string]Ablesung{}}},
+		AusModule: slices.Clone(standardAusModule),
 	}
 }
 
@@ -269,7 +334,7 @@ func validNum(x float64) bool {
 func validNumPtr(p *float64) bool { return p == nil || validNum(*p) }
 
 func trim(s string, max int) string {
-	s = strings.TrimSpace(s)
+	s = strings.TrimSpace(nurDruckbar(s))
 	r := []rune(s)
 	if len(r) > max {
 		r = r[:max]
@@ -344,4 +409,61 @@ func fmtFlex(x float64) string {
 		s = strings.TrimSuffix(s, ",")
 	}
 	return s
+}
+
+// nurDruckbar entfernt Zeichen jenseits von U+FFFF (z. B. Emoji): Die PDF-Bibliothek kann sie nicht setzen und
+// bricht sonst beim Erzeugen jeder Rechnung oder Liste ab, in der der Text vorkommt.
+func nurDruckbar(s string) string {
+	for _, r := range s {
+		if r > 0xFFFF {
+			return strings.Map(func(r rune) rune {
+				if r > 0xFFFF {
+					return -1
+				}
+				return r
+			}, s)
+		}
+	}
+	return s
+}
+
+// texteBereinigen wendet nurDruckbar auf alle Texte im Datenbestand an (beim Laden und vor jedem Speichern), damit
+// auch alte Daten, eingespielte Sicherungen und Felder ohne eigene Prüfung nie ein PDF zum Absturz bringen.
+func texteBereinigen(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if !v.IsNil() {
+			texteBereinigen(v.Elem())
+		}
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			if v.Type().Field(i).IsExported() {
+				texteBereinigen(v.Field(i))
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < v.Len(); i++ {
+			texteBereinigen(v.Index(i))
+		}
+	case reflect.Map:
+		for _, k := range v.MapKeys() {
+			wert := reflect.New(v.Type().Elem()).Elem()
+			wert.Set(v.MapIndex(k))
+			texteBereinigen(wert)
+			neu := k
+			if k.Kind() == reflect.String {
+				if b := nurDruckbar(k.String()); b != k.String() {
+					neu = reflect.ValueOf(b).Convert(k.Type())
+					v.SetMapIndex(k, reflect.Value{})
+				}
+			}
+			v.SetMapIndex(neu, wert)
+		}
+	case reflect.String:
+		if v.CanSet() {
+			if b := nurDruckbar(v.String()); b != v.String() {
+				v.SetString(b)
+			}
+		}
+	}
 }

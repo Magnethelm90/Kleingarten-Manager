@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net/http"
@@ -156,11 +155,7 @@ func buildAblesebogen(s Settings, year int, rows []ablesezeile) ([]byte, error) 
 		}
 		y += rowH
 	}
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 func (a *App) ablesebogenPDF(r *http.Request) ([]byte, int, error) {

@@ -133,7 +133,7 @@ func writeXLSX(sheetName string, widths []float64, rows [][]xCell) ([]byte, erro
 			`<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
 			`<sheets><sheet name="` + name + `" sheetId="1" r:id="rId1"/></sheets>` +
 			`<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'` + name + `'!$A$1:$` +
-			colName(maxInt(lastCol-1, 0)) + `$` + strconv.Itoa(maxInt(len(rows), 1)) + `</definedName></definedNames></workbook>`},
+			colName(max(lastCol-1, 0)) + `$` + strconv.Itoa(max(len(rows), 1)) + `</definedName></definedNames></workbook>`},
 		{"xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
 			`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
 			`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
@@ -156,13 +156,6 @@ func writeXLSX(sheetName string, widths []float64, rows [][]xCell) ([]byte, erro
 		return nil, err
 	}
 	return out.Bytes(), nil
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 // ---------------------------------------------------------------- Lesen

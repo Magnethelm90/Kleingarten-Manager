@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -40,6 +41,11 @@ type Store struct {
 	zweiteZuletzt time.Time
 	zweiteFehler  string
 	zweiteVersuch time.Time
+
+	// Mehrplatz-Sperre (siehe sperre.go); leer = keine Sperre (Tests, Kommandozeile)
+	sperre         sperrInfo
+	sperrToken     string
+	sperreVerloren string
 }
 
 func newID() string {
@@ -120,6 +126,7 @@ func parseDaten(raw []byte) (*Data, error) {
 	if d.Rechnungen == nil {
 		d.Rechnungen = []*Rechnung{}
 	}
+	texteBereinigen(reflect.ValueOf(&d))
 	return &d, nil
 }
 
@@ -157,6 +164,10 @@ func (s *Store) ensureYear(y int) *Jahr {
 // saveLocked schreibt atomar (erst temporäre Datei, dann umbenennen) und legt
 // höchstens eine Tagessicherung an. Der Aufrufer hält s.mu.
 func (s *Store) saveLocked() error {
+	if err := s.sperrePruefenLocked(); err != nil {
+		return err
+	}
+	texteBereinigen(reflect.ValueOf(s.d))
 	raw, err := json.MarshalIndent(s.d, "", "  ")
 	if err != nil {
 		return err

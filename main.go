@@ -137,6 +137,10 @@ func main() {
 		}
 	}
 	actual := ln.Addr().(*net.TCPAddr).Port
+	if err := st.sperreHolen(time.Now()); err != nil {
+		fail(err.Error())
+	}
+	go st.sperreAuffrischen()
 
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -180,6 +184,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx)
+		st.sperreFreigeben()
 	}
 	// Läuft das Programm als eigenes Fenster, endet es, sobald das Fenster
 	// geschlossen wird. Sonst (Browser oder --no-browser) läuft der Server

@@ -15,7 +15,9 @@ import (
 // datenbestandLeer meldet, ob noch nichts eingegeben wurde (keine Pächter, Rechnungen, Ausgaben,
 // kein abgeschlossenes Jahr). Der Aufrufer hält s.mu.
 func (s *Store) datenbestandLeer() bool {
-	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 {
+	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 || len(s.d.Einsatzstunden) > 0 || len(s.d.Spenden) > 0 || len(s.d.Vorauszahlungen) > 0 ||
+		len(s.d.Rundschreiben) > 0 || len(s.d.Schluessel) > 0 || len(s.d.Geraete) > 0 ||
+		len(s.d.Kuendigungen) > 0 || len(s.d.Beschluesse) > 0 || len(s.d.Vertraege) > 0 || len(s.d.Haushalt) > 0 || len(s.d.Aemter) > 0 || len(s.d.Bauwerke) > 0 || len(s.d.Sitzungen) > 0 || len(s.d.Kassenpruefungen) > 0 || s.d.Pachtgrenze.ErwerbsobstbauJeQm > 0 || s.d.LageKarte.Bild != "" || len(s.d.LageKarte.Objekte) > 0 {
 		return false
 	}
 	for _, j := range s.d.Jahre {
@@ -77,6 +79,8 @@ func (s *Store) ladeBeispieldaten() {
 			ID: id, Mitgliedsnr: fmt.Sprintf("%d-%02d", i+1, (heute.Year()-x.jahreDabei)%100), Gartennr: fmt.Sprint(i + 1), Anrede: x.anrede, Name: x.name,
 			Strasse: x.strasse, PLZOrt: set.Ort, Versand: versand, Gartengroesse: x.groesse,
 			WasserzaehlerNr: fmt.Sprintf("W-%04d", 1001+i), StromzaehlerNr: fmt.Sprintf("S-%04d", 2001+i),
+			// Eichjahre gestaffelt: zwei Wasserzähler müssen dieses Jahr getauscht werden
+			WasserEichjahr: heute.Year() - 6 + i%6, StromEichjahr: heute.Year() - 2 - i%5,
 		}
 		if !x.post {
 			p.Email = fmt.Sprintf("garten%d@example.org", i+1)
@@ -166,7 +170,140 @@ func (s *Store) ladeBeispieldaten() {
 			s.d.Maengel = append(s.d.Maengel, m)
 		}
 	}
+	// Spenden und erfundene Angaben zur Gemeinnützigkeit, damit sich die Zuwendungsbestätigung ausprobieren lässt
+	s.d.Gemeinnuetzigkeit = Gemeinnuetzigkeit{Anschrift: "Am Vereinsheim 1\n" + set.Ort, Zweck: "der Kleingärtnerei", Finanzamt: "Musterstadt",
+		Steuernummer: "000/000/00000", Bescheid: "freistellung", BescheidDatum: heute.AddDate(-1, -2, 0).Format("2006-01-02"),
+		Veranlagung: fmt.Sprintf("%d–%d", heute.Year()-4, heute.Year()-2)}
+	if p, ok := s.aktiverPaechterLocked("2"); ok {
+		s.d.Spenden = append(s.d.Spenden, Spende{ID: newID(), Datum: fmt.Sprintf("%d-05-10", jahr), Jahr: jahr, Betrag: 50, PaechterID: p.ID, Name: p.Name, Strasse: p.Strasse, PLZOrt: p.PLZOrt})
+	}
+	s.d.Spenden = append(s.d.Spenden, Spende{ID: newID(), Datum: fmt.Sprintf("%d-06-21", jahr), Jahr: jahr, Betrag: 120, Name: "Gartencenter Grünfink", Strasse: "Gewerbestraße 4", PLZOrt: set.Ort, Notiz: "für das Sommerfest"})
+	// Vorauszahlungen per Dauerauftrag: fünf Gärten zahlen monatlich, Garten 4 ist seit drei Monaten im Rückstand
+	s.d.VorauszahlungSoll = map[string]float64{}
+	for i, nr := range []string{"1", "2", "4", "6", "9"} {
+		p, ok := s.aktiverPaechterLocked(nr)
+		if !ok {
+			continue
+		}
+		soll := []float64{20, 15, 20, 15, 20}[i] // unter der Jahresrechnung, damit ein Restbetrag bleibt
+		s.d.VorauszahlungSoll[p.ID] = soll
+		monate := 12
+		if nr == "4" {
+			monate = 9
+		}
+		for m := 1; m <= monate; m++ {
+			v := Vorauszahlung{ID: newID(), PaechterID: p.ID, Jahr: jahr, Datum: fmt.Sprintf("%d-%02d-01", jahr, m), Betrag: soll, Quelle: "kontoauszug"}
+			s.d.Vorauszahlungen = append(s.d.Vorauszahlungen, v)
+			s.d.vorauszahlungBuchen(&s.d.Vorauszahlungen[len(s.d.Vorauszahlungen)-1], +1)
+		}
+	}
+	// Lageplan: Hauptweg mit Wasserleitung, Tor, Zähler, Absperrhahn, Verteiler, Vereinsheim und Kompostplatz
+	s.d.LageKarte.Leitungen = []LageLinie{{Art: "wasser", Punkte: []Punkt{{10, 122}, {860, 122}}, Bez: "Hauptleitung unter dem Weg"}}
+	s.d.LageKarte.Objekte = []LageObjekt{
+		{Art: "tor", X: 10, Y: 122, Bez: "Haupttor"}, {Art: "wasserzaehler", X: 45, Y: 122, Bez: "Hauptzähler"},
+		{Art: "absperr", X: 370, Y: 122, Bez: "Hahn Mitte"}, {Art: "strom", X: 580, Y: 104, Bez: "Verteiler"},
+		{Art: "vereinsheim", X: 830, Y: 60}, {Art: "kompost", X: 830, Y: 190},
+	}
+	// Schlüssel und Geräte: ein Rasenmäher ist überfällig, der Häcksler muss zur Wartung
+	vorTagen := func(t int) string { return heute.AddDate(0, 0, t).Format("2006-01-02") }
+	s.d.Schluessel = []Schluessel{
+		{ID: newID(), Nummer: "1", Art: "Tor", Inhaber: "Vorstand (Vorsitz)", Seit: vorTagen(-900)},
+		{ID: newID(), Nummer: "2", Art: "Tor", Inhaber: "Vorstand (Kasse)", Seit: vorTagen(-900)},
+		{ID: newID(), Nummer: "3", Art: "Tor", Pfand: 20},
+		{ID: newID(), Nummer: "1", Art: "Vereinsheim", Inhaber: "Vorstand (Vorsitz)", Seit: vorTagen(-900)},
+		{ID: newID(), Nummer: "1", Art: "Wasserschacht", Bezeichnung: "Hauptschacht am Tor", Pfand: 0},
+	}
+	if p, ok := s.aktiverPaechterLocked("3"); ok {
+		s.d.Schluessel[2].PaechterID, s.d.Schluessel[2].Seit = p.ID, vorTagen(-400)
+		s.d.Schluessel[2].Verlauf = []Vorgang{{Datum: vorTagen(-400), Aktion: "ausgegeben", PaechterID: p.ID, Notiz: "20 € Pfand bar"}}
+	}
+	s.d.Geraete = []Geraet{
+		{ID: newID(), Name: "Gartenhäcksler", Inventarnr: "G-01", Standort: "Geräteschuppen", Angeschafft: vorTagen(-1500), Wert: 450, WartungMonate: 12, LetzteWartung: vorTagen(-380)},
+		{ID: newID(), Name: "Rasenmäher (Benzin)", Inventarnr: "G-02", Standort: "Geräteschuppen", Angeschafft: vorTagen(-900), Wert: 380, WartungMonate: 12, LetzteWartung: vorTagen(-120)},
+		{ID: newID(), Name: "Leiter 3 m", Inventarnr: "G-03", Standort: "Vereinsheim", Wert: 90},
+	}
+	if p, ok := s.aktiverPaechterLocked("5"); ok {
+		g := &s.d.Geraete[1]
+		g.PaechterID, g.Seit, g.Bis = p.ID, vorTagen(-10), vorTagen(-3)
+		g.Verlauf = []Vorgang{{Datum: vorTagen(-10), Aktion: "verliehen", PaechterID: p.ID}}
+	}
+	// Kündigung: Garten 8 kündigt zum 30. November, Bestätigung ist raus
+	if p, ok := s.aktiverPaechterLocked("8"); ok {
+		s.d.Kuendigungen = []Kuendigung{{ID: newID(), PaechterID: p.ID, Gartennr: "8", Eingang: fmt.Sprintf("%d-08-12", jahr+1), Zum: fmt.Sprintf("%d-11-30", jahr+1),
+			Von: "paechter", Grund: "Umzug", Erledigt: map[string]string{"bestaetigung": fmt.Sprintf("%d-08-15", jahr+1)}}}
+	}
+	// Beschlussbuch, Verträge, Haushaltsplan und Hauptzähler (für den Schwund)
+	s.d.Beschluesse = []Beschluss{
+		{ID: newID(), Datum: fmt.Sprintf("%d-03-14", jahr), Gremium: "Mitgliederversammlung", Nummer: fmt.Sprintf("MV %d/1", jahr), Titel: "Wasserpreis ab dem nächsten Jahr 2,04 € je m³", Ja: 31, Nein: 4, Enthaltung: 2, Ergebnis: "angenommen", Stichworte: "Wasser, Preise"},
+		{ID: newID(), Datum: fmt.Sprintf("%d-03-14", jahr), Gremium: "Mitgliederversammlung", Nummer: fmt.Sprintf("MV %d/2", jahr), Titel: "12 Pflichtstunden Gemeinschaftsarbeit, 10 € je fehlende Stunde", Ja: 29, Nein: 6, Enthaltung: 2, Ergebnis: "angenommen", Stichworte: "Gemeinschaftsarbeit"},
+		{ID: newID(), Datum: fmt.Sprintf("%d-05-02", jahr), Gremium: "Vorstand", Nummer: fmt.Sprintf("V %d/1", jahr), Titel: "Neuer Rasenmäher für den Verein bis 400 €", Text: "Angebote von zwei Händlern eingeholt, der günstigere wird gekauft.", Ergebnis: "angenommen", Stichworte: "Anschaffung, Geräte"},
+	}
+	s.d.Vertraege = []Vertrag{
+		{ID: newID(), Art: "Versicherung", Bezeichnung: "Vereinshaftpflicht", Partner: "Musterversicherung AG", Nummer: "VH-123456", Beginn: "2019-01-01", Ende: fmt.Sprintf("%d-12-31", jahr), FristMonate: 3, Verlaengert: 12, Kosten: 186.4, Turnus: "jährlich"},
+		{ID: newID(), Art: "Strom", Bezeichnung: "Stromliefervertrag Anlage", Partner: "Stadtwerke Musterstadt", Beginn: vorTagen(-640), Ende: heute.AddDate(0, 3, 20).Format("2006-01-02"), FristMonate: 3, Verlaengert: 12, Kosten: 38, Turnus: "monatlich"},
+		{ID: newID(), Art: "Pacht (Zwischenpacht)", Bezeichnung: "Zwischenpachtvertrag mit dem Verband", Partner: "Verband der Gartenfreunde", Beginn: "1998-04-01"},
+	}
+	s.d.Aemter = []Amt{
+		{ID: newID(), Amt: "Vorsitz", Name: "Helga Sommer", Seit: fmt.Sprintf("%d-03-14", jahr-2), Bis: heute.AddDate(0, 3, 0).Format("2006-01-02")},
+		{ID: newID(), Amt: "Kassenwart/in", Name: "Jens Köhler", Seit: fmt.Sprintf("%d-03-14", jahr-6), Bis: fmt.Sprintf("%d-03-14", jahr-2), Ehemalig: true},
+		{ID: newID(), Amt: "Kassenwart/in", Name: "Petra Lindner", Seit: fmt.Sprintf("%d-03-14", jahr-2), Bis: fmt.Sprintf("%d-03-14", jahr+2),
+			Checkliste: map[string]string{"protokoll": fmt.Sprintf("%d-03-14", jahr-2), "bank": fmt.Sprintf("%d-03-20", jahr-2), "schluessel": fmt.Sprintf("%d-03-14", jahr-2), "zugaenge": fmt.Sprintf("%d-03-14", jahr-2), "unterlagen": fmt.Sprintf("%d-04-02", jahr-2), "verband": fmt.Sprintf("%d-04-02", jahr-2), "register": fmt.Sprintf("%d-05-10", jahr-2)}},
+		{ID: newID(), Amt: "Kassenprüfer/in", Name: "Uwe Brandt", Seit: fmt.Sprintf("%d-03-14", jahr-1), Bis: fmt.Sprintf("%d-03-14", jahr+3)},
+	}
+	// Laubenkataster: Garten 4 ist mit Freisitz über 24 m², Garten 9 hat ein Gewächshaus ohne Genehmigung
+	for _, x := range []struct {
+		nr      string
+		laube   float64
+		baujahr int
+	}{{"1", 18, 1994}, {"2", 22, 2003}, {"3", 16, 1978}, {"4", 20, 2011}, {"5", 24, 1999}, {"6", 12, 2016}, {"7", 19.5, 1987}, {"8", 21, 2008}, {"9", 17, 1996}, {"10", 23, 2001}} {
+		s.d.Bauwerke = append(s.d.Bauwerke, Bauwerk{ID: newID(), Gartennr: x.nr, Art: "Laube", Flaeche: x.laube, Baujahr: x.baujahr, Genehmigt: "ja", Bestandsschutz: x.baujahr < 1983})
+	}
+	s.d.Bauwerke = append(s.d.Bauwerke,
+		Bauwerk{ID: newID(), Gartennr: "4", Art: "Überdachter Freisitz", Flaeche: 7.5, Baujahr: 2019, Genehmigt: "unbekannt"},
+		Bauwerk{ID: newID(), Gartennr: "9", Art: "Gewächshaus", Flaeche: 6, Baujahr: 2022, Genehmigt: "nein"},
+		Bauwerk{ID: newID(), Gartennr: "2", Art: "Schuppen", Flaeche: 3, Genehmigt: "ja"})
+	// Barkasse: Sommerfest und kleine Einkäufe
+	if j := s.d.Jahre[yearKey(jahr)]; j != nil {
+		anf := 85.0
+		j.BarAnfang = &anf
+		for i, b := range []Barbuchung{
+			{Datum: fmt.Sprintf("%d-04-12", jahr), Text: "Blumenerde für den Eingang", Kategorie: "Instandhaltung", Betrag: -23.8},
+			{Datum: fmt.Sprintf("%d-06-21", jahr), Text: "Sommerfest: Getränkeverkauf", Kategorie: "Feste", Betrag: 312.5},
+			{Datum: fmt.Sprintf("%d-06-21", jahr), Text: "Sommerfest: Grillgut und Getränke", Kategorie: "Feste", Betrag: -186.4},
+			{Datum: fmt.Sprintf("%d-07-02", jahr), Text: "Einzahlung auf das Vereinskonto", Kategorie: "Umbuchung", Betrag: -100},
+		} {
+			b.ID, b.BelegNr = newID(), i+1
+			j.Barkasse = append(j.Barkasse, b)
+		}
+		j.BarLetzteNr = len(j.Barkasse)
+	}
+	s.d.Pachtgrenze = Pachtgrenze{ErwerbsobstbauJeQm: 0.035, Quelle: "Gutachterausschuss (Beispielwert)"}
+	s.d.Haushalt = map[string]Haushaltsplan{fmt.Sprint(jahr): {
+		Einnahmen: map[string]float64{"Pacht": 220, "Mitgliedsbeiträge und Umlage": 1050, "Wasser und Strom": 1600, "Spenden": 100},
+		Ausgaben:  map[string]float64{"Instandhaltung": 300, "Anschaffung": 200, "Verwaltung": 60, "Versicherung & Gebühren": 250},
+		Notiz:     "Größere Anschaffung geplant: Rasenmäher (Beschluss V 1).",
+	}}
+	if v, ok := s.viewLocked(jahr); ok {
+		summe := 0.0 // alle abgelesenen Gärten, auch solche, deren Rechnung noch unvollständig ist
+		for _, p := range v.Paechter {
+			if w := calculate(v.Settings, p, v.Ablesungen[p.ID]).WasserVerbrauch; w != nil {
+				summe += *w
+			}
+		}
+		haupt, eur := round2(summe*1.14+3), round2((summe*1.14+3)*1.9)
+		if j := s.d.Jahre[yearKey(jahr)]; j != nil {
+			j.Versorger = &Versorger{WasserM3: &haupt, WasserEUR: &eur}
+		}
+	}
+	s.d.Rundschreiben = []Rundschreiben{{ID: newID(), Datum: fmt.Sprintf("%d-03-20", jahr), An: "alle", Betreff: "Wasser wird angestellt – bitte Leitungen prüfen",
+		Text:       "Liebe Gartenfreundinnen und Gartenfreunde,\n\nam ersten Samstag im April stellen wir das Wasser in der Anlage wieder an. Bitte schließt vorher die Entleerungshähne in euren Gärten und prüft die Leitungen auf Frostschäden.\n\nWer beim Anstellen helfen möchte, ist um 9 Uhr am Haupttor herzlich willkommen.",
+		Verschickt: fmt.Sprintf("%d-03-20", jahr)}}
+	s.d.Vereinsinfo = Vereinsinfo{
+		Ansprechpartner: "Vorsitz: Erika Beispiel, Tel. 0123 4567\nKasse: Max Muster, kasse@example.org\nSprechstunde: samstags 10–12 Uhr im Vereinsheim",
+		Hinweise:        "Mittagsruhe 13–15 Uhr, sonntags keine lauten Arbeiten\nWasser wird im April angestellt und im Oktober abgestellt\nGrünschnitt bitte zum Kompostplatz am Tor, Müll nimmt jeder selbst mit",
+	}
 	s.d.Demo = true
+	s.d.AusModule = nil // Beispieldaten zeigen alle Bereiche
 	s.audit("Beispieldaten geladen")
 }
 

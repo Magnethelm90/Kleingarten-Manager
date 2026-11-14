@@ -151,11 +151,8 @@ func layoutFit(s Settings, p Paechter, a Ablesung, r Result, wantPDF bool) (floa
 		if !wantPDF {
 			return squeeze, nil, nil
 		}
-		var buf bytes.Buffer
-		if err := pdf.Output(&buf); err != nil {
-			return 0, nil, err
-		}
-		return squeeze, buf.Bytes(), nil
+		out, err := pdfBytes(pdf)
+		return squeeze, out, err
 	}
 	return 0, nil, errors.New("Rechnung passt nicht auf eine Seite (Hinweistext zu lang?)")
 }
@@ -182,11 +179,7 @@ func buildInvoicesCombined(items []invoiceItem, title string) ([]byte, error) {
 		}
 		drawInvoicePage(pdf, it.S, it.P, it.A, it.R, sq)
 	}
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 func newInvoiceDoc(title string, s Settings) *fpdf.Fpdf {
@@ -630,11 +623,7 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	if y > 290 {
 		return nil, errors.New("Mahnung passt nicht auf eine Seite")
 	}
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 // zeichneKopf setzt den Briefkopf von Rechnung und Mahnung (oberhalb der Absenderzeile bei 31 mm):

@@ -1,28 +1,44 @@
-# Kleingarten-Manager
+<p align="center">
+  <img src="docs/bilder/garten.svg" width="560" alt="Kleingarten mit Laube, Beet, Obstbaum und Zaun">
+</p>
 
-**Die Jahresabrechnung für euren Kleingartenverein.** Pächter einmal anlegen, jedes Jahr nur noch die
-Zählerstände eintragen – die Rechnungen kommen fertig als PDF heraus, mit QR-Code zum Bezahlen.
+<h1 align="center">Kleingarten-Manager</h1>
 
-### [⬇ Zum Download (Windows und macOS)](https://github.com/Magnethelm90/Kleingarten-Manager/releases/latest)
+<p align="center">
+  <b>Das Vereinsbüro für euren Kleingartenverein.</b><br>
+  Pächter einmal anlegen, jedes Jahr nur noch die Zählerstände eintragen – die Rechnungen kommen fertig als PDF
+  heraus, mit QR-Code zum Bezahlen. Dazu Kasse, Lageplan, Kündigungen, Rundschreiben und alles, was ein Vorstand
+  sonst in Ordnern und Tabellen sucht.
+</p>
+
+<h3 align="center"><a href="https://github.com/Magnethelm90/Kleingarten-Manager/releases/latest">⬇ Zum Download (Windows und macOS)</a></h3>
 
 - **Kostenlos**, ohne Anmeldung und ohne Abo
 - **Keine Installation:** eine Datei herunterladen und doppelklicken
 - **Eure Daten bleiben bei euch:** alles liegt auf dem eigenen Rechner, nichts wird ins Internet gesendet
 - **Für Vorstand und Kassenwart gemacht:** Zählerstände, Rechnungen, Zahlungen, Mahnungen, Kassenbericht,
-  Pächterwechsel, Warteliste, Gartenakte, Termine und die Jahresmeldung an den Verband
-- **Mit Einführung:** beim ersten Start zeigt ein kurzer Rundgang, was wohin gehört
+  Haushaltsplan, Pächterwechsel, Kündigungen, Warteliste, Gartenakte, Termine und die Jahresmeldung an den Verband
+- **Sagt selbst, was ansteht:** Fristen, offene Zahlungen, Kündigungstermine, Wasserschwund – die Übersicht meldet sich
+- **Mit Einführung:** beim ersten Start eine kurze Bildergeschichte und ein Rundgang durchs Programm
 - **Erst ausprobieren:** auf Knopfdruck mit einem erfundenen Beispielverein, der sich danach mit einem Klick wieder entfernen lässt
 
 ## So sieht es aus
 
-![Übersicht mit Begrüßung, Jahresfortschritt, Terminen und Kennzahlen](docs/bilder/uebersicht.png)
+![Übersicht mit Begrüßung, Jahresfortschritt und dem, was gerade ansteht](docs/bilder/uebersicht.png)
+
+<p align="center">
+  <img src="docs/bilder/lageplan-3d.png" width="760" alt="Der Lageplan als 3D-Modell: drehen, zoomen, Gärten anklicken">
+  <br><sub><b>Der Lageplan in 3D</b> – die Anlage zum Drehen und Zoomen, jeder Garten in der Farbe seines Abrechnungsstands</sub>
+</p>
 
 | | |
 | --- | --- |
 | ![Einführung beim ersten Start](docs/bilder/einfuehrung.png) | ![Zählerstände eintragen](docs/bilder/zaehlerstaende.png) |
-| **Einführung** beim ersten Start – fünf kurze Schritte | **Zählerstände:** Nummer eintippen, nur die neuen Stände eingeben |
+| **Einführung** beim ersten Start – fünf Bilder, dann der Rundgang | **Zählerstände:** Nummer eintippen, nur die neuen Stände eingeben |
 | ![Rechnungen prüfen und ausstellen](docs/bilder/rechnungen.png) | ![Zahlungen verfolgen](docs/bilder/zahlungen.png) |
 | **Rechnungen** prüfen und mit einem Klick für alle ausstellen | **Zahlungen** abhaken, offene Posten und Mahnungen |
+| ![Kündigung mit Fahrplan](docs/bilder/kuendigungen.png) | ![Haushaltsplan mit Plan und Ist](docs/bilder/haushalt.png) |
+| **Kündigungen:** Frist prüfen, Bestätigung drucken, Schritt für Schritt zur Übergabe | **Haushaltsplan:** Plan und Ist je Posten, auf einen Blick |
 | ![Gartenakte mit Dokumenten und Wertermittlung](docs/bilder/gartenakte.png) | ![Berichte und Jahresmeldung](docs/bilder/berichte.png) |
 | **Gartenakte:** Dokumente, Fotos, Wertermittlung und Verlauf je Garten | **Berichte & Meldungen:** Jahresbericht, Jahresmeldung für den Verband, Aushänge |
 | ![Pächter verwalten](docs/bilder/paechter.png) | ![Beispielrechnung](docs/bilder/rechnung-beispiel.png) |
@@ -53,6 +69,18 @@ Benutzerkonto und keine Übertragung ins Internet.
 
 ## Was das Programm kann
 
+### Für den Vorstand
+
+- **Was steht an?** Die Übersicht sagt von selbst, was zu tun ist: Ablesung oder Versammlung vorbereiten, Stunden nach
+  dem Arbeitseinsatz eintragen, überfällige Zahlungen, abgelaufene Mängelfristen, Spenden ohne Bestätigung,
+  ein bald ablaufender Bescheid zur Gemeinnützigkeit, Warteliste nachfragen
+- **Amtsübergabe:** Die Vereinsakte enthält alle Daten und Dateien plus ein »Lies mich zuerst« mit Zahlen, Preisen,
+  Terminen und offenen Punkten – auf einen USB-Stick kopieren und der neue Vorstand kann sofort weitermachen
+- **Mehrere Vorstände ohne Cloud:** Liegt der Datenordner auf einem USB-Stick oder Netzlaufwerk, erkennt das Programm,
+  wenn er gerade an einem anderen Rechner geöffnet ist, und verhindert, dass Änderungen überschrieben werden
+- **Willkommensmappe** für neue Pächter (Garten, Zähler, Termine, Lageplan mit markiertem Garten, Ansprechpartner) und
+  **Exposé** für freie Gärten (Foto, Größe, Ablöse, laufende Kosten, Lage) für Interessenten der Warteliste
+
 ### Abrechnung
 
 - **Zählerstände** in der Schnelleingabe: Nummer eintippen, Name und Vorjahresstände erscheinen von selbst, nur die
@@ -75,7 +103,12 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Pächter** anlegen oder aus einer Excel-/CSV-Liste übernehmen, mit Kontakt, Gartengröße, Zählern und interner
   Notiz; gelöschte Pächter kommen erst in den Papierkorb
 - **Lageplan:** die Gärten so angeordnet, wie sie auf dem Gelände liegen, farbig nach Abrechnungsstand; freie
-  Gärten gestrichelt, mit einem Klick an jemanden von der Warteliste vergeben; als Aushang druckbar (ohne Namen)
+  Gärten gestrichelt, mit einem Klick an jemanden von der Warteliste vergeben; als Aushang druckbar (ohne Namen).
+  Auf Knopfdruck als **3D-Modell** der Anlage zum Drehen und Zoomen
+- **Plan als Hintergrund:** der eingescannte Vereinsplan oder ein Foto der Anlage unter dem Lageplan, mit
+  einstellbarer Größe und Deckkraft. Darauf die **Umrisse der Parzellen** nachzeichnen (benachbarte Ecken rasten ein),
+  **Wasser- und Stromleitungen**, Wege und **Einrichtungen** wie Hauptzähler, Absperrhähne, Schächte, Tor und
+  Vereinsheim eintragen. Der Ausdruck zeigt alles mit Legende
 - **Gartenakte:** alles zu einem Garten an einer Stelle – Verlauf, Übergaben, Wertermittlungen und Dokumente wie
   Bauantrag, Genehmigung, Fotos der Laube oder Pachtvertrag
 - **Pächterwechsel** in einem Schritt: Schlussrechnung für den bisherigen Pächter (nur Verbrauch bis zur Übergabe),
@@ -84,11 +117,38 @@ Benutzerkonto und keine Übertragung ins Internet.
   beim Wechsel als Ablösesumme vorgeschlagen
 - **Warteliste** in der Reihenfolge der Anmeldung, mit Besichtigungsterminen und Erinnerung, lange nicht bestätigte
   Einträge nachzufragen
-- **Mängel und Gartenbegehung:** Begehungsliste zum Ausdrucken, Mängel je Garten mit Frist erfassen und dem Pächter
-  eine schriftliche Aufforderung als PDF schreiben
+- **Mängel und Gartenbegehung:** Begehungsliste zum Ausdrucken oder geführte Begehung am Laptop (Garten für Garten
+  Mängel ankreuzen und Nutzung schätzen), Mängel je Garten mit Frist erfassen und dem Pächter
+  eine schriftliche Aufforderung als PDF schreiben; dazu die **Drittelregelung**: Flächenanteile schätzen und sehen,
+  welche Gärten unter einem Drittel Anbau liegen
 - **Vereinstermine:** Jahresplaner für Arbeitseinsätze, Versammlungen und Feste, als Aushang und als Kalenderdatei
   fürs Handy, mit einem Klick ins nächste Jahr übernommen; für Versammlungen gibt es die **Einladung mit
   Tagesordnung** und die **Anwesenheitsliste** zum Unterschreiben
+- **Gemeinschaftsstunden aus Arbeitseinsätzen:** Stundenliste zum Ausdrucken, danach am Rechner abhaken, wer da
+  war – die Stunden landen automatisch beim Pächter, Korrekturen zählen nicht doppelt
+- **Kündigung mit Fahrplan:** Eingang und Pachtende erfassen, das Programm prüft die Frist nach eurer Regel, druckt
+  die Kündigungsbestätigung und führt Schritt für Schritt bis zur Übergabe (Nachfolger, Wertermittlung, Abnahme,
+  Schlüssel, Pächterwechsel) – mehrere Schritte erkennt es selbst, das Cockpit erinnert an den Rest
+- **Pachtvertrag** zum Unterschreiben aus Pächterdaten, Preisen und euren Vertragsbestimmungen, mit Lageplan als
+  Anlage; auf Wunsch direkt in die Gartenakte
+- **Protokoll der Versammlung:** Tagesordnung aus der Einladung, je Punkt mitschreiben und abstimmen lassen;
+  Abstimmungen landen mit fortlaufender Nummer automatisch im Beschlussbuch, am Ende ein Protokoll-PDF mit
+  Unterschriftszeilen
+- **Laubenkataster:** Laube, Freisitz, Gewächshaus und Schuppen je Garten mit Größe, Baujahr und Genehmigung;
+  das Cockpit warnt, wenn Laube und überdachter Freisitz zusammen über 24 m² liegen (§ 3 BKleingG), Bestandsschutz
+  wird berücksichtigt; Liste für die Begehung als PDF
+- **Beschlussbuch:** Beschlüsse von Vorstand und Mitgliederversammlung mit Abstimmungsergebnis und Stichworten,
+  durchsuchbar und als PDF
+- **Ämter:** wer welches Amt bis wann hat; das Cockpit erinnert vor Ende der Amtszeit an die Wahl, beim Amtswechsel
+  führt eine Checkliste durch die Übergabe (Bankvollmacht, Vereinsregister, Schlüssel, Zugänge)
+- **Verträge und Versicherungen** des Vereins mit Laufzeit und Kündigungsfrist; das Cockpit meldet sich rechtzeitig
+  vor dem letzten Kündigungstag
+- **Rundschreiben** an alle oder ausgewählte Pächter: per E-Mail über das eigene E-Mail-Programm (alle Adressen
+  im Bcc, bei vielen Empfängern in mehreren Paketen) und als Serienbrief für alle ohne E-Mail, mit Anschrift für den
+  Fensterumschlag; dazu als Aushang und mit Vorlagen (Wasser an/ab, Arbeitseinsatz)
+- **Schlüssel und Geräte:** wer welchen Tor-, Vereinsheim- oder Schachtschlüssel hat (mit Pfand und Verlauf), und
+  welche Vereinsgeräte verliehen sind oder zur Wartung müssen; das Cockpit erinnert an Schlüssel ausgeschiedener
+  Pächter, überfällige Rückgaben und fällige Wartungen
 - **Jubiläen** langjähriger Mitglieder für die Mitgliederversammlung
 
 ### Kasse und Berichte
@@ -96,7 +156,33 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Kassenbericht** mit Anfangs- und Endbestand, Vorjahresvergleich, Verlauf über die Jahre und Vergleich mit der
   Rechnung des Versorgers; sonstige Ausgaben mit Kategorie und Beleg-Fotos, wiederkehrende Ausgaben werden
   vorgeschlagen; als Excel-Datei
-- **Kassenprüfer-Zugang** mit eigenem Passwort: sieht den Kassenbericht und hakt Ausgaben als geprüft ab, sonst nichts
+- **Monatliche Vorauszahlungen per Überweisung:** Monatsbetrag je Pächter, Monatsübersicht (wer hat welchen Monat
+  bezahlt, wer ist im Rückstand), Daueraufträge werden beim Einlesen des Kontoauszugs erkannt, Erinnerung als PDF;
+  alles wird als Abschlag auf die Jahresrechnung gebucht
+- **SEPA-Lastschrift** (bei Bedarf einschaltbar) für die monatliche Vorauszahlung und die Jahresrechnung: Mandate je Pächter (mit Formular zum
+  Unterschreiben), Datei für das Online-Banking (pain.008), Vorabankündigung mit allen Terminen, Rücklastschrift mit
+  einem Klick; Vorauszahlungen werden auf der Jahresrechnung abgezogen und zählen in der Kasse
+- **Haushaltsplan:** Einnahmen und Ausgaben je Posten planen, das Ist kommt laufend aus dem Kassenbericht;
+  Abweichungen auf einen Blick und als PDF für die Mitgliederversammlung
+- **Eichfristen der Zähler:** Wasserzähler 6 Jahre, Stromzähler 8 Jahre (einstellbar); das Cockpit warnt, die
+  Tauschliste für den Wasserwart kommt als PDF, beim Zählerwechsel setzt das Programm das Eichjahr selbst
+- **Wasserschwund-Kontrolle:** Hauptzähler gegen die Summe aller Gartenzähler, Jahr für Jahr in Menge, Prozent
+  und Euro, dazu die Gärten mit auffälligem Verbrauch oder stehendem Zähler; ab 10 % oder bei deutlichem Anstieg
+  warnt das Cockpit
+- **Kontoauszug einlesen:** die CSV-Datei aus dem Online-Banking laden, das Programm ordnet die Eingänge über die
+  Rechnungsnummer im Verwendungszweck den Rechnungen zu (sonst Vorschlag über Name und Betrag); übernommen wird nur, was
+  du bestätigst, und nichts doppelt
+- **Spenden und Zuwendungsbestätigungen** nach dem amtlichen Muster, einzeln oder als Sammelbestätigung fürs Jahr;
+  das Programm prüft, ob der Bescheid des Finanzamts noch gilt, und zählt Spenden im Kassenbericht als Einnahme
+- **Barkasse:** Kassenbuch für Bargeld mit fortlaufenden Belegnummern, Anfangsbestand aus dem Vorjahr und
+  Kassenbuch als PDF; die Kassenprüfung vergleicht das gezählte Bargeld mit dem Bestand
+- **Kassenprüfung:** geführte Prüfung mit Kontostand-Abgleich, Belegkontrolle und zufälliger Stichprobe; am Ende
+  ein fertiger Prüfbericht mit Empfehlung zur Entlastung für die Mitgliederversammlung. Ausgaben ohne Beleg meldet
+  das Cockpit
+- **Kassenprüfer-Zugang** mit eigenem Passwort: sieht den Kassenbericht, hakt Ausgaben als geprüft ab und führt die
+  Kassenprüfung durch, sonst nichts
+- **Pachtobergrenze** nach § 5 Bundeskleingartengesetz: das Programm vergleicht den Pachtsatz mit dem Vierfachen der
+  ortsüblichen Pacht und zeigt, wie viel Luft bleibt
 - **Jahresbericht** als PDF für die Mitgliederversammlung – Kennzahlen, Kasse, Diagramm, Termine, ohne Namen
 - **Jahresmeldung** für den Landes- oder Regionalverband: Parzellen, Flächen, Wechsel, Warteliste,
   Gemeinschaftsstunden, Abgaben – als Übersicht und Excel-Datei
@@ -106,6 +192,15 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Einführung** beim ersten Start und jederzeit über das »?«; **Beispieldaten** zum gefahrlosen Ausprobieren
 - Übersicht mit Jahresfortschritt, nächsten Terminen und Kennzahlen; Suche nach Name, Garten oder Nummer von
   jeder Seite aus
+- **Einrichtungs-Assistent** beim ersten Start: Verein, Preise, gebrauchte Bereiche und Pächter-Import in vier Schritten
+- **Vereinsjahr** auf der Übersicht: was wann ansteht, von der Kassenprüfung bis zum Jahresabschluss; Erledigtes
+  erkennt das Programm selbst oder wird abgehakt
+- **Erklärungen zum Aufklappen** (»?«) an Preisen, Beiträgen und Abrechnungsfeldern
+- **Prüfung vor dem Jahreswechsel** als Ampel: fehlende Zählerstände, nicht ausgestellte oder offene Rechnungen,
+  Ausgaben ohne Beleg, Kassen- und Barbestand, Sicherung außer Haus
+- **Sicherung ansehen**, ohne sie einzuspielen – mit Vergleich zum heutigen Stand
+- **Bereiche ein- und ausblenden:** Was der Verein nicht braucht (z. B. Barkasse, Laubenkataster, Spenden), verschwindet
+  aus Menü und Aufgaben; die Daten bleiben erhalten. Neue Installationen starten mit dem Grundpaket
 - **Vereinsfarbe und Logo** für Programm und Rechnungen; Modus **»Gut lesbar«** und einstellbare Schriftgröße
 
 ### Sicherung und Datenschutz
@@ -168,6 +263,8 @@ Start meldet macOS „nicht verifizierter Entwickler“: mit Rechtsklick auf die
 - Die **Verwaltung** (Pächter, Warteliste, Kasse, Berichte, Einstellungen) lässt sich mit einem Passwort schützen.
   Übersicht, Zählerstände, Rechnungen, Zahlungen, Lageplan und Termine bleiben für alle am Rechner offen, damit
   zum Beispiel beim Ablesen jemand helfen kann.
+- Nutzen mehrere Personen den Rechner, lässt sich unter *Passwort* **»Alles nur mit Anmeldung«** einschalten: Dann
+  zeigt das Programm ohne Anmeldung nur die Anmeldeseite – keine Namen, Anschriften oder Zahlen.
 - Wer sich am Rechner anmelden kann, kommt auch an die Datendatei. Sie ist nicht verschlüsselt. Deshalb gehört
   das Programm auf einen Rechner mit eigenem Benutzerkennwort und eingeschalteter Festplattenverschlüsselung
   (Windows: BitLocker bzw. Geräteverschlüsselung, macOS: FileVault).
