@@ -207,6 +207,7 @@ Benutzerkonto und keine Übertragung ins Internet.
 
 - **Automatische Sicherungen** bei jeder Änderung, vor heiklen Schritten und vor jedem Jahreswechsel (zwölf Jahre
   lang), auf Wunsch zusätzlich auf einem USB-Stick oder Netzlaufwerk; jede Sicherung lässt sich wieder einspielen
+- **Verschlüsselte Sicherung** für den USB-Stick: eine Datei, die sich nur mit eurem Passwort öffnen lässt
 - **DSGVO-Hilfen:** Auskunft je Person als Datei, endgültiges Löschen auch aus allen Sicherungen, Bereinigung nach
   Ablauf der Aufbewahrungsfrist, Änderungsprotokoll. Vorlagen für Verarbeitungsverzeichnis und
   Mitgliederinformation stehen in [DATENSCHUTZ.md](DATENSCHUTZ.md).

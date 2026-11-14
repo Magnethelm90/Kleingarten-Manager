@@ -25,7 +25,7 @@ const vereinsakteOrdner = "Vereinsakte"
 func vereinsakteAuslassen(rel string, dir bool) bool {
 	erster := strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]
 	if dir {
-		return erster == "Sicherungen" || erster == druckOrdner || erster == vereinsakteOrdner
+		return erster == "Sicherungen" || erster == druckOrdner || erster == vereinsakteOrdner || erster == tresorOrdner
 	}
 	base := filepath.Base(rel)
 	return base == sperrDateiName || strings.HasPrefix(base, ".schreibtest") || strings.HasSuffix(base, ".tmp")

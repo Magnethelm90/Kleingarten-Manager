@@ -61,6 +61,9 @@
 - Prüfung Nov 2026 (3): Tests `TestAlleLeseRoutenOhneFehler` (jede Bereichs-Konfiguration), `TestKeinDatenverlust`,
   `TestLoeschungInAllenBereichen`; 3D-Lageplan zeichnet nur bei Bewegung; Toolchain in go.mod aktuell halten
   (govulncheck in CI); MIT-Lizenz (LICENSE), Haftungsausschluss und »Rechtliche Hinweise« im README.
+- Verschlüsselte Sicherung (tresor.go: AES-256-GCM + PBKDF2, Ordner »Verschlüsselte Sicherungen«, Öffnen legt eine
+  gewöhnliche Sicherung »entschluesselt« ab; `entferneTresore` beim endgültigen Löschen). Dialoge: »cancel« nur
+  behandeln, wenn `e.target === dlg` (Datei-Felder im Dialog feuern auch »cancel«).
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

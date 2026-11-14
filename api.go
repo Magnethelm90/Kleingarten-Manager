@@ -1064,6 +1064,7 @@ func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 		}
 		a.st.leereDruckOrdner()     // abgeleitete Druckdateien (z. B. Sammel-PDF) enthalten den Namen noch
 		a.st.entferneVereinsakten() // ebenso ältere Vereinsakten (Momentaufnahmen des ganzen Datenordners)
+		a.st.entferneTresore()      // und verschlüsselte Sicherungen: sie lassen sich nicht bereinigen
 		sicherungen := a.st.bereinigeSicherungen(func(d *Data) bool { return d.entfernePerson(id) })
 		writeJSON(w, 200, map[string]int{"sicherungenBereinigt": sicherungen})
 		return
@@ -1779,6 +1780,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/sicherungen/ansehen", a.admin(a.handleSicherungAnsehen))
 	mux.HandleFunc("GET /api/admin/abschlusspruefung", a.admin(a.handleAbschlussPruefung))
 	mux.HandleFunc("POST /api/admin/sicherung-jetzt", a.admin(a.handleSicherungJetzt))
+	mux.HandleFunc("POST /api/admin/sicherung-verschluesselt", a.admin(a.handleTresorErstellen))
+	mux.HandleFunc("POST /api/admin/sicherung-entschluesseln", a.admin(a.handleTresorOeffnen))
 	mux.HandleFunc("POST /api/admin/beispieldaten", a.admin(a.handleDemoLaden))
 	mux.HandleFunc("PUT /api/admin/lageplan", a.admin(a.handleLageplan))
 	mux.HandleFunc("POST /api/admin/lageplan/bild", a.admin(a.handleKarteHochladen))

@@ -201,7 +201,8 @@ function modal(title, body, buttons) {
       }, b.label));
     }
     dlg.append(h('div', { class: 'dhead' }, title), h('div', { class: 'dbody' }, body), foot);
-    dlg.addEventListener('cancel', (e) => { e.preventDefault(); close(undefined); });
+    // »cancel« kommt auch von Datei-Feldern im Dialog (Auswahl abgebrochen) – nur das eigene Esc schließt.
+    dlg.addEventListener('cancel', (e) => { if (e.target !== dlg) return; e.preventDefault(); close(undefined); });
     document.body.append(dlg);
     dlg.showModal();
   });
@@ -536,7 +537,7 @@ function geschichteZeigen() {
   zurueck.addEventListener('click', () => i > 0 && zeigen(i - 1, 'links'));
   weiter.addEventListener('click', () => (i === GESCHICHTE.length - 1 ? ende(true) : zeigen(i + 1, 'rechts')));
   selbst.addEventListener('click', () => ende(false));
-  dlg.addEventListener('cancel', (e) => { e.preventDefault(); ende(false); });
+  dlg.addEventListener('cancel', (e) => { if (e.target !== dlg) return; e.preventDefault(); ende(false); });
   dlg.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight' && i < GESCHICHTE.length - 1) zeigen(i + 1, 'rechts');
     if (e.key === 'ArrowLeft' && i > 0) zeigen(i - 1, 'links');
@@ -3995,6 +3996,7 @@ async function einrichtungsAssistent() {
     i++; zeigen();
   });
   dlg.addEventListener('cancel', async (e) => {
+    if (e.target !== dlg) return;
     e.preventDefault();
     if (fragt) return;
     fragt = true;
@@ -4638,6 +4640,54 @@ function kassenberichtVerlaufCard() {
 
 // ---- Import / Export / Sicherung
 
+// Verschlüsselte Sicherung für den USB-Stick: eine Datei, die sich nur mit dem Passwort öffnen lässt.
+async function tresorErstellen() {
+  const pw = h('input', { type: 'password', autocomplete: 'new-password', style: 'width:100%' });
+  const pw2 = h('input', { type: 'password', autocomplete: 'new-password', style: 'width:100%' });
+  const body = h('div', {},
+    h('p', { class: 'hint', style: 'margin-top:0' }, 'Der ganze Datenbestand wird in eine Datei geschrieben, die sich nur mit diesem Passwort öffnen lässt. Sie ist für den USB-Stick oder einen anderen Ort außer Haus gedacht.'),
+    h('label', {}, 'Passwort (mindestens 10 Zeichen)', pw),
+    h('label', { style: 'margin-top:8px;display:block' }, 'Passwort wiederholen', pw2),
+    h('p', { class: 'banner warn', style: 'margin-top:12px' }, 'Ohne das Passwort ist die Datei unbrauchbar, niemand kann es zurücksetzen. Bitte aufschreiben und getrennt vom Stick aufbewahren, zum Beispiel beim Vorsitzenden.'));
+  const ok = await modal('Verschlüsselte Sicherung erstellen', body, [
+    { label: 'Abbrechen', value: false },
+    { label: 'Erstellen', cls: 'primary', value: true, action: () => {
+      if (pw.value.length < 10) { toast('Das Passwort braucht mindestens 10 Zeichen.', 'err'); pw.focus(); return false; }
+      if (pw.value !== pw2.value) { toast('Die beiden Passwörter stimmen nicht überein.', 'err'); pw2.focus(); return false; }
+      return true;
+    } },
+  ]);
+  if (!ok) return;
+  try {
+    const r = await api('POST', '/api/admin/sicherung-verschluesselt', { passwort: pw.value });
+    toast(`Verschlüsselte Sicherung erstellt: ${r.datei} (${groesseText(r.groesse)}). Der Ordner wurde geöffnet – Datei auf den USB-Stick kopieren.`, 'ok');
+  } catch (e) { handleErr(e); }
+}
+
+async function tresorOeffnen() {
+  const datei = h('input', { type: 'file', accept: '.kgsicherung' });
+  const pw = h('input', { type: 'password', autocomplete: 'off', style: 'width:100%' });
+  const body = h('div', {},
+    h('p', { class: 'hint', style: 'margin-top:0' }, 'Die Datei wird entschlüsselt und in die Liste der Sicherungen gelegt. Am heutigen Stand ändert das nichts: Ansehen und Wiederherstellen entscheidet ihr danach in der Liste.'),
+    h('label', {}, 'Datei (.kgsicherung)', datei),
+    h('label', { style: 'margin-top:8px;display:block' }, 'Passwort', pw));
+  let antwort = null;
+  const ok = await modal('Verschlüsselte Sicherung öffnen', body, [
+    { label: 'Abbrechen', value: false },
+    { label: 'Öffnen', cls: 'primary', value: true, action: async () => {
+      if (!datei.files.length) { toast('Bitte eine Datei auswählen.', 'err'); return false; }
+      const fd = new FormData();
+      fd.append('file', datei.files[0]);
+      fd.append('passwort', pw.value);
+      try { antwort = await api('POST', '/api/admin/sicherung-entschluesseln', fd, true); } catch (e) { handleErr(e); return false; }
+      return true;
+    } },
+  ]);
+  if (!ok || !antwort) return;
+  toast(`Sicherung geöffnet (${antwort.paechter} Pächter, ${antwort.rechnungen} Rechnungen). Sie steht jetzt unten in der Liste der Sicherungen.`, 'ok');
+  await reload();
+}
+
 async function vereinsakteErstellen() {
   try {
     const r = await api('POST', '/api/admin/vereinsakte');
@@ -4708,6 +4758,10 @@ function adminData() {
         h('a', { class: 'btn', href: '/api/admin/backup' }, 'Gesamten Datenbestand herunterladen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'sicherungen' }).catch(handleErr) }, 'Sicherungsordner öffnen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'daten' }).catch(handleErr) }, 'Datenordner öffnen')),
+      h('h4', { style: 'margin:16px 0 4px' }, 'Verschlüsselt für den USB-Stick', hilfe('Die gewöhnlichen Sicherungen sind nicht verschlüsselt: Wer den Stick findet, kann sie lesen. Die verschlüsselte Sicherung ist eine einzelne Datei, die sich nur mit eurem Passwort öffnen lässt. Sie enthält den Datenbestand, aber keine Rechnungs-PDFs und Belege.')),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn', onclick: tresorErstellen }, 'Verschlüsselte Sicherung erstellen'),
+        h('button', { class: 'btn', onclick: tresorOeffnen }, 'Verschlüsselte Sicherung öffnen')),
       zweiteSicherungField()),
     h('div', { class: 'card', style: 'margin-top:16px' },
       h('h3', { style: 'margin-top:0' }, 'Amtsübergabe'),

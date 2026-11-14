@@ -118,6 +118,12 @@ der Beleg es verlangt; die Einträge sind Buchungsbelege und bleiben mit dem Jah
 **Sicherung ansehen:** Die Vorschau einer Sicherung zeigt Pächternamen des damaligen Stands. Endgültig gelöschte
 Personen sind auch aus den Sicherungen entfernt und erscheinen dort nicht mehr.
 
+**Verschlüsselte Sicherung:** Eine Datei mit dem ganzen Datenbestand, die sich nur mit dem gewählten Passwort
+öffnen lässt (AES-256-GCM, Schlüssel per PBKDF2 aus dem Passwort). Das Passwort wird nirgends gespeichert und lässt
+sich nicht zurücksetzen. Wird eine Person endgültig gelöscht, entfernt das Programm die verschlüsselten Dateien im
+Datenordner, weil es sie nicht bereinigen kann. **Kopien auf dem USB-Stick müsst ihr danach selbst durch eine neue
+ersetzen** – sonst enthalten sie die gelöschte Person weiter.
+
 **Begehungen:** Geschätzte Flächenanteile (Drittelregelung) gehören zum Pächter, der den Garten damals hatte; sie
 stehen in der Auskunft und werden mit der Person gelöscht.
 
@@ -151,7 +157,8 @@ Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 
 - Admin-Passwort setzen; Rechner mit Windows-/macOS-Benutzerkonto schützen, Bildschirmsperre
 - **Festplatte verschlüsseln** (BitLocker, FileVault): die Datendatei ist nicht verschlüsselt
-- Sicherungsmedien (USB-Stick) verschlüsseln und sicher verwahren
+- Sicherungsmedien (USB-Stick) verschlüsseln und sicher verwahren – oder dafür die **verschlüsselte Sicherung** des
+  Programms verwenden (Import, Export, Sicherung → Verschlüsselt für den USB-Stick)
 - Wenige, namentlich bekannte Personen mit Zugang; Weitergabe des Passworts dokumentieren
 - Rechner nicht an Dritte weitergeben, ohne den Datenordner vorher sicher zu löschen
 
