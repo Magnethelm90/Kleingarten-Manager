@@ -3355,7 +3355,7 @@ const vorabDrucken = (jahr) => pdfDrucken({
 async function laufDatei(l) {
   if (inNativeWindow()) {
     try { const r = await api('POST', `/api/admin/sepa/lauf/${l.id}/datei`); toast(`${r.datei} liegt im Ordner »Lastschriften« – im Online-Banking als SEPA-Sammellastschrift hochladen.`, 'ok'); } catch (e) { handleErr(e); }
-  } else location.href = `/api/admin/sepa/lauf/${l.id}/xml`;
+  } else location.href = `/api/admin/sepa/lauf/${encodeURIComponent(l.id)}/xml`;
 }
 
 async function laufDetails(l) {
@@ -3667,7 +3667,7 @@ function adminPaechter() {
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Kündigung erfassen …', title: 'Kündigung mit Frist und Fahrplan bis zur Übergabe', aktion: async () => { if (await kuendigungDialog(p)) { adminTabWaehlen('kuendigungen'); render(); } } } : null,
             p.gartennr && p.gartengroesse > 0 ? { label: 'Pachtvertrag …', title: 'Unterpachtvertrag zum Unterschreiben, auf Wunsch in die Gartenakte', aktion: () => pachtvertragDialog(p) } : null,
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Willkommensmappe', title: 'PDF für neue Pächter: Garten, Zähler, Termine, Lageplan, Ansprechpartner', aktion: () => willkommenDrucken(p) } : null,
-            { label: 'Auskunft (DSGVO)', title: 'Alle gespeicherten Daten dieser Person als Datei herunterladen (Art. 15 DSGVO)', aktion: () => { location.href = `/api/admin/paechter/${p.id}/auskunft`; } },
+            { label: 'Auskunft (DSGVO)', title: 'Alle gespeicherten Daten dieser Person als Datei herunterladen (Art. 15 DSGVO)', aktion: () => { location.href = `/api/admin/paechter/${encodeURIComponent(p.id)}/auskunft`; } },
             { label: 'In den Papierkorb', gefahr: true, aktion: async () => {
               const ok = await confirmBox(`Pächter „${p.name}“ (${p.mitgliedsnr}) in den Papierkorb legen? Er verschwindet aus allen Ansichten, Zählerstände und Rechnungen bleiben aber erhalten und lassen sich im Papierkorb wiederherstellen.`, 'In den Papierkorb', true);
               if (!ok) return;
@@ -3777,7 +3777,7 @@ function adminDatenschutz() {
       h('h3', { style: 'margin-top:0' }, 'Auskunft und Datenkopie (Art. 15 und 20 DSGVO)'),
       h('p', { class: 'hint' }, 'Wer wissen möchte, was über sie oder ihn gespeichert ist, bekommt hier alle Daten als Datei (maschinenlesbar, JSON). Dieselbe Datei gibt es auch je Person in der Pächter-Liste (»Auskunft«) und im Papierkorb – am besten erstellst du sie, bevor du jemanden löschst.'),
       list.length
-        ? h('div', { class: 'toolbar' }, sel, h('a', { class: 'btn primary', href: '#', onclick: (e) => { e.preventDefault(); location.href = `/api/admin/paechter/${sel.value}/auskunft`; } }, 'Auskunft herunterladen'))
+        ? h('div', { class: 'toolbar' }, sel, h('a', { class: 'btn primary', href: '#', onclick: (e) => { e.preventDefault(); location.href = `/api/admin/paechter/${encodeURIComponent(sel.value)}/auskunft`; } }, 'Auskunft herunterladen'))
         : h('p', { class: 'hint' }, 'Noch keine Pächter angelegt.')),
 
     h('div', { class: 'card', style: 'margin-bottom:14px' },
