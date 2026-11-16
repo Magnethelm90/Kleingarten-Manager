@@ -5291,11 +5291,27 @@ const begehungslisteDrucken = () => pdfDrucken({
   url: '/api/admin/begehungsliste', oeffnenUrl: '/api/admin/begehungsliste/oeffnen',
   titel: 'Begehungsliste', meldung: () => 'Die Begehungsliste wurde im PDF-Programm geöffnet – dort drucken und zur Begehung mitnehmen.',
 });
-const maengelschreibenDrucken = (nr) => pdfDrucken({
-  url: `/api/admin/maengelschreiben?gartennr=${encodeURIComponent(nr)}`,
-  oeffnenUrl: `/api/admin/maengelschreiben/oeffnen?gartennr=${encodeURIComponent(nr)}`,
+const MAENGEL_STUFEN = [
+  { key: 'erst', knopf: 'Aufforderung schreiben', titel: 'Aufforderung' },
+  { key: 'erinnerung', knopf: 'Erinnerung schreiben', titel: 'Erinnerung' },
+  { key: 'zweit', knopf: 'Zweitschreiben (letzte Frist)', titel: 'Zweitschreiben' }];
+const maengelschreibenDrucken = (nr, stufe, frist) => pdfDrucken({
+  url: `/api/admin/maengelschreiben?gartennr=${encodeURIComponent(nr)}&stufe=${stufe}&frist=${frist}`,
+  oeffnenUrl: `/api/admin/maengelschreiben/oeffnen?gartennr=${encodeURIComponent(nr)}&stufe=${stufe}&frist=${frist}`,
   titel: `Aufforderung Garten ${nr}`, meldung: () => 'Das Schreiben wurde im PDF-Programm geöffnet – dort drucken oder als PDF verschicken.',
 });
+const mangelStand = (m) => MAENGEL_STUFEN.reduce((hoch, x, i) => (m.stufen && m.stufen[x.key] ? i : hoch), -1);
+// Nächstes Schreiben im Fahrplan: neue Frist abfragen, Schreiben öffnen und den Versand vermerken.
+async function maengelSchreiben(nr, stufe) {
+  const frist = h('input', { type: 'date', value: isoInTagen(14) });
+  const ok = await modal(stufe.titel + ' – Garten ' + nr, h('div', null,
+    h('p', { class: 'hint' }, 'Bis wann sollen die Mängel beseitigt sein? Die Frist gilt für alle offenen Mängel dieses Gartens. Das Schreiben öffnet sich im PDF-Programm. Danach vermerkt das Programm, dass es verschickt wurde, und erinnert an den nächsten Schritt.'),
+    h('label', null, 'Neue Frist ', frist)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Schreiben erstellen', cls: 'primary', value: true }]);
+  if (!ok || !frist.value) return;
+  await maengelschreibenDrucken(nr, stufe.key, frist.value);
+  try { await api('POST', '/api/admin/maengel-schreiben', { gartennr: nr, stufe: stufe.key, frist: frist.value }); S.maengel = null; render(); } catch (e) { handleErr(e); }
+}
 
 function mangelDialog(m, gartennr) {
   const isNew = !m || !m.id;
@@ -5562,7 +5578,16 @@ function adminMaengel() {
       h('div', { class: 'fs-kopf' }, h('b', null, `Garten ${nr}`, l[0].name ? ` · ${l[0].name}` : ''),
         h('span', { class: 'toolbar-gruppe' },
           h('button', { class: 'btn small', onclick: () => neu(nr) }, '+ Mangel'),
-          h('button', { class: 'btn small primary', onclick: () => maengelschreibenDrucken(nr) }, 'Aufforderung schreiben'))),
+          (() => {
+            const stand = Math.max(-1, ...l.map(mangelStand));
+            if (stand >= MAENGEL_STUFEN.length - 1) return h('span', { class: 'badge warn', title: 'Das letzte Schreiben ist verschickt. Über Abmahnung und weitere Schritte entscheidet der Vorstand.' }, 'Abmahnung beraten');
+            const n = MAENGEL_STUFEN[stand + 1];
+            return h('button', { class: 'btn small primary', onclick: () => maengelSchreiben(nr, n) }, n.knopf);
+          })())),
+      (() => {
+        const hist = MAENGEL_STUFEN.map((x) => { const d = l.map((m) => m.stufen && m.stufen[x.key]).filter(Boolean).sort().pop(); return d ? `${x.titel} ${deDate(d)}` : null; }).filter(Boolean);
+        return hist.length ? h('div', { class: 'hint', style: 'margin:2px 0 6px' }, 'Verschickt: ' + hist.join(' · ')) : null;
+      })(),
       h('ul', { class: 'mangel-liste' }, l.map(zeile))))
       : h('div', { class: 'card' }, leer('fertig', 'Keine offenen Mängel', 'Bei der nächsten Begehung gefundene Mängel trägst du hier ein. Die Begehungsliste zum Ausdrucken liegt oben bereit.', '+ Mangel eintragen', () => neu(''))),
     nutzungKarte(),

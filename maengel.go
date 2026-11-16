@@ -26,6 +26,34 @@ type Mangel struct {
 	Beschreibung string `json:"beschreibung"`
 	Frist        string `json:"frist,omitempty"`
 	ErledigtAm   string `json:"erledigtAm,omitempty"`
+	// Stufen: Fahrplan bei verstrichener Frist – Schreiben (erst, erinnerung, zweit) → Datum, an dem es verschickt wurde
+	Stufen map[string]string `json:"stufen,omitempty"`
+}
+
+// maengelStufen: Reihenfolge der Schreiben. Auf die Aufforderung folgt nach Fristablauf eine Erinnerung, danach
+// ein Zweitschreiben mit Hinweis auf die Abmahnung; dann muss der Vorstand über weitere Schritte beraten.
+var maengelStufen = []struct{ Key, Titel string }{
+	{"erst", "Aufforderung"}, {"erinnerung", "Erinnerung"}, {"zweit", "Zweitschreiben (letzte Frist)"},
+}
+
+func stufeGueltig(k string) bool {
+	for _, x := range maengelStufen {
+		if x.Key == k {
+			return true
+		}
+	}
+	return false
+}
+
+// hoechsteStufe: wie weit der Fahrplan bei diesem Mangel ist (-1 = noch kein Schreiben).
+func (m Mangel) hoechsteStufe() int {
+	h := -1
+	for i, x := range maengelStufen {
+		if m.Stufen[x.Key] != "" {
+			h = i
+		}
+	}
+	return h
 }
 
 type mangelAnsicht struct {
@@ -127,7 +155,7 @@ func (a *App) handleMangelSpeichern(neu bool) http.HandlerFunc {
 				return
 			}
 			old := a.st.d.Maengel[idx]
-			in.ID, in.PaechterID = id, old.PaechterID
+			in.ID, in.PaechterID, in.Stufen = id, old.PaechterID, old.Stufen
 			if in.Gartennr != old.Gartennr { // anderer Garten: Pächter neu zuordnen
 				if !ok {
 					writeErr(w, bad(fmt.Sprintf("Für Garten %s ist kein Pächter eingetragen", in.Gartennr)))
@@ -167,6 +195,78 @@ func (a *App) handleMangelLoeschen(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeErr(w, notFound("Mangel nicht gefunden"))
+}
+
+// handleMaengelStufe vermerkt, dass ein Schreiben verschickt wurde: Alle offenen Mängel des Gartens bekommen das Datum
+// und die neue Frist. Das Cockpit erinnert danach an den nächsten Schritt.
+func (a *App) handleMaengelStufe(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Gartennr, Stufe, Frist string
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	in.Gartennr = strings.TrimSpace(in.Gartennr)
+	if !stufeGueltig(in.Stufe) {
+		writeErr(w, bad("Unbekannter Schritt"))
+		return
+	}
+	if f, err := parseDate(in.Frist); err != nil || f.Year() < 2000 || f.Year() > 2100 {
+		writeErr(w, bad("Bitte die neue Frist eintragen"))
+		return
+	}
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	n := 0
+	heute := time.Now().Format("2006-01-02")
+	for i := range a.st.d.Maengel {
+		m := &a.st.d.Maengel[i]
+		if m.Gartennr == in.Gartennr && m.ErledigtAm == "" {
+			if m.Stufen == nil {
+				m.Stufen = map[string]string{}
+			}
+			m.Stufen[in.Stufe], m.Frist = heute, in.Frist
+			n++
+		}
+	}
+	if n == 0 {
+		writeErr(w, notFound("Für diesen Garten sind keine offenen Mängel eingetragen"))
+		return
+	}
+	a.st.audit("Mängelschreiben verschickt: Garten %s (%s)", in.Gartennr, in.Stufe)
+	a.speichernUndAntworten(w, map[string]int{"maengel": n})
+}
+
+// maengelFahrplanLocked: Cockpit-Hinweise zu verstrichenen Fristen, je nachdem wie weit der Fahrplan ist.
+func (s *Store) maengelFahrplanLocked(heute string, add func(stufe, titel, text, ziel, knopf string)) {
+	stand := map[string]int{} // Garten → höchste Stufe der Mängel mit abgelaufener Frist
+	for _, m := range s.d.Maengel {
+		if m.ErledigtAm == "" && m.Frist != "" && m.Frist < heute {
+			if h, ok := stand[m.Gartennr]; !ok || m.hoechsteStufe() > h {
+				stand[m.Gartennr] = m.hoechsteStufe()
+			}
+		}
+	}
+	var gaerten []string
+	for g := range stand {
+		gaerten = append(gaerten, g)
+	}
+	sort.SliceStable(gaerten, func(i, j int) bool { return naturalLess(gaerten[i], gaerten[j]) })
+	ersteStufe := 0
+	for _, g := range gaerten {
+		switch stand[g] {
+		case 1:
+			add("warn", fmt.Sprintf("Garten %s: Frist nach der Erinnerung verstrichen", g), "Zweitschreiben mit letzter Frist schreiben.", "admin:maengel", "Zweitschreiben")
+		case 2:
+			add("err", fmt.Sprintf("Garten %s: letzte Frist verstrichen", g), "Die Mängel sind nicht beseitigt. Im Vorstand über Abmahnung und weitere Schritte beraten und das im Beschlussbuch festhalten.", "admin:maengel", "Mängel")
+		default:
+			ersteStufe++
+		}
+	}
+	if ersteStufe > 0 {
+		add("warn", mehrzahl(ersteStufe, "Mängelfrist abgelaufen", "Mängelfristen abgelaufen"), "Nachsehen, ob die Mängel beseitigt sind, oder eine Erinnerung schreiben.", "admin:maengel", "Mängel")
+	}
 }
 
 // ------------------------------------------------------------------ Begehungsliste (Vordruck)
@@ -295,7 +395,7 @@ func (a *App) begehungslistePDF(r *http.Request) ([]byte, string, error) {
 
 // ------------------------------------------------------------------ Aufforderung an den Pächter
 
-func buildMaengelschreiben(s Settings, p Paechter, ms []Mangel, frist string) ([]byte, error) {
+func buildMaengelschreiben(s Settings, p Paechter, ms []Mangel, frist, stufe string) ([]byte, error) {
 	if len(ms) == 0 {
 		return nil, bad("Für diesen Garten sind keine offenen Mängel eingetragen")
 	}
@@ -305,7 +405,14 @@ func buildMaengelschreiben(s Settings, p Paechter, ms []Mangel, frist string) ([
 	pdf.SetFont("lib", "B", 13)
 	pdf.SetTextColor(mr, mg, mb)
 	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, 7, "Aufforderung zur Beseitigung von Mängeln", "", 0, "L", false, 0, "")
+	ueberschrift := "Aufforderung zur Beseitigung von Mängeln"
+	switch stufe {
+	case "erinnerung":
+		ueberschrift = "Erinnerung: Beseitigung von Mängeln"
+	case "zweit":
+		ueberschrift = "Letzte Aufforderung zur Beseitigung von Mängeln"
+	}
+	pdf.CellFormat(rightX-leftX, 7, ueberschrift, "", 0, "L", false, 0, "")
 	pdf.SetTextColor(0, 0, 0)
 	y += 7
 	pdf.SetFont("lib", "", 10)
@@ -313,7 +420,14 @@ func buildMaengelschreiben(s Settings, p Paechter, ms []Mangel, frist string) ([
 	pdf.CellFormat(rightX-leftX, 6, "Garten "+p.Gartennr, "", 0, "L", false, 0, "")
 	y += 10
 	pdf.SetXY(leftX, y)
-	pdf.MultiCell(rightX-leftX, 5.2, "Liebe Gartenfreundin, lieber Gartenfreund,\n\nbei der Begehung der Gartenanlage wurden in Ihrem Garten die folgenden Mängel festgestellt:", "", "L", false)
+	einleitung := "bei der Begehung der Gartenanlage wurden in Ihrem Garten die folgenden Mängel festgestellt:"
+	switch stufe {
+	case "erinnerung":
+		einleitung = "wir hatten Sie aufgefordert, die folgenden Mängel in Ihrem Garten zu beseitigen. Die Frist ist verstrichen, und wir konnten noch keine Beseitigung feststellen:"
+	case "zweit":
+		einleitung = "trotz unserer Aufforderung und Erinnerung sind die folgenden Mängel in Ihrem Garten nicht beseitigt:"
+	}
+	pdf.MultiCell(rightX-leftX, 5.2, "Liebe Gartenfreundin, lieber Gartenfreund,\n\n"+einleitung, "", "L", false)
 	y = pdf.GetY() + 3
 	for i, m := range ms {
 		if y > 262 {
@@ -340,6 +454,10 @@ func buildMaengelschreiben(s Settings, p Paechter, ms []Mangel, frist string) ([
 	pdf.SetXY(leftX, y)
 	text := fmt.Sprintf("Wir bitten Sie, diese Mängel bis zum %s zu beseitigen. Sind sie bereits behoben oder gibt es Gründe, warum das nicht möglich ist, melden Sie sich bitte beim Vorstand. "+
 		"Wir bitten um Verständnis, dass wir nach Fristablauf weitere Schritte nach Pachtvertrag und Satzung prüfen müssen.", germanDate(frist))
+	if stufe == "zweit" {
+		text = fmt.Sprintf("Wir fordern Sie auf, diese Mängel bis zum %s zu beseitigen. Das ist die letzte Frist. Danach wird der Vorstand über eine Abmahnung und weitere Schritte nach Pachtvertrag, Satzung und Bundeskleingartengesetz entscheiden. "+
+			"Melden Sie sich bitte vorher, wenn es Gründe gibt, warum die Beseitigung nicht möglich ist.", germanDate(frist))
+	}
 	pdf.MultiCell(rightX-leftX, 5.2, text, "", "L", false)
 	y = pdf.GetY() + 8
 	pdf.SetXY(leftX, y)
@@ -414,6 +532,10 @@ func (a *App) maengelschreibenPDF(r *http.Request) ([]byte, string, error) {
 		frist = time.Now().AddDate(0, 0, 14).Format("2006-01-02")
 	}
 	sort.SliceStable(ms, func(i, j int) bool { return ms[i].Datum < ms[j].Datum })
-	pdf, err := buildMaengelschreiben(s, p, ms, frist)
+	stufe := r.URL.Query().Get("stufe")
+	if !stufeGueltig(stufe) {
+		stufe = "erst"
+	}
+	pdf, err := buildMaengelschreiben(s, p, ms, frist, stufe)
 	return pdf, safeName("Maengel_Garten_"+nr, 80) + ".pdf", err
 }

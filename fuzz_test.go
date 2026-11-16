@@ -184,7 +184,7 @@ func FuzzVersammlungUndMaengel(f *testing.F) {
 		}
 		if m, err := cleanMangel(Mangel{Gartennr: garten, Datum: "2026-05-01", Beschreibung: beschreibung}); err == nil {
 			p := Paechter{Gartennr: m.Gartennr, Name: pName, Strasse: pStrasse}
-			if _, err := buildMaengelschreiben(s, p, []Mangel{m}, "2026-06-01"); err != nil {
+			if _, err := buildMaengelschreiben(s, p, []Mangel{m}, "2026-06-01", "erst"); err != nil {
 				t.Fatalf("Mängel-Schreiben: %v", err)
 			}
 		}

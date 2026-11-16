@@ -115,15 +115,7 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	}
 
 	// Mängel und Drittelregelung
-	fristAb := 0
-	for _, m := range s.d.Maengel {
-		if m.ErledigtAm == "" && m.Frist != "" && m.Frist < heuteISO {
-			fristAb++
-		}
-	}
-	if fristAb > 0 {
-		add("warn", mehrzahl(fristAb, "Mängelfrist abgelaufen", "Mängelfristen abgelaufen"), "Nachsehen, ob die Mängel beseitigt sind, oder eine Aufforderung schreiben.", "admin:maengel", "Mängel")
-	}
+	s.maengelFahrplanLocked(heuteISO, add)
 	unter := 0
 	for _, z := range s.nutzungUebersichtLocked() {
 		if z.Unter {
