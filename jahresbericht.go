@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-pdf/fpdf"
@@ -33,6 +34,9 @@ type jahresberichtDaten struct {
 	Termine     []Termin
 	ErstelltAm  time.Time
 	VorjahrJahr int
+	// Vereinsleben: Mängel der Begehungen, Arbeitseinsätze und Beschlüsse des Jahres (ohne Namen)
+	Maengel, MaengelErledigt, Einsaetze int
+	Beschluesse                         []Beschluss
 }
 
 func (s *Store) jahresberichtLocked(year int, jetzt time.Time) (jahresberichtDaten, bool) {
@@ -81,6 +85,26 @@ func (s *Store) jahresberichtLocked(year int, jetzt time.Time) (jahresberichtDat
 	}
 	sort.SliceStable(d.Uebergaben, func(i, j int) bool { return d.Uebergaben[i].Datum < d.Uebergaben[j].Datum })
 	d.Warteliste = len(s.d.Warteliste)
+	jp := fmt.Sprintf("%d-", year)
+	for _, m := range s.d.Maengel {
+		if strings.HasPrefix(m.Datum, jp) {
+			d.Maengel++
+			if m.ErledigtAm != "" {
+				d.MaengelErledigt++
+			}
+		}
+	}
+	for _, t := range s.d.Termine {
+		if t.Art == "Arbeitseinsatz" && strings.HasPrefix(t.Datum, jp) {
+			d.Einsaetze++
+		}
+	}
+	for _, b := range s.d.Beschluesse {
+		if strings.HasPrefix(b.Datum, jp) {
+			d.Beschluesse = append(d.Beschluesse, b)
+		}
+	}
+	sort.SliceStable(d.Beschluesse, func(i, j int) bool { return d.Beschluesse[i].Datum < d.Beschluesse[j].Datum })
 	heute := jetzt.Format("2006-01-02")
 	for _, t := range s.d.Termine {
 		if t.Datum >= heute && len(d.Termine) < 8 {
@@ -374,6 +398,22 @@ func buildJahresbericht(d jahresberichtDaten) ([]byte, error) {
 	if d.MitStunden > 0 {
 		punkt(fmt.Sprintf("Pflichtstunden (%s h) erfüllt: %d von %d Gärten, zusammen %s Stunden Gemeinschaftsarbeit.",
 			fmtFlex(s.Pflichtstunden), d.PflichtOK, d.MitStunden, fmtFlex(d.Stunden)))
+	}
+	if d.Einsaetze > 0 {
+		punkt(fmt.Sprintf("%d Arbeitseinsätze in der Anlage.", d.Einsaetze))
+	}
+	if d.Maengel > 0 {
+		punkt(fmt.Sprintf("Bei den Begehungen wurden %d Mängel festgestellt, davon sind %d beseitigt.", d.Maengel, d.MaengelErledigt))
+	}
+	if n := len(d.Beschluesse); n > 0 {
+		punkt(fmt.Sprintf("%d Beschlüsse im Beschlussbuch:", n))
+		for i, b := range d.Beschluesse {
+			if i >= 8 {
+				punkt(fmt.Sprintf("… und %d weitere.", n-i))
+				break
+			}
+			punkt(germanDate(b.Datum) + ": " + b.Titel + " (" + b.Ergebnis + ")")
+		}
 	}
 	y += 5
 
