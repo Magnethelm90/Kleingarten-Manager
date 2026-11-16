@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +45,40 @@ type uebergabeDaten struct {
 	Jahre    []int
 	// Inventar: Schlüssel (wer hat welchen) und Geräte, je eine Zeile
 	Inventar [][2]string
+	// Ämter, laufende Verträge und letzte Beschlüsse, je eine Zeile (Bezeichnung, Angabe)
+	Aemter, Vertraege, Beschluesse [][2]string
+}
+
+// uebergabeVerwaltungLocked trägt Ämter, Verträge und Beschlüsse für die Akte zusammen.
+func (s *Store) uebergabeVerwaltungLocked(d *uebergabeDaten) {
+	for _, a := range s.d.Aemter {
+		if a.Ehemalig {
+			continue
+		}
+		angabe := a.Name + " (seit " + germanDate(a.Seit)
+		if a.Bis != "" {
+			angabe += ", bis " + germanDate(a.Bis)
+		}
+		d.Aemter = append(d.Aemter, [2]string{a.Amt, angabe + ")"})
+	}
+	for _, v := range s.d.Vertraege {
+		if v.Gekuendigt != "" {
+			continue
+		}
+		angabe := v.Partner
+		if v.Ende != "" {
+			angabe += " · läuft bis " + germanDate(v.Ende)
+		}
+		d.Vertraege = append(d.Vertraege, [2]string{v.Bezeichnung, strings.TrimSpace(strings.TrimPrefix(angabe, " · "))})
+	}
+	bs := append([]Beschluss{}, s.d.Beschluesse...)
+	sort.SliceStable(bs, func(i, j int) bool { return bs[i].Datum > bs[j].Datum })
+	for i, b := range bs {
+		if i >= 8 {
+			break
+		}
+		d.Beschluesse = append(d.Beschluesse, [2]string{germanDate(b.Datum) + "  " + b.Nummer, b.Titel + " (" + b.Ergebnis + ")"})
+	}
 }
 
 func (s *Store) uebergabeLocked(heute time.Time) uebergabeDaten {
@@ -57,6 +92,7 @@ func (s *Store) uebergabeLocked(heute time.Time) uebergabeDaten {
 		}
 	}
 	d.Gaerten = len(s.belegteGaertenLocked())
+	s.uebergabeVerwaltungLocked(&d)
 	for k := range s.d.Jahre {
 		if y, err := strconv.Atoi(k); err == nil {
 			d.Jahre = append(d.Jahre, y)
@@ -208,6 +244,34 @@ func buildUebergabe(d uebergabeDaten, heute time.Time) ([]byte, error) {
 			}
 			y = mappeTabelle(pdf, y, d.Inventar[i:min(i+12, len(d.Inventar))])
 		}
+	}
+	for _, abschnitt := range []struct {
+		titel  string
+		zeilen [][2]string
+	}{{"Ämter", d.Aemter}, {"Laufende Verträge und Versicherungen", d.Vertraege}, {"Letzte Beschlüsse", d.Beschluesse}} {
+		if len(abschnitt.zeilen) == 0 {
+			continue
+		}
+		if y > 230 {
+			pdf.AddPage()
+			y = 20
+		}
+		y = mappeAbschnitt(pdf, s, y, abschnitt.titel)
+		for i := 0; i < len(abschnitt.zeilen); i += 12 {
+			if y > 250 {
+				pdf.AddPage()
+				y = 20
+			}
+			y = mappeTabelle(pdf, y, abschnitt.zeilen[i:min(i+12, len(abschnitt.zeilen))])
+		}
+	}
+	if y > 200 {
+		pdf.AddPage()
+		y = 20
+	}
+	y = mappeAbschnitt(pdf, s, y, "Checkliste zur Übergabe")
+	for _, p := range amtsWechselPunkte {
+		y = mappeText(pdf, y, "[   ]  "+p.Text, 9.5) - 1.5
 	}
 	if d.Info.Ansprechpartner != "" || d.Info.Hinweise != "" {
 		if y > 230 {
