@@ -205,6 +205,7 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	s.kuendigungAufgabenLocked(heute, add)
 	s.vertragAufgabenLocked(heute, add)
 	s.probeAufgabeLocked(heute, add)
+	s.stundenAufgabeLocked(heute, add)
 	if s.modulAn("eichung") {
 		s.eichungAufgabenLocked(heute, add)
 	}

@@ -6137,6 +6137,40 @@ async function loadMeldung(jahr) {
   render();
 }
 
+// Arbeitsstunden-Konto: Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt.
+async function stundenkontoDialog(jahr) {
+  let k;
+  const laden = async () => { k = await api('GET', `/api/admin/stundenkonto?year=${jahr}`); };
+  try { await laden(); } catch (e) { handleErr(e); return; }
+  const inhalt = h('div');
+  const zeichnen = () => {
+    inhalt.replaceChildren(
+      h('p', { class: 'hint' }, `Pflicht: ${nfFlex.format(k.pflicht)} Stunden je Garten, je fehlende Stunde ${eur(k.jeStunde)}. ${k.erfuellt} von ${k.zeilen.length} Gärten haben die Pflicht erfüllt, zusammen ${nfFlex.format(k.summe)} Stunden geleistet. Die Ersatzzahlung kommt automatisch in die Jahresrechnung.`),
+      h('table', { class: 'tbl' },
+        h('thead', null, h('tr', null, ['Garten', 'Name', 'Geleistet', 'Fehlt', 'Ersatzzahlung', ''].map((t, i) => h('th', { class: i > 1 && i < 5 ? 'r' : '' }, t)))),
+        h('tbody', null, k.zeilen.map((z) => h('tr', null,
+          h('td', null, z.gartennr), h('td', null, z.name),
+          h('td', { class: 'r' }, nfFlex.format(z.ist), z.einsaetze ? h('span', { class: 'hint' }, ` (${z.einsaetze} Einsätze)`) : null),
+          h('td', { class: 'r' }, z.erfuellt ? h('span', { class: 'badge ok' }, 'erfüllt') : nfFlex.format(z.fehlt)),
+          h('td', { class: 'r' }, z.ersatz ? eur(z.ersatz) : '–'),
+          h('td', { class: 'r' }, h('button', { class: 'btn small', onclick: () => nachtragen(z) }, '+ Stunden')))))),
+      h('p', { class: 'hint' }, `Zu erwartende Ersatzzahlungen insgesamt: ${eur(k.ersatzSumme)}`));
+  };
+  const nachtragen = async (z) => {
+    const std = h('input', { type: 'number', step: '0.5', min: '-24', max: '24', value: '', style: 'width:6em', placeholder: 'z. B. 3' });
+    const ok = await modal(`Stunden nachtragen – Garten ${z.gartennr}`, h('div', null,
+      h('p', { class: 'hint' }, `${z.name} hat bisher ${nfFlex.format(z.ist)} Stunden. Für Einsätze mit Termin im Jahresplaner trägst du die Stunden dort ein. Hier geht es um einzelne Stunden außerhalb davon. Mit einer negativen Zahl nimmst du Stunden zurück.`),
+      h('label', null, 'Stunden ', std)), [{ label: 'Abbrechen', value: false }, { label: 'Eintragen', cls: 'primary', value: true }]);
+    if (!ok) return;
+    try {
+      await api('POST', '/api/admin/stundenkonto/buchen', { paechterId: z.paechterId, jahr, stunden: Number(std.value) });
+      await laden(); zeichnen(); await reload(); toast('Stunden eingetragen', 'ok');
+    } catch (e) { handleErr(e); }
+  };
+  zeichnen();
+  await breiterDialog(`Arbeitsstunden ${jahr}`, inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
+}
+
 function adminBerichte() {
   const st = S.state;
   const jahr = S.berichtJahr || st.currentYear;
@@ -6164,6 +6198,8 @@ function adminBerichte() {
         h('button', { class: 'btn', onclick: paechterlisteDrucken }, 'Drucken')),
       kachel('karte', 'Lageplan', 'Als Aushang ohne Namen oder für den Vorstand mit Namen.',
         h('button', { class: 'btn', onclick: () => lageplanDrucken(true) }, 'Drucken')),
+      kachel('uhr', `Arbeitsstunden ${jahr}`, 'Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt. Einzelne Stunden lassen sich nachtragen.',
+        h('button', { class: 'btn', onclick: () => stundenkontoDialog(jahr) }, 'Ansehen')),
       kachel('zaehler', `Fehlende Zählerstände ${st.currentYear}`, 'Wer hat noch keinen Stand gemeldet? Mit Aushang ohne Namen und E-Mail-Erinnerung.',
         h('button', { class: 'btn', onclick: () => zaehlerErinnerungDialog(st.currentYear) }, 'Prüfen')),
       kachel('personen', 'Willkommensmappe & Exposé', 'Texte für die Mappe neuer Pächter und den Steckbrief freier Gärten: Ansprechpartner und das Wichtigste aus der Gartenordnung.',
