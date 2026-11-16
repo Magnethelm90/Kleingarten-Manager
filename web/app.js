@@ -6140,6 +6140,25 @@ async function loadMeldung(jahr) {
   render();
 }
 
+// Ablesung mit dem Handy: Ergebnisdatei vom Handy einlesen und zeigen, was übernommen wurde.
+function handyErgebnisEinlesen() {
+  const datei = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none' });
+  datei.addEventListener('change', async () => {
+    if (!datei.files[0]) return;
+    const fd = new FormData(); fd.append('file', datei.files[0]);
+    try {
+      const r = await api('POST', '/api/admin/ablesung-handy/import', fd, true);
+      await reload();
+      await modal('Zählerstände übernommen', h('div', null,
+        h('p', null, `${r.uebernommen} Gärten wurden aktualisiert, ${r.unveraendert} waren schon so eingetragen.`),
+        r.hinweise.length ? h('div', { class: 'banner warn' }, h('b', null, 'Bitte prüfen:'), h('ul', null, r.hinweise.map((x) => h('li', null, x)))) : h('p', { class: 'hint' }, 'Keine Auffälligkeiten.')),
+      [{ label: 'Schließen', cls: 'primary', value: true }]);
+    } catch (e) { handleErr(e); }
+  });
+  document.body.append(datei); datei.click();
+  setTimeout(() => datei.remove(), 60000);
+}
+
 // Arbeitsstunden-Konto: Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt.
 async function stundenkontoDialog(jahr) {
   let k;
@@ -6201,6 +6220,9 @@ function adminBerichte() {
         h('button', { class: 'btn', onclick: paechterlisteDrucken }, 'Drucken')),
       kachel('karte', 'Lageplan', 'Als Aushang ohne Namen oder für den Vorstand mit Namen.',
         h('button', { class: 'btn', onclick: () => lageplanDrucken(true) }, 'Drucken')),
+      kachel('zaehler', `Ablesung mit dem Handy ${st.currentYear}`, 'Eine Datei fürs Handy, die ohne Internet funktioniert: Zählerstände beim Rundgang eintippen, das Ergebnis hier wieder einlesen. Die Datei enthält Namen – vertraulich behandeln.',
+        h('div', { class: 'toolbar-gruppe' }, h('a', { class: 'btn', href: '/api/admin/ablesung-handy', download: '' }, 'Datei fürs Handy'), ' ',
+          h('button', { class: 'btn', onclick: handyErgebnisEinlesen }, 'Ergebnis einlesen'))),
       kachel('uhr', `Arbeitsstunden ${jahr}`, 'Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt. Einzelne Stunden lassen sich nachtragen.',
         h('button', { class: 'btn', onclick: () => stundenkontoDialog(jahr) }, 'Ansehen')),
       kachel('zaehler', `Fehlende Zählerstände ${st.currentYear}`, 'Wer hat noch keinen Stand gemeldet? Mit Aushang ohne Namen und E-Mail-Erinnerung.',
