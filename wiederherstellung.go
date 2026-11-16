@@ -79,8 +79,6 @@ func (s *Store) probeSicherungLocked(titel, dir string, jetzt time.Time) probeZe
 	switch {
 	case alter > 7:
 		stufe, text = "warn", text+fmt.Sprintf(" Die Sicherung ist %d Tage alt – seitdem hat sich etwas geändert oder es wurde nicht gesichert.", alter)
-	case len(d.Paechter) < len(s.d.Paechter)/2 && len(s.d.Paechter) > 4:
-		stufe, text = "warn", text+" Es sind deutlich weniger Pächter enthalten als heute."
 	}
 	return probeZeile{titel, stufe, text}
 }
