@@ -1956,6 +1956,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/admin/vorauszahlungen/{id}", a.admin(a.handleVzLoeschen))
 	mux.HandleFunc("GET /api/admin/vorauszahlungen/erinnerung", a.admin(a.pdfAnzeigen(a.vzErinnerungPDF)))
 	mux.HandleFunc("POST /api/admin/vorauszahlungen/erinnerung/oeffnen", a.admin(a.pdfOeffnen(a.vzErinnerungPDF)))
+	mux.HandleFunc("GET /api/admin/termine/{id}/paket", a.admin(a.handleVersammlungspaket))
 	mux.HandleFunc("GET /api/admin/maengel", a.admin(a.handleMaengelListe))
 	mux.HandleFunc("POST /api/admin/maengel", a.admin(a.handleMangelSpeichern(true)))
 	mux.HandleFunc("PUT /api/admin/maengel/{id}", a.admin(a.handleMangelSpeichern(false)))

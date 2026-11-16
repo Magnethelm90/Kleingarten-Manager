@@ -5813,6 +5813,7 @@ function viewTermine() {
           istAdmin ? h('div', { class: 'termin-aktionen' },
             t.art === 'Versammlung' || t.art === 'Vorstand' ? h('button', { class: 'btn small', title: 'Einladung mit Tagesordnung als PDF', onclick: () => einladungDrucken(t) }, 'Einladung') : null,
             t.art === 'Versammlung' || t.art === 'Vorstand' ? h('button', { class: 'btn small', title: 'Liste aller Pächter zum Unterschreiben', onclick: () => anwesenheitDrucken(t) }, 'Anwesenheit') : null,
+            t.art === 'Versammlung' ? h('a', { class: 'btn small', title: 'Einladung, Anwesenheitsliste, Jahresbericht, Prüfbericht und Protokoll als ZIP', href: `/api/admin/termine/${encodeURIComponent(t.id)}/paket` }, 'Paket') : null,
             t.art === 'Versammlung' || t.art === 'Vorstand' ? h('button', { class: 'btn small' + (t.datum <= heute ? ' primary' : ''), title: 'Protokoll schreiben – Beschlüsse landen im Beschlussbuch', onclick: () => sitzungDialog(t) }, 'Protokoll') : null,
             t.art === 'Arbeitseinsatz' ? h('button', { class: 'btn small', title: 'Liste zum Eintragen von Beginn und Ende', onclick: () => stundenlisteDrucken(t) }, 'Stundenliste') : null,
             t.art === 'Arbeitseinsatz' ? h('button', { class: 'btn small primary', title: 'Abhaken, wer dabei war, und die Stunden buchen', onclick: async () => { if (await stundenDialog(t)) await reload(); } }, 'Stunden eintragen') : null,
