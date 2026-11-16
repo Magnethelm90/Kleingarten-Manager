@@ -208,6 +208,11 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Automatische Sicherungen** bei jeder Änderung, vor heiklen Schritten und vor jedem Jahreswechsel (zwölf Jahre
   lang), auf Wunsch zusätzlich auf einem USB-Stick oder Netzlaufwerk; jede Sicherung lässt sich wieder einspielen
 - **Verschlüsselte Sicherung** für den USB-Stick: eine Datei, die sich nur mit eurem Passwort öffnen lässt
+- **Wiederherstellungs-Probe:** liest die jüngsten Sicherungen probeweise ein; das Cockpit erinnert alle 90 Tage
+- **Versammlungspaket:** Einladung, Anwesenheitsliste, Jahresbericht, Prüfbericht und Protokoll als ZIP
+- **Mängel-Fahrplan:** Aufforderung, Erinnerung und Zweitschreiben mit Fristen; danach berät der Vorstand
+- **Arbeitsstunden-Konto** mit Ersatzzahlung vorab, **Ablesung mit dem Handy** (Datei ohne Internet),
+  **Wartelisten-Briefe** und Nachrücker-Vorschlag, Amtsübergabe mit Ämtern, Verträgen und Checkliste
 - **DSGVO-Hilfen:** Auskunft je Person als Datei, endgültiges Löschen auch aus allen Sicherungen, Bereinigung nach
   Ablauf der Aufbewahrungsfrist, Änderungsprotokoll. Vorlagen für Verarbeitungsverzeichnis und
   Mitgliederinformation stehen in [DATENSCHUTZ.md](DATENSCHUTZ.md).

@@ -124,6 +124,19 @@ sich nicht zurücksetzen. Wird eine Person endgültig gelöscht, entfernt das Pr
 Datenordner, weil es sie nicht bereinigen kann. **Kopien auf dem USB-Stick müsst ihr danach selbst durch eine neue
 ersetzen** – sonst enthalten sie die gelöschte Person weiter.
 
+**Ablesedatei fürs Handy:** Die HTML-Datei enthält Gartennummern, Namen und Zählernummern der aktiven Pächter und liegt
+nach dem Versand auf Handys und in Postfächern. Sie nur an Personen weitergeben, die den Rundgang machen, und danach
+löschen. Die Ergebnisdatei enthält keine Namen, nur interne Kennungen und Zählerstände. Im Programm bleibt nichts
+davon gespeichert, außer den übernommenen Zählerständen.
+
+**Versammlungspaket und Wartelisten-Briefe:** Das Paket (ZIP) enthält die Anwesenheitsliste mit Pächternamen und
+ist vertraulich zu behandeln; der Jahresbericht darin enthält keine Namen. Die Briefe an Bewerber werden nicht
+gespeichert, sie entstehen bei jedem Aufruf neu aus der Warteliste und verschwinden mit dem Eintrag.
+
+**Wiederherstellungs-Probe, Mängel-Fahrplan, Arbeitsstunden:** Die Probe speichert nur Datum und Ergebnis. Der
+Mängel-Fahrplan speichert nur, an welchem Tag welches Schreiben verschickt wurde. Nachgetragene Stunden stehen bei
+der Ablesung des Pächters und im Änderungsprotokoll (mit Gartennummer, ohne Namen).
+
 **Begehungen:** Geschätzte Flächenanteile (Drittelregelung) gehören zum Pächter, der den Garten damals hatte; sie
 stehen in der Auskunft und werden mit der Person gelöscht.
 

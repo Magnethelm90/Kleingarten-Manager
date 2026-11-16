@@ -64,6 +64,12 @@
 - Verschlüsselte Sicherung (tresor.go: AES-256-GCM + PBKDF2, Ordner »Verschlüsselte Sicherungen«, Öffnen legt eine
   gewöhnliche Sicherung »entschluesselt« ab; `entferneTresore` beim endgültigen Löschen). Dialoge: »cancel« nur
   behandeln, wenn `e.target === dlg` (Datei-Felder im Dialog feuern auch »cancel«).
+- Ideen-Paket Nov 2026: wiederherstellung.go (Probe, Data.Probe, Cockpit 90 Tage), versammlungspaket.go (ZIP, Knopf »Paket«
+  bei Versammlungen), maengel.go Fahrplan (Mangel.Stufen erst/erinnerung/zweit, `maengel-schreiben`, Cockpit
+  `maengelFahrplanLocked`), stundenkonto.go (Karte in Berichte, bucht über `bucheStunden`), warteliste_brief.go (3 Briefe +
+  Nachrücker), ablesung_handy.go + ablesung_handy_seite.go (eigenständige HTML-Datei, Ergebnis-JSON; JS darf kein »NaN«
+  im Text haben, sonst schlägt TestAlleLeseRouten an), jahresbericht.go (+Mängel/Einsätze/Beschlüsse), vereinsakte.go (+Ämter,
+  Verträge, Beschlüsse, Checkliste).
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)
