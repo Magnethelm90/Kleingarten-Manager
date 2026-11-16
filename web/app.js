@@ -822,6 +822,18 @@ async function sicherungJetzt() {
   } catch (e) { handleErr(e); }
 }
 
+// Wiederherstellungs-Probe: liest die jüngsten Sicherungen probeweise ein und zeigt, was dabei herauskam.
+async function wiederherstellungsProbe() {
+  let r;
+  try { r = await api('POST', '/api/admin/wiederherstellungsprobe'); } catch (e) { handleErr(e); return; }
+  const zeilen = r.zeilen.map((z) => h('div', { class: 'banner ' + (z.stufe === 'ok' ? 'info' : z.stufe), style: 'margin:6px 0' },
+    h('b', null, z.titel), h('div', null, z.text)));
+  await modal(r.ok ? 'Probe bestanden' : 'Probe: Handlungsbedarf',
+    h('div', null, h('p', { class: 'hint' }, 'Es wurde nichts verändert. Das Programm hat die Sicherungen so eingelesen, wie es beim Wiederherstellen geschähe.'), ...zeilen),
+    [{ label: 'Schließen', cls: 'primary', value: true }]);
+  await reload();
+}
+
 function zweiteSicherungBanner(st, istAdmin) {
   const z = st.zweiteSicherung || {};
   if (S.zweiteDismissed || !istAdmin || !st.paechter.length) return null;
@@ -4756,6 +4768,7 @@ function adminData() {
       h('div', { class: 'actions', style: 'margin-top:8px' },
         h('button', { class: 'btn', title: 'Sofort eine Sicherung anlegen und in den zweiten Sicherungsordner kopieren', onclick: sicherungJetzt }, 'Jetzt sichern'),
         h('a', { class: 'btn', href: '/api/admin/backup' }, 'Gesamten Datenbestand herunterladen'),
+        h('button', { class: 'btn', title: 'Liest die jüngsten Sicherungen probeweise ein – ohne etwas zu verändern', onclick: wiederherstellungsProbe }, 'Sicherungen prüfen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'sicherungen' }).catch(handleErr) }, 'Sicherungsordner öffnen'),
         h('button', { class: 'btn', onclick: () => api('POST', '/api/open-folder', { which: 'daten' }).catch(handleErr) }, 'Datenordner öffnen')),
       h('h4', { style: 'margin:16px 0 4px' }, 'Verschlüsselt für den USB-Stick', hilfe('Die gewöhnlichen Sicherungen sind nicht verschlüsselt: Wer den Stick findet, kann sie lesen. Die verschlüsselte Sicherung ist eine einzelne Datei, die sich nur mit eurem Passwort öffnen lässt. Sie enthält den Datenbestand, aber keine Rechnungs-PDFs und Belege.')),

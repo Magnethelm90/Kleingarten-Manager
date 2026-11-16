@@ -1779,6 +1779,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/sicherungen/wiederherstellen", a.admin(a.handleSicherungWiederherstellen))
 	mux.HandleFunc("POST /api/admin/sicherungen/ansehen", a.admin(a.handleSicherungAnsehen))
 	mux.HandleFunc("GET /api/admin/abschlusspruefung", a.admin(a.handleAbschlussPruefung))
+	mux.HandleFunc("POST /api/admin/wiederherstellungsprobe", a.admin(a.handleProbe))
 	mux.HandleFunc("POST /api/admin/sicherung-jetzt", a.admin(a.handleSicherungJetzt))
 	mux.HandleFunc("POST /api/admin/sicherung-verschluesselt", a.admin(a.handleTresorErstellen))
 	mux.HandleFunc("POST /api/admin/sicherung-entschluesseln", a.admin(a.handleTresorOeffnen))

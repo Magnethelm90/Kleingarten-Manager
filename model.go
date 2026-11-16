@@ -257,6 +257,9 @@ type Data struct {
 	// Rechnungen) – für Rechner, die mehrere Personen nutzen. Siehe vollschutz in api.go.
 	AllesGeschuetzt bool `json:"allesGeschuetzt,omitempty"`
 
+	// Probe: Ergebnis der letzten Wiederherstellungs-Probe (wiederherstellung.go).
+	Probe *Wiederherstellungsprobe `json:"probe,omitempty"`
+
 	// AusModule: ausgeblendete Bereiche (module.go); leer = alles sichtbar.
 	AusModule []string `json:"ausModule,omitempty"`
 
