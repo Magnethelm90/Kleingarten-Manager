@@ -203,6 +203,9 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	}
 	s.schwundAufgabenLocked(heute, add)
 	s.kuendigungAufgabenLocked(heute, add)
+	if s.modulAn("warteliste") {
+		s.nachrueckerAufgabeLocked(add)
+	}
 	s.vertragAufgabenLocked(heute, add)
 	s.probeAufgabeLocked(heute, add)
 	s.stundenAufgabeLocked(heute, add)

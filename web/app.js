@@ -5270,6 +5270,9 @@ function adminWarteliste() {
           h('button', { class: 'btn small primary', onclick: () => gartenVergeben(b) }, 'Garten vergeben'), ' ',
           h('button', { class: 'btn small', onclick: async () => { if (await bewerberDialog(b)) { S.warteliste = null; S.dashWarteliste = null; render(); } } }, 'Bearbeiten'), ' ',
           mehrMenue([
+            ...[['angebot', 'Brief: Garten anbieten'], ['nachfrage', 'Brief: Interesse nachfragen'], ['bestaetigung', 'Brief: Anmeldung bestätigen']].map(([art, label]) => ({
+              label, aktion: () => pdfDrucken({ url: `/api/admin/warteliste/${encodeURIComponent(b.id)}/brief?art=${art}`, oeffnenUrl: `/api/admin/warteliste/${encodeURIComponent(b.id)}/brief/oeffnen?art=${art}`,
+                titel: label, meldung: () => 'Der Brief wurde im PDF-Programm geöffnet – dort drucken oder als PDF verschicken.' }) })),
             { label: 'Interesse heute bestätigt', aktion: () => bestaetigen(b) },
             { label: 'Von der Liste löschen', gefahr: true, aktion: () => loeschen(b) }])))))))
       : leer('personen', 'Niemand auf der Warteliste', 'Wer sich für einen Garten interessiert, kommt hier auf die Liste. Wird ein Garten frei, siehst du sofort, wer als Nächstes dran ist.', '+ Auf die Warteliste setzen', neu));
