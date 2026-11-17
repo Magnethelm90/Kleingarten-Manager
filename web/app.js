@@ -186,10 +186,17 @@ function handleErr(e) {
   toast(e.message, 'err');
 }
 
+let dialogZaehler = 0;
 function modal(title, body, buttons) {
   return new Promise((resolve) => {
-    const dlg = h('dialog');
-    const close = (val) => { dlg.close(); dlg.remove(); resolve(val); };
+    const titelId = 'dlg-titel-' + (++dialogZaehler);
+    const dlg = h('dialog', { 'aria-labelledby': titelId });
+    const vorher = document.activeElement;
+    const close = (val) => {
+      dlg.close(); dlg.remove(); resolve(val);
+      // Fokus zurück an die Stelle, von der aus der Dialog geöffnet wurde (Tastaturbedienung).
+      if (vorher && vorher.isConnected && typeof vorher.focus === 'function') vorher.focus();
+    };
     const foot = h('div', { class: 'dfoot' });
     for (const b of buttons.filter(Boolean)) {
       foot.append(h('button', {
@@ -200,7 +207,7 @@ function modal(title, body, buttons) {
         },
       }, b.label));
     }
-    dlg.append(h('div', { class: 'dhead' }, title), h('div', { class: 'dbody' }, body), foot);
+    dlg.append(h('div', { class: 'dhead', id: titelId }, title), h('div', { class: 'dbody' }, body), foot);
     // »cancel« kommt auch von Datei-Feldern im Dialog (Auswahl abgebrochen) – nur das eigene Esc schließt.
     dlg.addEventListener('cancel', (e) => { if (e.target !== dlg) return; e.preventDefault(); close(undefined); });
     document.body.append(dlg);
@@ -400,6 +407,7 @@ function render() {
   }
 
   app.append(
+    h('a', { class: 'sprunglink', href: '#inhalt', onclick: (e) => { e.preventDefault(); document.getElementById('inhalt')?.focus(); } }, 'Zum Inhalt springen'),
     h('header', { class: 'top' },
       h('button', { class: 'menue-knopf', title: 'Menü', 'aria-label': 'Menü', onclick: () => { S.menueOffen = !S.menueOffen; render(); } }, icon('menue', 20)),
       h('div', { class: 'brand' }, st.settings.logo ? h('span', { class: 'logo bild' }, h('img', { src: `/api/logo?v=${encodeURIComponent(st.settings.logo)}`, alt: '' })) : h('span', { class: 'logo' }, icon('blatt', 20)), h('div', null, h('b', null, 'Kleingarten-Manager'), h('span', { title: st.settings.vereinName }, st.settings.vereinName))),
@@ -411,7 +419,7 @@ function render() {
     ),
     h('div', { class: 'shell' },
     seitenleiste(st),
-    h('main', null,
+    h('main', { id: 'inhalt', tabindex: '-1' },
       st.sperrHinweis ? h('div', { class: 'banner err' }, st.sperrHinweis) : null,
       demoBanner(st),
       sicherungBanner(st),
@@ -6591,7 +6599,7 @@ function besichtigungenKarte(st, istAdmin) {
 // ------------------------------------------------------------------ Start
 
 (async function start() {
-  document.body.append(h('div', { id: 'toasts' }));
+  document.body.append(h('div', { id: 'toasts', role: 'status', 'aria-live': 'polite' }));
   try { await load(); render(); } catch (e) {
     document.getElementById('app').replaceChildren(h('div', { class: 'center card' }, h('h2', null, 'Verbindung fehlgeschlagen'), h('p', null, e.message)));
   }
