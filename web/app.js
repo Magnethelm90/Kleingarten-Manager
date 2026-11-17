@@ -3675,6 +3675,7 @@ function adminPaechter() {
           h('button', { class: 'btn small', onclick: async () => { if (await paechterDialog(p)) await reload(); } }, 'Bearbeiten'), ' ',
           p.gartennr ? [h('button', { class: 'btn small', title: `Gartenakte von Garten ${p.gartennr}: Dokumente, Wertermittlungen, Übergaben, Verlauf`, onclick: () => gartenakteDialog(p.gartennr.trim()) }, 'Akte'), ' '] : null,
           mehrMenue([
+            p.gartennr && !p.ausgeschiedenAm ? { label: 'Wechsel-Assistent …', title: 'Schritt für Schritt: Kündigung, Wertermittlung, Schlüssel, Übergabe', aktion: () => wechselAssistent(p) } : null,
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Pächterwechsel …', title: 'Garten an einen neuen Pächter übergeben (Schlussrechnung, Übergabeprotokoll, neuer Pächter)', aktion: () => paechterwechselDialog(p) } : null,
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Kündigung erfassen …', title: 'Kündigung mit Frist und Fahrplan bis zur Übergabe', aktion: async () => { if (await kuendigungDialog(p)) { adminTabWaehlen('kuendigungen'); render(); } } } : null,
             p.gartennr && p.gartengroesse > 0 ? { label: 'Pachtvertrag …', title: 'Unterpachtvertrag zum Unterschreiben, auf Wunsch in die Gartenakte', aktion: () => pachtvertragDialog(p) } : null,
@@ -5052,6 +5053,63 @@ function naechsteMitgliedsnr() {
   let max = 0;
   for (const p of S.state.paechter) { const n = parseInt(p.mitgliedsnr, 10); if (n > max) max = n; }
   return String(max + 1);
+}
+
+// ------------------------------------------------------------------ Pächterwechsel-Assistent
+// Führt Schritt für Schritt durch den Wechsel eines Gartens. Der Stand kommt aus dem Fahrplan der Kündigung; jeder
+// Schritt hat einen Knopf, der die vorhandene Funktion öffnet. Nach jeder Aktion zeigt der Assistent den neuen Stand.
+async function wechselAssistent(p) {
+  const holen = async () => (await api('GET', '/api/admin/kuendigungen')).kuendigungen.find((x) => x.paechterId === p.id && !x.abgeschlossen) || null;
+  let k;
+  try { k = await holen(); } catch (e) { handleErr(e); return; }
+  const inhalt = h('div');
+  let aktuell = p;
+  const frisch = async () => {
+    try { k = await holen(); await reload(); aktuell = S.state.paechter.find((x) => x.id === p.id) || aktuell; } catch (e) { handleErr(e); }
+    zeichnen();
+  };
+  const dlg = { schliessen: null };
+  const aktionen = {
+    bestaetigung: ['Bestätigung drucken', () => pdfDrucken({ url: `/api/admin/kuendigungen/${encodeURIComponent(k.id)}/bestaetigung`, oeffnenUrl: `/api/admin/kuendigungen/${encodeURIComponent(k.id)}/bestaetigung/oeffnen`,
+      titel: 'Kündigungsbestätigung', meldung: () => 'Die Bestätigung wurde im PDF-Programm geöffnet – dort drucken.' }).then(frisch)],
+    warteliste: ['Zur Warteliste', () => { dlg.schliessen(true); adminTabWaehlen('warteliste'); render(); }],
+    wertermittlung: ['Wertermittlung anlegen', async () => { await wertermittlungDialog(p.gartennr); await frisch(); }],
+    raeumung: ['Zu den Mängeln', () => { dlg.schliessen(true); adminTabWaehlen('maengel'); render(); }],
+    schluessel: ['Zu Schlüssel & Geräte', () => { dlg.schliessen(true); adminTabWaehlen('inventar'); render(); }],
+    uebergabe: ['Pächterwechsel starten', async () => { await paechterwechselDialog(aktuell); await frisch(); }],
+  };
+  const markieren = async (key, an) => {
+    try { await api('POST', `/api/admin/kuendigungen/${encodeURIComponent(k.id)}/schritt`, { schritt: key, erledigt: an }); await frisch(); } catch (e) { handleErr(e); }
+  };
+  const zeichnen = () => {
+    if (!k) {
+      inhalt.replaceChildren(
+        h('p', null, `Der Wechsel beginnt mit der Kündigung. Danach führt dich dieser Assistent durch Bestätigung, Nachfolger, Wertermittlung, Abnahme, Schlüsselrückgabe und Übergabe.`),
+        h('button', { class: 'btn primary', onclick: async () => { if (await kuendigungDialog(aktuell)) { S.kuend = null; await frisch(); } } }, 'Kündigung erfassen'));
+      return;
+    }
+    const fertig = k.schritte.filter((x) => x.erledigt).length;
+    const gesamt = k.schritte.length;
+    const naechster = k.schritte.find((x) => !x.erledigt);
+    inhalt.replaceChildren(
+      h('p', { class: 'hint' }, `Garten ${k.gartennr} – ${k.name}: Kündigung vom ${deDate(k.eingang)} zum ${deDate(k.zum)}.`),
+      h('div', { class: 'wa-balken', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': gesamt, 'aria-valuenow': fertig },
+        h('i', { style: `width:${Math.round((fertig / gesamt) * 100)}%` })),
+      h('p', { class: 'hint' }, `${fertig} von ${gesamt} Schritten erledigt.`),
+      h('ol', { class: 'kd-schritte' }, k.schritte.map((x) => {
+        const akt = aktionen[x.key];
+        return h('li', { class: x.erledigt ? 'erledigt' : '' },
+          h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!x.erledigt, disabled: x.auto, onchange: (e) => markieren(x.key, e.target.checked) }),
+            h('span', null, x.titel, x.erledigt ? h('span', { class: 'hint' }, x.auto ? ' – vom Programm erkannt' : ` – ${deDate(x.erledigt)}`) : null)),
+          x.erledigt ? null : h('div', { class: 'hint kd-hilfe' }, x.hilfe),
+          !x.erledigt && akt ? h('button', { class: 'btn small' + (naechster && naechster.key === x.key ? ' primary' : ''), onclick: akt[1] }, akt[0]) : null);
+      })),
+      fertig === gesamt ? h('p', null, h('b', null, 'Alle Schritte sind erledigt.'), ' Schließe die Kündigung unter »Kündigungen« ab. Für den Nachfolger: Pachtvertrag und Willkommensmappe findest du beim neuen Pächter unter »Mehr«.') : h('span'));
+  };
+  zeichnen();
+  const w = breiterDialog(`Pächterwechsel – Garten ${p.gartennr}`, inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
+  dlg.schliessen = () => { const b = [...document.querySelectorAll('dialog:last-of-type .dfoot button, dialog:last-of-type button')].find((x) => x.textContent === 'Schließen'); if (b) b.click(); };
+  await w;
 }
 
 async function paechterwechselDialog(alt, bewerber) {

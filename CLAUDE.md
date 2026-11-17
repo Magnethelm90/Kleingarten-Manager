@@ -70,6 +70,12 @@
   Nachrücker), ablesung_handy.go + ablesung_handy_seite.go (eigenständige HTML-Datei, Ergebnis-JSON; JS darf kein »NaN«
   im Text haben, sonst schlägt TestAlleLeseRouten an), jahresbericht.go (+Mängel/Einsätze/Beschlüsse), vereinsakte.go (+Ämter,
   Verträge, Beschlüsse, Checkliste).
+- Ideen-Paket 2 (Nov 2026): kostenvergleich.go (GET /api/admin/kostenvergleich, Kachel in Berichte; auffällig = +50 % und über
+  minAbweichung), papierkorb.go (Data.Papierkorb, 30 Tage, Mängel/Termine/Beschlüsse/Verträge; Warteliste bewusst NICHT; `papierkorbLegeLocked`
+  in den Löschhandlern, `papierkorbPersonEntfernen` in entfernePerson), maengel_foto.go (Mangel.Foto, `FotoBytes json:"-"` nur fürs PDF;
+  Upload wird neu kodiert = EXIF/GPS weg, Orphan-Aufräumen `fotosAufraeumenLocked` nach Foto-/Papierkorb-/Personenlöschung),
+  Wechsel-Assistent (app.js `wechselAssistent`, nur Frontend über den Kündigungs-Fahrplan; Pächter-»Mehr«-Menü).
+  Falle: `replaceChildren(..., null)` schreibt den Text »null« – statt null ein leeres Element übergeben.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

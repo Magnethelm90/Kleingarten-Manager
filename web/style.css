@@ -966,3 +966,8 @@ main.nur-anmeldung { margin: 0 auto; padding-top: 48px; max-width: 520px; }
 .ampel-text { flex: 1; min-width: 0; }
 .sich-paechter { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 16px; margin-top: 8px; font-size: 13.5px; }
 .notiz-zeichen { color: var(--muted); vertical-align: -2px; }
+
+/* Pächterwechsel-Assistent */
+.wa-balken { height: 8px; border-radius: 4px; background: #e6eae2; overflow: hidden; margin: 6px 0; }
+.wa-balken i { display: block; height: 100%; background: var(--green); transition: width .3s; }
+@media (prefers-reduced-motion: reduce) { .wa-balken i { transition: none; } }
