@@ -2559,9 +2559,10 @@ function viewZahlungen() {
       h('input', { type: 'search', placeholder: 'Suchen (Nummer oder Name)', value: S.payQ, style: 'width:240px', oninput: (e) => { S.payQ = e.target.value; draw(); } }),
       !st.hasPassword || st.loggedIn ? h('button', { class: 'btn primary', title: 'CSV-Datei aus dem Online-Banking: Eingänge werden den Rechnungen zugeordnet', onclick: kontoauszugEinlesen }, 'Kontoauszug einlesen') : null,
       h('div', { class: 'spacer' }),
-      h('a', { class: 'btn', href: `/api/export-payments?year=${st.year}&nur=offen` }, 'Offene Posten als Excel'),
-      h('a', { class: 'btn', href: `/api/export-payments?year=${st.year}` }, 'Alle Zahlungen als Excel'),
-      h('a', { class: 'btn', href: `/api/export-ics?year=${st.year}`, title: 'Fälligkeitstermine der offenen Rechnungen zum Import in den eigenen Kalender' }, 'Fälligkeiten als Kalender (.ics)')),
+      mehrMenue([
+        { label: 'Offene Posten als Excel', aktion: () => { location.href = `/api/export-payments?year=${st.year}&nur=offen`; } },
+        { label: 'Alle Zahlungen als Excel', aktion: () => { location.href = `/api/export-payments?year=${st.year}`; } },
+        { label: 'Fälligkeiten als Kalenderdatei', title: 'Fälligkeitstermine der offenen Rechnungen zum Import in den eigenen Kalender', aktion: () => { location.href = `/api/export-ics?year=${st.year}`; } }], 'Exportieren ▾')),
     filters,
     mahnBar,
     h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
@@ -4021,9 +4022,9 @@ function adminPaechter() {
 }
 
 // Kleines Aufklappmenü »Mehr« für seltener gebrauchte Aktionen einer Tabellenzeile.
-function mehrMenue(eintraege) {
+function mehrMenue(eintraege, beschriftung = 'Mehr ▾') {
   const liste = h('div', { class: 'mehr-liste', role: 'menu' });
-  const knopf = h('button', { class: 'btn small mehr-knopf', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: 'Weitere Aktionen' }, 'Mehr ▾');
+  const knopf = h('button', { class: (beschriftung === 'Mehr ▾' ? 'btn small' : 'btn') + ' mehr-knopf', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: 'Weitere Aktionen' }, beschriftung);
   const box = h('div', { class: 'mehr' }, knopf, liste);
   const platzieren = () => {
     // fest am Fenster ausrichten (die Tabelle scrollt und würde das Menü sonst abschneiden);

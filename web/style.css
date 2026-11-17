@@ -283,6 +283,13 @@ ul.plain li { margin: 3px 0; }
 aside.sidebar {
   position: sticky; top: var(--kopf, 56px); height: calc(100vh - var(--kopf, 56px)); overflow-y: auto;
   background: var(--card); border-right: 1px solid var(--line); padding: 10px 10px 24px;
+  /* Schatten oben/unten, sobald das Menü weiterscrollt – zeigt, dass unten noch Einträge folgen */
+  background:
+    linear-gradient(var(--card) 30%, transparent) center top / 100% 40px no-repeat local,
+    linear-gradient(transparent, var(--card) 70%) center bottom / 100% 40px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, .13), transparent) center top / 100% 12px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, .13), transparent) center bottom / 100% 12px no-repeat scroll,
+    var(--card);
 }
 .nav-gruppe { margin-bottom: 6px; }
 .nav-titel { font-size: 11px; font-weight: 700; letter-spacing: .9px; text-transform: uppercase; color: var(--muted); padding: 12px 10px 6px; }
