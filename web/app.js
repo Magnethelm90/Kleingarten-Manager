@@ -6193,6 +6193,35 @@ async function stundenkontoDialog(jahr) {
   await breiterDialog(`Arbeitsstunden ${jahr}`, inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
 }
 
+async function kostenvergleichDialog() {
+  let k;
+  try { k = await api('GET', '/api/admin/kostenvergleich'); } catch (e) { handleErr(e); return; }
+  if (!k.verein.length) { toast('Noch keine Jahre vorhanden', 'info'); return; }
+  const wert = (v, einheit) => (v == null ? '–' : `${nfFlex.format(v)}${einheit}`);
+  const reihe = (feld, titel, einheit) => h('div', { class: 'card' },
+    h('h4', null, titel),
+    barChart(k.verein.map((v) => ({ label: String(v.jahr), value: v[feld] || 0 })), { unit: einheit }));
+  const inhalt = h('div', null,
+    k.hinweise.length ? h('div', { class: 'hinweis warn' }, h('b', null, 'Auffällig im Verein: '), k.hinweise.join(' · ')) : null,
+    h('p', { class: 'hint' }, 'Verbrauch und Ausgaben der letzten Jahre. Auffällig ist ein Garten, dessen Verbrauch gegenüber dem Vorjahr um die Hälfte gestiegen ist (und über der Mindestabweichung liegt) – oft ein Rohrbruch, tropfender Hahn oder defekter Zähler.'),
+    h('table', { class: 'tbl' },
+      h('thead', null, h('tr', null, ['Jahr', 'Wasser', 'Strom', 'Ausgaben', 'Rechnungen'].map((t, i) => h('th', { class: i ? 'r' : '' }, t)))),
+      h('tbody', null, k.verein.slice().reverse().map((v) => h('tr', null,
+        h('td', null, String(v.jahr)), h('td', { class: 'r' }, wert(v.wasser, ' m³')), h('td', { class: 'r' }, wert(v.strom, ' kWh')),
+        h('td', { class: 'r' }, eur(v.ausgaben)), h('td', { class: 'r' }, eur(v.rechnungen)))))),
+    h('div', { class: 'toolbar' }, reihe('wasser', 'Wasser gesamt (m³)', ' m³'), reihe('ausgaben', 'Ausgaben (€)', ' €')),
+    h('h4', null, 'Verbrauch je Garten'),
+    h('table', { class: 'tbl' },
+      h('thead', null, h('tr', null, h('th', null, 'Garten'), h('th', null, 'Pächter'),
+        ...k.jahre.map((y) => h('th', { class: 'r' }, String(y))), h('th', null, 'Hinweis'))),
+      h('tbody', null, k.gaerten.map((g) => h('tr', null,
+        h('td', null, g.gartennr), h('td', null, g.name),
+        ...g.werte.map((w) => h('td', { class: 'r' }, w.wasser == null && w.strom == null ? '–' : `${w.wasser == null ? '–' : nfFlex.format(w.wasser)} / ${w.strom == null ? '–' : nfFlex.format(w.strom)}`)),
+        h('td', null, g.hinweise.length ? h('span', { class: 'badge warn' }, g.hinweise.join('; ')) : ''))))),
+    h('p', { class: 'hint' }, 'Spalten: Wasser (m³) / Strom (kWh).'));
+  await breiterDialog('Kostenvergleich über die Jahre', inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
+}
+
 function adminBerichte() {
   const st = S.state;
   const jahr = S.berichtJahr || st.currentYear;
@@ -6223,6 +6252,8 @@ function adminBerichte() {
       kachel('zaehler', `Ablesung mit dem Handy ${st.currentYear}`, 'Eine Datei fürs Handy, die ohne Internet funktioniert: Zählerstände beim Rundgang eintippen, das Ergebnis hier wieder einlesen. Die Datei enthält Namen – vertraulich behandeln.',
         h('div', { class: 'toolbar-gruppe' }, h('a', { class: 'btn', href: '/api/admin/ablesung-handy', download: '' }, 'Datei fürs Handy'), ' ',
           h('button', { class: 'btn', onclick: handyErgebnisEinlesen }, 'Ergebnis einlesen'))),
+      kachel('bericht', 'Kostenvergleich', 'Wasser, Strom und Ausgaben über die Jahre, je Garten mit Hinweis auf auffälligen Mehrverbrauch.',
+        h('button', { class: 'btn', onclick: kostenvergleichDialog }, 'Ansehen')),
       kachel('uhr', `Arbeitsstunden ${jahr}`, 'Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt. Einzelne Stunden lassen sich nachtragen.',
         h('button', { class: 'btn', onclick: () => stundenkontoDialog(jahr) }, 'Ansehen')),
       kachel('zaehler', `Fehlende Zählerstände ${st.currentYear}`, 'Wer hat noch keinen Stand gemeldet? Mit Aushang ohne Namen und E-Mail-Erinnerung.',
