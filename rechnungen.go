@@ -51,6 +51,10 @@ type Rechnung struct {
 
 	// Mahnungen: bisher erstellte Zahlungserinnerungen und Mahnungen (Stufe 1 bis 3) samt Zahlungsfrist
 	Mahnungen []Mahnung `json:"mahnungen,omitempty"`
+
+	// Gutschriften: nachträgliche Korrekturen der ausgestellten Rechnung (siehe gutschrift.go). Die Rechnung selbst
+	// bleibt unverändert; der zu zahlende Betrag sinkt um die Summe der Gutschriften.
+	Gutschriften []Gutschrift `json:"gutschriften,omitempty"`
 }
 
 // Mahnung vermerkt, wann welche Stufe erstellt und bis wann Zahlung verlangt wurde.
@@ -90,13 +94,14 @@ type archiveEntry struct {
 	Datei       string  `json:"datei"`
 
 	// Versand: Versandart laut ausgestellter Rechnung (steht auf dem Papier), nicht laut aktuellen Stammdaten
-	Versand       string    `json:"versand"`
-	Faellig       string    `json:"faellig"`
-	BezahltAm     string    `json:"bezahltAm"`
-	BezahltBetrag *float64  `json:"bezahltBetrag"`
-	Notiz         string    `json:"notiz"`
-	EmailAm       string    `json:"emailAm,omitempty"`
-	Mahnungen     []Mahnung `json:"mahnungen,omitempty"`
+	Versand       string       `json:"versand"`
+	Faellig       string       `json:"faellig"`
+	BezahltAm     string       `json:"bezahltAm"`
+	BezahltBetrag *float64     `json:"bezahltBetrag"`
+	Notiz         string       `json:"notiz"`
+	EmailAm       string       `json:"emailAm,omitempty"`
+	Mahnungen     []Mahnung    `json:"mahnungen,omitempty"`
+	Gutschriften  []Gutschrift `json:"gutschriften,omitempty"`
 }
 
 func archiveEntryFrom(r *Rechnung) archiveEntry {
@@ -104,7 +109,7 @@ func archiveEntryFrom(r *Rechnung) archiveEntry {
 		ID: r.ID, Jahr: r.Jahr, Mitgliedsnr: r.Paechter.Mitgliedsnr, Name: r.Paechter.Name, Nummer: r.Nummer,
 		Version: r.Version, Status: r.Status, Ausgestellt: r.Ausgestellt, Gesamt: r.Result.Gesamt, Datei: r.Datei,
 		Versand: r.Paechter.Versand, Faellig: r.Settings.Zahlungsziel, BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz,
-		EmailAm: r.EmailAm, Mahnungen: r.Mahnungen,
+		EmailAm: r.EmailAm, Mahnungen: r.Mahnungen, Gutschriften: r.Gutschriften,
 	}
 }
 
@@ -345,6 +350,7 @@ func (a *App) handleIssue(w http.ResponseWriter, r *http.Request) {
 					o.Status = statusErsetzt
 					// Zahlungsvermerk übernehmen; der Betrag kann sich geändert haben und lässt sich ansehen und anpassen
 					m.rec.BezahltAm, m.rec.BezahltBetrag, m.rec.Notiz = o.BezahltAm, o.BezahltBetrag, o.Notiz
+					m.rec.Gutschriften = o.Gutschriften
 				}
 			}
 			a.st.d.Rechnungen = append(a.st.d.Rechnungen, m.rec)
@@ -408,7 +414,7 @@ func (a *App) handleArchivePDF(w http.ResponseWriter, r *http.Request) {
 // openAmount ist der noch offene Betrag einer Rechnung (immer positiv; bei
 // einem Guthaben der noch nicht ausgezahlte Betrag).
 func openAmount(r *Rechnung) float64 {
-	total := absf(r.Result.Gesamt)
+	total := zuZahlen(r)
 	if r.BezahltAm == "" {
 		return total
 	}
@@ -428,7 +434,7 @@ func paidAmount(r *Rechnung) float64 {
 	if r.BezahltBetrag != nil {
 		return *r.BezahltBetrag
 	}
-	return absf(r.Result.Gesamt)
+	return zuZahlen(r)
 }
 
 type paymentReq struct {
@@ -469,7 +475,7 @@ func (a *App) handlePayment(w http.ResponseWriter, r *http.Request) {
 			x.BezahltBetrag = nil
 			if req.BezahltBetrag != nil {
 				b := round2(*req.BezahltBetrag)
-				if b != round2(absf(x.Result.Gesamt)) {
+				if b != zuZahlen(x) {
 					x.BezahltBetrag = &b // nur bei Teil- oder Mehrzahlung speichern
 				}
 			}

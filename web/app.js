@@ -2345,7 +2345,7 @@ function jahreSeit(iso) {
 // isoInTagen: heutiges Datum (Ortszeit) plus n Tage als JJJJ-MM-TT.
 const isoInTagen = (n) => { const d = new Date(); d.setDate(d.getDate() + n); const p = (x) => String(x).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
 const todayIso = () => isoInTagen(0);
-const payTotal = (e) => Math.abs(e.gesamt);
+const payTotal = (e) => Math.round((Math.abs(e.gesamt) - (e.gutschriften || []).reduce((a, g) => a + g.betrag, 0)) * 100) / 100;
 const payPaid = (e) => (e.bezahltAm ? (e.bezahltBetrag != null ? e.bezahltBetrag : payTotal(e)) : 0);
 const payOpen = (e) => Math.round((payTotal(e) - payPaid(e)) * 100) / 100;
 const payIsOpen = (e) => payOpen(e) > 0.004;
@@ -2366,17 +2366,68 @@ async function savePayment(e, patch) {
   }
 }
 
+// Gutschriften zu einer Rechnung: Liste mit PDF-Knopf; nur die jüngste lässt sich zurücknehmen.
+function gutschriftListe(e) {
+  const l = e.gutschriften || [];
+  if (!l.length) return null;
+  return h('div', { class: 'gutschriften' }, h('div', { class: 'hint' }, `Ursprünglicher Rechnungsbetrag ${eur(Math.abs(e.gesamt))}, abzüglich Gutschriften`),
+    ...l.map((g, i) => h('div', { class: 'zeile' },
+      h('span', { class: 'mono' }, g.nummer), h('span', null, `${deDate(g.datum)} · −${eur(g.betrag)} · ${g.grund}`),
+      h('span', { class: 'aktion' },
+        h('button', { class: 'btn small', onclick: () => pdfDrucken({ url: `/api/admin/rechnungen/${e.id}/gutschrift?nr=${i + 1}`, oeffnenUrl: `/api/admin/rechnungen/${e.id}/gutschrift/oeffnen?nr=${i + 1}`,
+          titel: g.nummer, meldung: () => 'Gutschrift im PDF-Programm geöffnet – dort drucken.' }) }, 'PDF'),
+        i === l.length - 1 ? h('button', { class: 'btn small', title: 'Jüngste Gutschrift zurücknehmen', onclick: async (ev) => {
+          if (!(await confirmBox(`Gutschrift ${g.nummer} zurücknehmen? Der Rechnungsbetrag steigt wieder um ${eur(g.betrag)}.`, 'Zurücknehmen'))) return;
+          const dlg = ev.target.closest('dialog');
+          try {
+            await api('DELETE', `/api/admin/rechnungen/${e.id}/gutschrift`);
+            await reload();
+            toast('Gutschrift zurückgenommen.', 'ok');
+            // Zahlungsdialog schließen: seine Angaben (Betrag, Liste) stammen noch von vorher
+            if (dlg && dlg.isConnected) dlg.dispatchEvent(new Event('cancel', { cancelable: true }));
+          } catch (er) { handleErr(er); }
+        } }, 'Zurücknehmen') : null))));
+}
+
+async function gutschriftDialog(e) {
+  const rest = payTotal(e);
+  const betrag = h('input', { type: 'text', inputmode: 'decimal', style: 'width:120px' });
+  const datum = h('input', { type: 'date', value: todayIso() });
+  const grund = h('input', { type: 'text', maxlength: 300, style: 'width:100%', placeholder: 'z. B. Wasserzähler falsch abgelesen' });
+  const body = h('div', { class: 'form' },
+    h('p', { class: 'hint' }, `Rechnung ${e.nummer} (${e.name}), aktueller Betrag ${eur(rest)}. Die Rechnung selbst bleibt unverändert; es entsteht ein eigenes Schreiben mit eigener Nummer. War sie schon bezahlt, ergibt sich ein Betrag zur Erstattung; diesen trägst du nach der Überweisung im Kassenbericht als Ausgabe ein.`),
+    h('div', { class: 'field' }, h('label', null, 'Gutschrift über'), h('div', { class: 'inputunit' }, betrag, h('span', null, '€'))),
+    h('div', { class: 'field' }, h('label', null, 'Datum'), datum),
+    h('div', { class: 'field wide' }, h('label', null, 'Grund (erscheint auf dem Schreiben)'), grund));
+  return modal('Gutschrift ausstellen', body, [
+    { label: 'Abbrechen', value: false },
+    { label: 'Ausstellen', cls: 'primary', value: true, action: async () => {
+      const v = parseNum(betrag.value);
+      if (v === null || Number.isNaN(v) || v <= 0) { toast('Bitte einen Betrag über 0 angeben.', 'err'); return false; }
+      if (v > rest + 0.004) { toast(`Höchstens ${eur(rest)} möglich.`, 'err'); return false; }
+      if (!grund.value.trim()) { toast('Bitte den Grund angeben.', 'err'); return false; }
+      try {
+        const r = await api('POST', `/api/admin/rechnungen/${e.id}/gutschrift`, { betrag: v, datum: datum.value, grund: grund.value.trim() });
+        await reload();
+        toast(`Gutschrift ${r.nummer} ausgestellt.`, 'ok');
+      } catch (er) { handleErr(er); return false; }
+    } },
+  ]);
+}
+
 async function paymentDialog(e) {
   const date = h('input', { type: 'date', value: e.bezahltAm || todayIso() });
   const amt = h('input', { type: 'text', inputmode: 'decimal', value: numIn(e.bezahltAm ? payPaid(e) : payTotal(e)), style: 'width:120px' });
   const note = h('input', { type: 'text', maxlength: 200, value: e.notiz || '', style: 'width:100%' });
   const body = h('div', { class: 'form' },
     h('p', null, `${e.mitgliedsnr} – ${e.name}: Rechnungsbetrag ${eur(payTotal(e))}${e.gesamt < 0 ? ' (Guthaben, wird an den Pächter ausgezahlt)' : ''}`),
+    gutschriftListe(e),
     h('div', { class: 'field' }, h('label', null, 'Bezahlt am'), date),
     h('div', { class: 'field' }, h('label', null, 'Bezahlter Betrag (bei Teilzahlung anpassen)'), h('div', { class: 'inputunit' }, amt, h('span', null, '€'))),
     h('div', { class: 'field wide' }, h('label', null, 'Notiz (z. B. bar, Überweisung, Ratenzahlung)'), note));
   return modal('Zahlung vermerken', body, [
     { label: 'Abbrechen', value: false },
+    e.gesamt > 0 && e.status === 'gueltig' ? { label: 'Gutschrift …', value: 'gutschrift' } : null,
     e.bezahltAm ? { label: 'Zahlung zurücknehmen', cls: 'danger', value: 'undo', action: async () => { try { await savePayment(e, { bezahltAm: '', bezahltBetrag: null }); } catch (er) { handleErr(er); return false; } } } : null,
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
       const v = parseNum(amt.value);
@@ -2474,14 +2525,15 @@ function viewZahlungen() {
       tbody.append(h('tr', { class: late ? 'late' : '' },
         h('td', null, mchk),
         h('td', null, e.mitgliedsnr), h('td', null, e.name), h('td', { class: 'mono' }, e.nummer),
-        h('td', { class: 'r' }, (e.gesamt < 0 ? '−' : '') + eur(payTotal(e))),
+        h('td', { class: 'r' }, (e.gesamt < 0 ? '−' : '') + eur(payTotal(e)),
+          e.gutschriften && e.gutschriften.length ? h('div', { class: 'hint', title: e.gutschriften.map((g) => g.nummer).join(', ') }, `nach Gutschrift (${eur(Math.abs(e.gesamt))})`) : null),
         h('td', null, deDate(e.faellig)),
-        h('td', null, h('span', { class: 'badge ' + (partial ? 'warn' : !open ? 'ok' : late ? 'err' : 'neu') },
-          partial ? `Teilzahlung, offen ${eur(payOpen(e))}` : !open ? (e.gesamt < 0 ? 'ausgezahlt' : 'bezahlt') : late ? 'überfällig' : e.gesamt < 0 ? 'Guthaben offen' : 'offen'),
+        h('td', null, h('span', { class: 'badge ' + (partial || (e.gutschriften && e.gutschriften.length && payOpen(e) < -0.004) ? 'warn' : !open ? 'ok' : late ? 'err' : 'neu') },
+          partial ? `Teilzahlung, offen ${eur(payOpen(e))}` : !open && e.gesamt >= 0 && payOpen(e) < -0.004 && e.gutschriften && e.gutschriften.length ? `zu erstatten ${eur(-payOpen(e))}` : !open ? (e.gesamt < 0 ? 'ausgezahlt' : 'bezahlt') : late ? 'überfällig' : e.gesamt < 0 ? 'Guthaben offen' : 'offen'),
           open && e.mahnungen && e.mahnungen.length ? h('div', { class: 'hint', title: 'Letzte Mahnung' }, `${MAHN_TITEL[e.mahnungen[e.mahnungen.length - 1].stufe]} ${deDate(e.mahnungen[e.mahnungen.length - 1].datum)}, Frist ${deDate(e.mahnungen[e.mahnungen.length - 1].frist)}`) : null),
         h('td', { class: 'paycell' }, chk, date),
         h('td', { class: 'note', title: e.notiz || '' }, e.notiz || ''),
-        h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await paymentDialog(e); if (r !== false && r !== undefined) draw(); } }, 'Details'))));
+        h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await paymentDialog(e); if (r === 'gutschrift') await gutschriftDialog(e); else if (r !== false && r !== undefined) draw(); } }, 'Details'))));
     }
     if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 10, class: 'empty' },
       !all.length ? leer('euro', 'Noch nichts zu kassieren', `Für ${st.year} wurde noch keine Rechnung ausgestellt. Sobald das passiert ist, hakst du hier die Zahlungen ab.`, 'Zu den Rechnungen', () => { S.tab = 'rechnungen'; render(); })
@@ -4820,6 +4872,7 @@ function adminKassenbericht(pruefMode) {
     h('p', { class: 'hint' }, `Übersicht für ${S.kasseYear}: ${k.paechter} Pächter (${k.ausgestellt} aus ausgestellten Rechnungen, ${k.berechnet} berechnet, aber noch nicht ausgestellt${k.unvollstaendig.length ? `, ${k.unvollstaendig.length} unvollständig` : ''}). Die Beträge »sonstige Ausgaben« sind Vereinskosten neben der Pächterabrechnung, z. B. Kontoführungsgebühren, Anwaltskosten oder Anschaffungen.`),
     k.unvollstaendig.length ? h('div', { class: 'banner warn' }, `Nicht enthalten (Angaben fehlen): ${k.unvollstaendig.join(', ')}`) : null,
     anfangsbestandHinweis(k, pruefMode),
+    wechselHinweis(k, pruefMode),
     h('div', { class: 'card', style: 'margin-bottom:14px' },
       h('div', { class: 'toolbar' },
         h('label', null, 'Anfangsbestand der Kasse'),
@@ -4850,6 +4903,20 @@ function adminKassenbericht(pruefMode) {
       h('a', { class: 'btn', href: `/api/admin/export-kassenbericht?year=${S.kasseYear}` }, `Kassenbericht ${S.kasseYear} als Excel`)),
     h('h3', null, 'Verlauf über die Jahre'),
     kassenberichtVerlaufCard());
+}
+
+// Nach einem Pächterwechsel: ausgeschiedene Pächter, bei denen noch eine Schlussrechnung, eine Zahlung oder ein Guthaben offen ist.
+function wechselHinweis(k, pruefMode) {
+  const l = k.wechsel || [];
+  if (!l.length) return null;
+  return h('div', { class: 'banner warn wechselhinweis' },
+    h('b', null, l.length === 1 ? 'Ausgeschiedener Pächter mit offenem Posten' : `${l.length} ausgeschiedene Pächter mit offenen Posten`),
+    h('ul', null, l.map((w) => h('li', null,
+      `Garten ${w.gartennr}, ${w.name} (ausgeschieden ${deDate(w.ausgeschieden)}): `,
+      [w.ohneRechnung ? 'Schlussrechnung fehlt' : null, w.offen > 0 ? `${eur(w.offen)} noch zu zahlen` : null, w.guthaben > 0 ? `${eur(w.guthaben)} Guthaben auszuzahlen` : null].filter(Boolean).join(', ')))),
+    pruefMode ? null : h('div', { class: 'actions' },
+      h('button', { class: 'btn small', onclick: () => { S.tab = 'rechnungen'; render(); } }, 'Zu den Rechnungen'),
+      h('button', { class: 'btn small', onclick: () => { S.tab = 'zahlungen'; render(); } }, 'Zu den Zahlungen')));
 }
 
 // Wasserschwund: Hauptzähler gegen die Summe der Gartenzähler, Jahr für Jahr, und Gärten mit auffälligem Verbrauch.
@@ -6582,6 +6649,13 @@ function handyErgebnisEinlesen() {
 }
 
 // Arbeitsstunden-Konto: Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt.
+// Ehrenamts-Nachweis (Stunden und Ämter) als PDF; ohne Pächter: eine Seite je Mitglied mit Stunden oder Amt.
+const ehrenamtDrucken = (jahr, paechterId) => pdfDrucken({
+  url: `/api/admin/ehrenamt?year=${jahr}&paechterId=${encodeURIComponent(paechterId)}`,
+  oeffnenUrl: `/api/admin/ehrenamt/oeffnen?year=${jahr}&paechterId=${encodeURIComponent(paechterId)}`,
+  titel: 'Ehrenamt', meldung: () => 'Nachweis im PDF-Programm geöffnet – dort drucken.',
+});
+
 async function stundenkontoDialog(jahr) {
   let k;
   const laden = async () => { k = await api('GET', `/api/admin/stundenkonto?year=${jahr}`); };
@@ -6597,7 +6671,8 @@ async function stundenkontoDialog(jahr) {
           h('td', { class: 'r' }, nfFlex.format(z.ist), z.einsaetze ? h('span', { class: 'hint' }, ` (${z.einsaetze} Einsätze)`) : null),
           h('td', { class: 'r' }, z.erfuellt ? h('span', { class: 'badge ok' }, 'erfüllt') : nfFlex.format(z.fehlt)),
           h('td', { class: 'r' }, z.ersatz ? eur(z.ersatz) : '–'),
-          h('td', { class: 'r' }, h('button', { class: 'btn small', onclick: () => nachtragen(z) }, '+ Stunden')))))),
+          h('td', { class: 'r' }, h('button', { class: 'btn small', onclick: () => nachtragen(z) }, '+ Stunden'), ' ',
+            h('button', { class: 'btn small', title: 'Bescheinigung über die ehrenamtliche Tätigkeit (Stunden und Ämter)', onclick: () => ehrenamtDrucken(jahr, z.paechterId) }, 'Nachweis')))))),
       h('p', { class: 'hint' }, `Zu erwartende Ersatzzahlungen insgesamt: ${eur(k.ersatzSumme)}`));
   };
   const nachtragen = async (z) => {
@@ -6612,7 +6687,9 @@ async function stundenkontoDialog(jahr) {
     } catch (e) { handleErr(e); }
   };
   zeichnen();
-  await breiterDialog(`Arbeitsstunden ${jahr}`, inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
+  await breiterDialog(`Arbeitsstunden ${jahr}`, inhalt, [
+    { label: 'Alle Nachweise (PDF)', value: 'nachweise', action: () => { ehrenamtDrucken(jahr, ''); return false; } },
+    { label: 'Schließen', cls: 'primary', value: true }]);
 }
 
 async function kostenvergleichDialog() {
@@ -6696,6 +6773,8 @@ function adminBerichte() {
   const kachel = (ic, titel, text, knopf) => h('div', { class: 'bericht-kachel' },
     h('span', { class: 'qlico' }, icon(ic, 24)), h('div', null, h('b', null, titel), h('p', { class: 'hint' }, text)), knopf);
   const fmt = (z) => (z.einheit === '€' ? eur(z.wert) : `${nfFlex.format(z.wert)}${z.einheit ? ' ' + z.einheit : ''}`);
+  // PDF-Knopf für Kacheln, die sonst nur einen Dialog oder eine Excel-Datei haben
+  const pdfKnopf = (pfad, titel, query = '') => h('button', { class: 'btn', onclick: () => pdfDrucken({ url: `/api/admin/${pfad}/pdf${query}`, oeffnenUrl: `/api/admin/${pfad}/pdf/oeffnen${query}`, titel, meldung: () => `${titel} im PDF-Programm geöffnet – dort drucken.` }) }, 'Als PDF');
   const gruppen = [];
   for (const z of (m ? m.zeilen : [])) {
     if (!gruppen.length || gruppen[gruppen.length - 1].g !== z.gruppe) gruppen.push({ g: z.gruppe, z: [] });
@@ -6708,7 +6787,7 @@ function adminBerichte() {
       kachel('bericht', `Jahresbericht ${jahr}`, 'Für die Mitgliederversammlung: Kennzahlen mit Vorjahresvergleich, Kasse, Ausgaben, Verlauf, Termine – ohne Namen.',
         h('button', { class: 'btn primary', onclick: () => jahresberichtDrucken(jahr) }, 'Als PDF')),
       kachel('waage', `Jahresmeldung ${jahr}`, 'Zahlen für den Landes- oder Regionalverband: Parzellen, Flächen, Wechsel, Warteliste, Stunden, Abgaben.',
-        h('a', { class: 'btn primary', href: `/api/admin/jahresmeldung?year=${jahr}&format=xlsx` }, 'Als Excel')),
+        h('div', { class: 'row' }, h('a', { class: 'btn primary', href: `/api/admin/jahresmeldung?year=${jahr}&format=xlsx` }, 'Als Excel'), pdfKnopf('jahresmeldung', `Jahresmeldung ${jahr}`, `?year=${jahr}`))),
       kachel('personen', 'Pächterliste', 'Alle Pächter mit Anschrift, Kontakt und Zählern zum Ausdrucken (vertraulich).',
         h('button', { class: 'btn', onclick: paechterlisteDrucken }, 'Drucken')),
       kachel('karte', 'Lageplan', 'Als Aushang ohne Namen oder für den Vorstand mit Namen.',
@@ -6717,13 +6796,13 @@ function adminBerichte() {
         h('div', { class: 'toolbar-gruppe' }, h('a', { class: 'btn', href: '/api/admin/ablesung-handy', download: '' }, 'Datei fürs Handy'), ' ',
           h('button', { class: 'btn', onclick: handyErgebnisEinlesen }, 'Ergebnis einlesen'))),
       kachel('bericht', 'Kostenvergleich', 'Wasser, Strom und Ausgaben über die Jahre, je Garten mit Hinweis auf auffälligen Mehrverbrauch.',
-        h('button', { class: 'btn', onclick: kostenvergleichDialog }, 'Ansehen')),
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: kostenvergleichDialog }, 'Ansehen'), pdfKnopf('kostenvergleich', 'Kostenvergleich'))),
       kachel('daten', 'Wartungs-Check', 'Ist alles in Ordnung? Datenordner, Sicherungen, zweiter Ordner, Passwort und Programmversion auf einen Blick.',
-        h('button', { class: 'btn', onclick: wartungsCheck }, 'Prüfen')),
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: wartungsCheck }, 'Prüfen'), pdfKnopf('wartung', 'Wartungs-Check'))),
       kachel('daten', 'Papierkorb', 'Gelöschte Mängel, Termine, Beschlüsse und Verträge 30 Tage lang zurückholen.',
         h('button', { class: 'btn', onclick: papierkorbDialog }, 'Öffnen')),
       kachel('uhr', `Arbeitsstunden ${jahr}`, 'Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt. Einzelne Stunden lassen sich nachtragen.',
-        h('button', { class: 'btn', onclick: () => stundenkontoDialog(jahr) }, 'Ansehen')),
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => stundenkontoDialog(jahr) }, 'Ansehen'), pdfKnopf('stundenkonto', `Arbeitsstunden ${jahr}`, `?year=${jahr}`))),
       kachel('zaehler', `Fehlende Zählerstände ${st.currentYear}`, 'Wer hat noch keinen Stand gemeldet? Mit Aushang ohne Namen und E-Mail-Erinnerung.',
         h('button', { class: 'btn', onclick: () => zaehlerErinnerungDialog(st.currentYear) }, 'Prüfen')),
       kachel('personen', 'Willkommensmappe & Exposé', 'Texte für die Mappe neuer Pächter und den Steckbrief freier Gärten: Ansprechpartner und das Wichtigste aus der Gartenordnung.',

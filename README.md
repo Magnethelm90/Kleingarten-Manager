@@ -94,7 +94,8 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Versand:** alle Rechnungen mit Postversand in einer Druckdatei; für die übrigen bereitet das Programm die
   E-Mail mit fertigem Text in eurem E-Mail-Programm vor (es verschickt selbst nichts)
 - **Zahlungen:** bezahlt abhaken, Teilzahlungen, offene Posten, Mahnungen als PDF (nur die ausgewählten, nie
-  automatisch), Fälligkeiten als Kalenderdatei, Excel-Export
+  automatisch), **Gutschriften** als eigenes Schreiben mit eigener Nummer (die Rechnung bleibt unverändert),
+  Fälligkeiten als Kalenderdatei, Excel-Export
 - **Jahreswechsel** mit Checkliste: Zählerstände und Kassenbestand werden ins neue Jahr übernommen, abgeschlossene
   Jahre bleiben unverändert nachdruckbar
 
@@ -224,7 +225,7 @@ Benutzerkonto und keine Übertragung ins Internet.
   **Aushang** für den Schaukasten mit Vorlagen, **Übergabeprotokoll** mit den am Übergabetag offenen Mängeln.
 - Mängel mehrfach auswählen (erledigt markieren, als Liste drucken); Dialoge merken die zuletzt gewählte Art; versehentlich
   geschlossene Eingaben lassen sich beim nächsten Öffnen zurückholen (nur im Arbeitsspeicher, bis zum Programmende).
-- **Arbeitsstunden-Konto** mit Ersatzzahlung vorab, **Ablesung mit dem Handy** (Datei ohne Internet),
+- **Arbeitsstunden-Konto** mit Ersatzzahlung vorab und **Ehrenamts-Nachweis** (Stunden und Ämter als Bescheinigung je Mitglied oder für alle), **Ablesung mit dem Handy** (Datei ohne Internet),
   **Wartelisten-Briefe** und Nachrücker-Vorschlag, Amtsübergabe mit Ämtern, Verträgen und Checkliste
 - **DSGVO-Hilfen:** Auskunft je Person als Datei, endgültiges Löschen auch aus allen Sicherungen, Bereinigung nach
   Ablauf der Aufbewahrungsfrist, Änderungsprotokoll. Vorlagen für Verarbeitungsverzeichnis und

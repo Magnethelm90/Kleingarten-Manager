@@ -123,6 +123,7 @@ func (d *Data) entfernePerson(id string) bool {
 	for _, r := range d.Rechnungen {
 		if r.PaechterID == id && (r.Notiz != "" || r.Paechter.Notiz != "" || r.Paechter.Email != "" || r.Paechter.Telefon != "") {
 			r.Notiz, r.Paechter.Notiz, r.Paechter.Email, r.Paechter.Telefon, changed = "", "", "", "", true
+			r.gutschriftGruendeLeeren()
 		}
 	}
 	behalten := d.Dokumente[:0]
@@ -217,6 +218,7 @@ func (d *Data) bereinigeAbgelaufene(aktuell int) (rechnungen int, jahre int, dat
 		}
 		anonymisiere(&r.Paechter, fristAbgelaufenText)
 		r.Notiz, r.Bereinigt = "", true
+		r.gutschriftGruendeLeeren()
 		if r.Datei != "" {
 			dateien = append(dateien, r.Datei)
 			r.Datei = ""
@@ -324,16 +326,17 @@ type auskunftJahr struct {
 }
 
 type auskunftRechnung struct {
-	Nummer        string   `json:"rechnungsnummer"`
-	Jahr          int      `json:"abrechnungsjahr"`
-	Version       int      `json:"version"`
-	Status        string   `json:"status"`
-	Ausgestellt   string   `json:"ausgestelltAm"`
-	Gesamtbetrag  float64  `json:"gesamtbetrag"`
-	BezahltAm     string   `json:"bezahltAm,omitempty"`
-	BezahltBetrag *float64 `json:"bezahlterBetrag,omitempty"`
-	Notiz         string   `json:"notiz,omitempty"`
-	Bereinigt     bool     `json:"personenbezugEntfernt,omitempty"`
+	Nummer        string       `json:"rechnungsnummer"`
+	Jahr          int          `json:"abrechnungsjahr"`
+	Version       int          `json:"version"`
+	Status        string       `json:"status"`
+	Ausgestellt   string       `json:"ausgestelltAm"`
+	Gesamtbetrag  float64      `json:"gesamtbetrag"`
+	BezahltAm     string       `json:"bezahltAm,omitempty"`
+	BezahltBetrag *float64     `json:"bezahlterBetrag,omitempty"`
+	Notiz         string       `json:"notiz,omitempty"`
+	Bereinigt     bool         `json:"personenbezugEntfernt,omitempty"`
+	Gutschriften  []Gutschrift `json:"gutschriften,omitempty"`
 }
 
 type auskunft struct {
@@ -414,7 +417,7 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 		if r.PaechterID == id {
 			a.Rechnungen = append(a.Rechnungen, auskunftRechnung{
 				Nummer: r.Nummer, Jahr: r.Jahr, Version: r.Version, Status: r.Status, Ausgestellt: r.Ausgestellt,
-				Gesamtbetrag: r.Result.Gesamt, BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz, Bereinigt: r.Bereinigt,
+				Gesamtbetrag: r.Result.Gesamt, BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz, Bereinigt: r.Bereinigt, Gutschriften: r.Gutschriften,
 			})
 		}
 	}

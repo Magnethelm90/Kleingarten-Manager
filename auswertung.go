@@ -596,6 +596,51 @@ type kassenbericht struct {
 	// (z. B. weil eine Vorjahresrechnung erst nach dem Jahreswechsel bezahlt wurde), bietet der
 	// Kassenbericht an, den Anfangsbestand anzugleichen. Leer, wenn es kein Vorjahr gibt.
 	VorjahrEndbestand *float64 `json:"vorjahrEndbestand,omitempty"`
+
+	// Wechsel: Pächter, die ausgeschieden sind und für die noch etwas offen ist (Schlussrechnung, Zahlung oder
+	// auszuzahlendes Guthaben). So geht beim Pächterwechsel nichts in der Kasse verloren.
+	Wechsel []wechselPosten `json:"wechsel"`
+}
+
+type wechselPosten struct {
+	PaechterID    string  `json:"paechterId"`
+	Gartennr      string  `json:"gartennr"`
+	Name          string  `json:"name"`
+	Ausgeschieden string  `json:"ausgeschieden"`
+	OhneRechnung  bool    `json:"ohneRechnung"`       // für dieses Jahr gibt es noch keine ausgestellte Rechnung
+	Offen         float64 `json:"offen"`              // noch zu zahlen (alle Jahre)
+	Guthaben      float64 `json:"guthaben,omitempty"` // noch auszuzahlen (alle Jahre)
+}
+
+// wechselLocked sucht ausgeschiedene Pächter mit offenen Posten. Abgeschlossene Jahre bleiben unberührt.
+func (s *Store) wechselLocked(v yearView) []wechselPosten {
+	out := []wechselPosten{}
+	if v.ReadOnly {
+		return out
+	}
+	for _, p := range v.Paechter {
+		if p.AusgeschiedenAm == "" || p.Geloescht {
+			continue
+		}
+		w := wechselPosten{PaechterID: p.ID, Gartennr: p.Gartennr, Name: p.Name, Ausgeschieden: p.AusgeschiedenAm}
+		w.OhneRechnung = s.validInvoiceLocked(v.Jahr, p.ID) == nil
+		for _, r := range s.d.Rechnungen {
+			if r.PaechterID != p.ID || r.Status != statusGueltig || r.Bereinigt {
+				continue
+			}
+			if o := openAmount(r); r.Result.Gesamt > 0 && o > 0.004 {
+				w.Offen += o
+			} else if r.Result.Gesamt < 0 && o > 0.004 {
+				w.Guthaben += o
+			}
+		}
+		w.Offen, w.Guthaben = round2(w.Offen), round2(w.Guthaben)
+		if w.OhneRechnung || w.Offen > 0 || w.Guthaben > 0 {
+			out = append(out, w)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return natLess(out[i].Gartennr, out[j].Gartennr) })
+	return out
 }
 
 // kassenberichtMitVorjahrLocked ergänzt den Kassenbericht um den aktuellen Endbestand des Vorjahres.
@@ -613,7 +658,7 @@ func (s *Store) kassenberichtMitVorjahrLocked(v yearView) kassenbericht {
 // Pächter ist die gültige ausgestellte Rechnung, sonst die aktuelle Berechnung.
 // Der Aufrufer hält s.mu.
 func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
-	k := kassenbericht{Jahr: v.Jahr, Unvollstaendig: []string{}, Ausgaben: []Ausgabe{}, AusgabenKategorie: []kategorieSumme{}}
+	k := kassenbericht{Jahr: v.Jahr, Wechsel: []wechselPosten{}, Unvollstaendig: []string{}, Ausgaben: []Ausgabe{}, AusgabenKategorie: []kategorieSumme{}}
 	if j := s.d.Jahre[yearKey(v.Jahr)]; j != nil {
 		if j.Versorger != nil {
 			k.Versorger = *j.Versorger
@@ -693,6 +738,7 @@ func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
 		k.Berechnet++
 	}
 	k.Paechter = k.Ausgestellt + k.Berechnet + len(k.Unvollstaendig)
+	k.Wechsel = s.wechselLocked(v)
 	k.Spenden = s.spendenSummeLocked(v.Jahr)
 	k.Vorauszahlungen = s.vorauszahlungenLocked(v.Jahr)
 	k.Saldo = k.EinnahmenBezahlt + k.Vorauszahlungen + k.Spenden - k.GuthabenAusgezahlt - k.AusgabenSumme

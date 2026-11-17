@@ -100,6 +100,14 @@
   oninput speichern; jeder Knopf mit `action` zählt als gespeichert), pdf_zeichen_test.go (alle GET-Routen inkl. {id} mit schwierigen Zeichen), `pdfListe` skaliert zu breite
   Spalten, `icsUID` für alle UID-Zeilen. Sperre speichert `Port`: gleicher Rechner+Benutzer und dort antwortet kein Programm →
   sofort frei (`programmLaeuft` = alreadyRunning, im Test austauschbar).
+- Ideen-Paket 6 (Nov 2026): gutschrift.go (Rechnung.Gutschriften, Nummer `GS-<Rechnungsnr>-<n>`, `zuZahlen(r)` = Betrag nach Gutschriften;
+  openAmount/paidAmount/handlePayment rechnen damit; bei voll bezahlter Rechnung wird BezahltBetrag beim Ausstellen festgeschrieben →
+  Erstattung sichtbar; Neuausstellung übernimmt Gutschriften; Freitext »Grund« wird bei Bereinigung/Löschung geleert; Dialog in app.js
+  `gutschriftDialog`/`gutschriftListe`, Knopf im Zahlungs-Dialog), ehrenamt.go (Nachweis-PDF je Pächter/alle, Ämter per Namensvergleich,
+  Knöpfe im Stundenkonto-Dialog), Kassenbericht.Wechsel (`wechselLocked`: ausgeschiedene Pächter mit fehlender Schlussrechnung/offenem
+  Posten, Hinweis `wechselHinweis`), berichte_pdf.go (PDF für Jahresmeldung, Kostenvergleich, Arbeitsstunden, Wartungs-Check; `pdfKnopf`
+  in Berichte). Design-Prüfung: `.cards` ist jetzt ein Grid (gleich breite Kennzahlen), Berichte-Kacheln mit Knöpfen unten, Handy-Kopfzeile
+  kompakter (2 Zeilen), Kennzahlen auf dem Handy zweispaltig. Kein Kautions-Feld im Programm (bewusst nicht ergänzt).
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

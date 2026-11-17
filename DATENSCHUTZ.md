@@ -35,7 +35,7 @@ vorher prüfen.
 
 - Stammdaten (inkl. E-Mail und Telefon), interne Notiz, Zählernummern, offene (nicht abgeschlossene) Zählerstände,
 - den Namen und die Mitgliedsnummer in der Garten-Historie und im Änderungsprotokoll,
-- Hinweis- und Notizfelder in aufbewahrten Rechnungen und Jahresunterlagen,
+- Hinweis- und Notizfelder in aufbewahrten Rechnungen und Jahresunterlagen (auch der Freitext »Grund« von Gutschriften; die Beträge bleiben für die Buchführung),
 - **alles Genannte auch in allen vorhandenen Sicherungen** (inkl. zweitem Sicherungsordner, sofern erreichbar).
   Dafür wird bewusst keine Sicherung „vor dem Löschen“ angelegt.
 - den Ordner `Druck/` (kurzlebige Druckdateien wie Sammel-PDF der Postrechnungen und Ablesebogen): er wird beim

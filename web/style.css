@@ -358,7 +358,7 @@ aside.sidebar {
 .qfoot .spacer { flex: 1; }
 
 /* Kennzahlen */
-.cards { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px; }
 .card.stat {
   padding: 14px 18px; min-width: 190px; display: flex; gap: 14px; align-items: flex-start; position: relative; overflow: hidden;
 }
@@ -592,9 +592,10 @@ dialog.breit .chips { margin-top: 12px; }
 
 /* Berichte & Meldungen */
 .bericht-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; margin: 6px 0 8px; }
-.bericht-kachel { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: start; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); transition: box-shadow .15s, transform .15s; }
+.bericht-kachel { display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; gap: 6px 14px; align-items: start; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); transition: box-shadow .15s, transform .15s; }
 .bericht-kachel:hover { box-shadow: 0 6px 18px rgba(20, 35, 22, .1); transform: translateY(-1px); }
 .bericht-kachel > :last-child { grid-column: 2; justify-self: start; margin-top: 6px; }
+.bericht-kachel .btn { white-space: nowrap; }
 .bericht-kachel .qlico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--green-soft); color: var(--green); }
 .bericht-kachel b { display: block; }
 .bericht-kachel p.hint { margin: 2px 0 0; font-size: 12.5px; line-height: 1.4; }
@@ -1041,3 +1042,30 @@ th[aria-sort="descending"]::after { content: " \25BC"; font-size: .7em; }
 .sort-reset { display: block; margin: 0 0 6px auto; }
 @media print { .sort-reset { display: none; } }
 .entwurf { margin-bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* Gutschriften im Zahlungsdialog */
+.form > .gutschriften { grid-column: 1 / -1; }
+.form > p:has(+ .gutschriften) { grid-column: 1 / -1; margin-bottom: 0; }
+.gutschriften { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--green-tint); }
+.gutschriften .zeile { display: grid; grid-template-columns: 9.5em 1fr auto; gap: 10px; align-items: center; padding: 4px 0; font-size: 13px; }
+.gutschriften .aktion { display: flex; gap: 6px; }
+.wechselhinweis ul { margin: 6px 0 8px; padding-left: 18px; }
+.wechselhinweis .actions { margin-top: 4px; }
+.bericht-kachel .row, .bericht-kachel .toolbar-gruppe { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Handy: Kopfzeile kompakter (Menü und Name oben, Suche, Jahr und Knöpfe in einer Zeile darunter), Kennzahlen zweispaltig */
+@media (max-width: 760px) {
+  header.top { gap: 8px 8px; padding: 8px 12px; }
+  header.top .brand { padding: 0; flex: 1 0 calc(100% - 56px); min-width: 0; }
+  header.top .brand span { max-width: none; }
+  .top .spacer { display: none; }
+  .globalsearch { flex: 1 1 80px; min-width: 0; }
+  .globalsearch .gs-input { width: 100%; }
+  .top > div > label { display: none; }
+  .top button.quit { padding: 6px 10px; }
+  .top button.help { margin-left: 0; }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .card.stat { min-width: 0; padding: 12px 14px; }
+  .card.stat .statico { display: none; }
+  .card.stat .big { font-size: 21px; }
+}
