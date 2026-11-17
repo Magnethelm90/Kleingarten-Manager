@@ -117,6 +117,7 @@
   Sicherheit & Datenschutz = Passwort | Datenschutz | Änderungsprotokoll. adminTab-IDs/Cockpit-Ziele unverändert. `reiterKopf()` unter der
   Überschrift, `reiterLeiste()` (Klasse `.reiter`, Unterstrich) für ALLE Seitenteile (auch Rechnungen/Archiv, Mängel/Lauben, Schlüssel/Geräte,
   Vereinsverwaltung); runde `.subtabs` nur noch für Filter/Ansichten. Seitenleiste 244 px.
+- Klicks gespart: Zahlungen »Alle überfälligen auswählen« (Mahnung), `ausgabeDialog` ist Schleife um `ausgabeDialogEinmal` (Knopf »Speichern und nächste«, Datum/Kategorie bleiben), `issue()` zeigt im Abschluss »Postversand drucken« / »E-Mails vorbereiten«.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

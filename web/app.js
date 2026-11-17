@@ -1539,9 +1539,19 @@ function issueSummary(r) {
 async function issue(ids, replace) {
   const st = S.state;
   const r = await api('POST', `/api/invoices/issue?year=${st.year}`, { ids, replace: !!replace });
-  const open = await modal('Fertig', issueSummary(r), [{ label: 'Schließen', value: false }, { label: 'Ordner öffnen', cls: 'primary', value: true }]);
-  if (open) await api('POST', '/api/open-folder', { which: 'rechnungen', year: st.year });
   await reload();
+  // Nächste Schritte gleich im Abschluss anbieten: Briefe drucken, E-Mails vorbereiten
+  const neu = S.state;
+  const nPost = (neu.archive || []).filter((e) => e.status === 'gueltig' && String(e.versand || '').toLowerCase() === 'postversand').length;
+  const mailOffen = neu.paechter.filter((p) => p.versand === 'Emailsendung' && p.email && (neu.issued || {})[p.id] && !neu.issued[p.id].emailAm);
+  const wahl = await modal('Fertig', issueSummary(r), [
+    { label: 'Schließen', value: false },
+    { label: 'Ordner öffnen', value: 'ordner' },
+    nPost && !neu.readOnly ? { label: `Postversand drucken (${nPost})`, value: 'post', cls: mailOffen.length ? '' : 'primary' } : null,
+    mailOffen.length && !neu.readOnly ? { label: `E-Mails vorbereiten (${mailOffen.length})`, value: 'mail', cls: 'primary' } : null]);
+  if (wahl === 'ordner') await api('POST', '/api/open-folder', { which: 'rechnungen', year: st.year }).catch(handleErr);
+  else if (wahl === 'post') await postRechnungenDrucken(neu.year);
+  else if (wahl === 'mail') { S.selInvoice = mailOffen[0].id; S.invView = 'archiv'; await emailVorbereiten(neu.issued[mailOffen[0].id].id); }
 }
 
 // ------------------------------------------------------------------ Tab: Lageplan
@@ -2517,9 +2527,14 @@ function viewZahlungen() {
       card('Überfällig', String(overdue.length), overdue.length ? eur(sum(overdue, payOpen)) : 'nichts überfällig', overdue.length ? 'err' : 'ok'),
       credits.length ? card('Guthaben auszuzahlen', eur(sum(credits.filter(payIsOpen), payOpen)), `${credits.filter(payIsOpen).length} von ${credits.length} noch offen`) : null].filter(Boolean));
 
+    const ueberfaellig = overdue.filter((e) => e.gesamt >= 0);
+    const alleGewaehlt = ueberfaellig.length > 0 && ueberfaellig.every((e) => S.mahnSel.has(e.id));
     mahnBar.replaceChildren(
       h('button', { class: 'btn', disabled: !S.mahnSel.size, onclick: () => mahnungErzeugen([...S.mahnSel]) },
         `Mahnung erzeugen${S.mahnSel.size ? ` (${S.mahnSel.size})` : ''}`),
+      h('button', { class: 'btn', disabled: !ueberfaellig.length, title: 'Setzt den Haken bei allen Rechnungen, die über das Zahlungsziel hinaus offen sind',
+        onclick: () => { for (const e of ueberfaellig) { if (alleGewaehlt) S.mahnSel.delete(e.id); else S.mahnSel.add(e.id); } draw(); } },
+      alleGewaehlt ? 'Auswahl aufheben' : `Alle überfälligen auswählen${ueberfaellig.length ? ` (${ueberfaellig.length})` : ''}`),
       h('span', { class: 'hint' }, 'Haken bei den gewünschten offenen Rechnungen setzen, dann »Mahnung erzeugen«. Es wird nie automatisch gemahnt.'));
 
     const nOpen = all.filter(payIsOpen).length;
@@ -4568,11 +4583,22 @@ async function loadKasseVerlauf() {
 
 const AUSGABEN_KATEGORIEN = ['Instandhaltung', 'Anschaffung', 'Verwaltung', 'Versicherung & Gebühren', 'Sonstiges'];
 
-function ausgabeDialog(a) {
+// Neue Ausgaben nacheinander erfassen: »Speichern und nächste« öffnet den Dialog erneut, Datum und Kategorie bleiben stehen.
+async function ausgabeDialog(a) {
+  let vorlage = null, r;
+  do {
+    r = await ausgabeDialogEinmal(a, vorlage);
+    vorlage = r === 'weiter' ? ausgabeDialogEinmal.letzte : null;
+    if (r === 'weiter') await refreshKasse();
+  } while (r === 'weiter');
+  return r;
+}
+
+function ausgabeDialogEinmal(a, vorlage) {
   const isNew = !a;
-  const datum = h('input', { type: 'date', value: (a && a.datum) || todayIso() });
+  const datum = h('input', { type: 'date', value: (a && a.datum) || (vorlage && vorlage.datum) || todayIso() });
   const besch = h('input', { type: 'text', maxlength: 120, value: (a && a.beschreibung) || '', autocomplete: 'off' });
-  const kategorie = h('input', { type: 'text', list: 'kategorien-liste', maxlength: 40, value: (a && a.kategorie) || '', placeholder: AUSGABEN_KATEGORIEN[AUSGABEN_KATEGORIEN.length - 1], autocomplete: 'off' });
+  const kategorie = h('input', { type: 'text', list: 'kategorien-liste', maxlength: 40, value: (a && a.kategorie) || (vorlage && vorlage.kategorie) || '', placeholder: AUSGABEN_KATEGORIEN[AUSGABEN_KATEGORIEN.length - 1], autocomplete: 'off' });
   const katList = h('datalist', { id: 'kategorien-liste' }, AUSGABEN_KATEGORIEN.map((x) => h('option', { value: x })));
   const betrag = h('input', { type: 'text', inputmode: 'decimal', value: a ? numIn(a.betrag) : '', autocomplete: 'off' });
   const wiederkehrend = h('input', { type: 'checkbox', checked: !!(a && a.wiederkehrend) });
@@ -4618,14 +4644,7 @@ function ausgabeDialog(a) {
       isNew ? null : belegeBox,
       fileInput,
       isNew ? h('span', { class: 'fhint' }, 'Werden nach dem Anlegen hochgeladen.') : null));
-  return modal(isNew ? 'Ausgabe erfassen' : `Ausgabe bearbeiten – ${a.beschreibung}`, body, [
-    { label: 'Abbrechen', value: false },
-    isNew ? null : { label: 'Löschen', cls: 'danger', value: 'del', action: async () => {
-      const ok = await confirmBox(`Ausgabe „${a.beschreibung}“ (${eur(a.betrag)}) wirklich löschen?`, 'Löschen', true);
-      if (!ok) return false;
-      try { await api('DELETE', `/api/admin/ausgaben/${a.id}?year=${S.kasseYear}`); } catch (e) { handleErr(e); return false; }
-    } },
-    { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+  const speichern = async () => {
       const b = parseNum(betrag.value);
       if (!datum.value) { toast('Bitte ein Datum angeben.', 'err'); return false; }
       if (!besch.value.trim()) { toast('Bitte eine Beschreibung eintragen.', 'err'); return false; }
@@ -4639,7 +4658,17 @@ function ausgabeDialog(a) {
           await api('POST', `/api/admin/ausgaben/${saved.id}/beleg?year=${S.kasseYear}`, fd, true);
         }
       } catch (e) { handleErr(e); return false; }
+      ausgabeDialogEinmal.letzte = { datum: datum.value, kategorie: kategorie.value.trim() };
+  };
+  return modal(isNew ? 'Ausgabe erfassen' : `Ausgabe bearbeiten – ${a.beschreibung}`, body, [
+    { label: 'Abbrechen', value: false },
+    isNew ? null : { label: 'Löschen', cls: 'danger', value: 'del', action: async () => {
+      const ok = await confirmBox(`Ausgabe „${a.beschreibung}“ (${eur(a.betrag)}) wirklich löschen?`, 'Löschen', true);
+      if (!ok) return false;
+      try { await api('DELETE', `/api/admin/ausgaben/${a.id}?year=${S.kasseYear}`); } catch (e) { handleErr(e); return false; }
     } },
+    isNew ? { label: 'Speichern und nächste', value: 'weiter', action: speichern } : null,
+    { label: 'Speichern', cls: 'primary', value: true, action: speichern },
   ].filter(Boolean));
 }
 
