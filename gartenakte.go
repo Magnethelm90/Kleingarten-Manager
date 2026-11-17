@@ -590,6 +590,7 @@ type gartenakte struct {
 	Wertermittlungen []Wertermittlung `json:"wertermittlungen"`
 	Dokumente        []GartenDokument `json:"dokumente"`
 	AufKarte         bool             `json:"aufKarte"`
+	Zeitleiste       []zeitEintrag    `json:"zeitleiste"`
 }
 
 func (a *App) handleGartenakte(w http.ResponseWriter, r *http.Request) {
@@ -624,6 +625,7 @@ func (a *App) handleGartenakte(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_, ak.AufKarte = a.st.d.Lageplan[nr]
+	ak.Zeitleiste = a.st.zeitleisteLocked(nr)
 	a.st.mu.Unlock()
 	sort.SliceStable(ak.Historie, func(i, j int) bool { return ak.Historie[i].Seit > ak.Historie[j].Seit })
 	sort.SliceStable(ak.Uebergaben, func(i, j int) bool { return ak.Uebergaben[i].Datum > ak.Uebergaben[j].Datum })

@@ -6029,7 +6029,11 @@ async function gartenakteDialog(nr) {
           h('td', { class: 'r' }, h('button', { class: 'btn small', onclick: () => protokollDrucken(u) }, 'Protokoll')))))) : null,
         ak.historie.length ? h('ul', { class: 'akte-verlauf' }, ak.historie.map((e) => h('li', null,
           h('b', null, e.name), ` (${e.mitgliedsnr || '–'}) · seit ${deDate(e.seit)}${e.bis ? ' bis ' + deDate(e.bis) : ' – heute'}`)))
-          : h('p', { class: 'hint' }, 'Noch kein Eintrag im Gartenverlauf.')));
+          : h('p', { class: 'hint' }, 'Noch kein Eintrag im Gartenverlauf.')),
+      abschnitt('uhr', 'Zeitleiste', null,
+        ak.zeitleiste && ak.zeitleiste.length ? h('ul', { class: 'akte-verlauf' }, ak.zeitleiste.map((z) => h('li', null,
+          h('b', null, deDate(z.datum)), ' · ', z.titel, z.text ? h('span', { class: 'hint' }, ` – ${z.text}`) : null)))
+          : h('p', { class: 'hint' }, 'Noch keine Ereignisse.')));
   };
   zeichnen();
   await breiterDialog(`Gartenakte – Garten ${nr}`, inhalt, [

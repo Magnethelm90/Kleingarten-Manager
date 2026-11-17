@@ -214,3 +214,24 @@ func TestJahresmeldungUndBesichtigung(t *testing.T) {
 		t.Errorf("ohne Datum bleiben Reste: %+v", got)
 	}
 }
+
+func TestGartenZeitleiste(t *testing.T) {
+	a, h := newTestApp(t)
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "7", "name": "Gerd Sieben", "gartennr": "7", "gartengroesse": 100})
+	do(h, "POST", "/api/admin/maengel", map[string]any{"gartennr": "7", "datum": "2026-05-01", "art": "Hecke und Bäume", "beschreibung": "zu hoch", "erledigtAm": "2026-06-01"})
+	a.st.mu.Lock()
+	z := a.st.zeitleisteLocked("7")
+	a.st.mu.Unlock()
+	if len(z) < 3 {
+		t.Fatalf("Zeitleiste: %+v", z)
+	}
+	for i := 1; i < len(z); i++ {
+		if z[i-1].Datum < z[i].Datum {
+			t.Errorf("nicht absteigend: %+v", z)
+		}
+	}
+	ak := decode[gartenakte](t, do(h, "GET", "/api/admin/gartenakte?gartennr=7", nil))
+	if len(ak.Zeitleiste) != len(z) {
+		t.Errorf("Akte: %d statt %d", len(ak.Zeitleiste), len(z))
+	}
+}
