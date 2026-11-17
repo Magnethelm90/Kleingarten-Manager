@@ -1276,7 +1276,10 @@ async function eichungDialog() {
       h('p', { class: 'hint' }, 'Nach dem Mess- und Eichgesetz dürfen Zähler nur begrenzt messen: Kaltwasserzähler 6 Jahre, elektronische Stromzähler 8 Jahre (Ferraris-Zähler 16). Die Frist endet mit Ablauf des Jahres. Trag das Eichjahr ein (steht meist auf dem Zähler oder der Plombe) – beim Zählerwechsel setzt das Programm es selbst.'),
       h('div', { class: 'toolbar' }, h('label', null, 'Eichfrist Wasser ', fw, ' Jahre'), h('label', null, 'Strom ', fs, ' Jahre'), h('div', { class: 'spacer' }),
         h('button', { class: 'btn', disabled: !tauschen, onclick: () => pdfDrucken({ url: '/api/admin/eichung/tauschliste', oeffnenUrl: '/api/admin/eichung/tauschliste/oeffnen', titel: 'Tauschliste', meldung: () => 'Die Tauschliste wurde im PDF-Programm geöffnet.' }) },
-          `Tauschliste drucken${tauschen ? ` (${tauschen})` : ''}`)),
+          `Tauschliste drucken${tauschen ? ` (${tauschen})` : ''}`),
+        h('button', { class: 'btn', title: 'Alle im Abrechnungsjahr getauschten Zähler mit Endstand und Anfangsstand, zum Gegenzeichnen',
+          onclick: () => pdfDrucken({ url: `/api/admin/zaehlerwechsel/protokoll?year=${S.year}`, oeffnenUrl: `/api/admin/zaehlerwechsel/protokoll/oeffnen?year=${S.year}`, titel: 'Zählerwechsel-Protokoll', meldung: () => 'Das Protokoll wurde im PDF-Programm geöffnet.' }) },
+        'Wechsel-Protokoll')),
       h('div', { class: 'tablewrap', style: 'max-height:55vh' }, h('table', { class: 'data' },
         h('thead', null, h('tr', null, ['Garten', 'Pächter', 'Zähler', 'Eichjahr', 'Gültig bis', ''].map((t) => h('th', null, t)))),
         h('tbody', null, d.zeilen.map((z) => {
@@ -3755,6 +3758,7 @@ function adminPaechter() {
           h('button', { class: 'btn small', onclick: async () => { if (await paechterDialog(p)) await reload(); } }, 'Bearbeiten'), ' ',
           p.gartennr ? [h('button', { class: 'btn small', title: `Gartenakte von Garten ${p.gartennr}: Dokumente, Wertermittlungen, Übergaben, Verlauf`, onclick: () => gartenakteDialog(p.gartennr.trim()) }, 'Akte'), ' '] : null,
           mehrMenue([
+            { label: 'Beitragsübersicht …', title: 'Alle Rechnungen, Zahlungen und Mahnungen dieses Pächters über die Jahre, mit Saldo', aktion: () => beitragskontoDialog(p) },
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Wechsel-Assistent …', title: 'Schritt für Schritt: Kündigung, Wertermittlung, Schlüssel, Übergabe', aktion: () => wechselAssistent(p) } : null,
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Pächterwechsel …', title: 'Garten an einen neuen Pächter übergeben (Schlussrechnung, Übergabeprotokoll, neuer Pächter)', aktion: () => paechterwechselDialog(p) } : null,
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Kündigung erfassen …', title: 'Kündigung mit Frist und Fahrplan bis zur Übergabe', aktion: async () => { if (await kuendigungDialog(p)) { adminTabWaehlen('kuendigungen'); render(); } } } : null,
@@ -5138,6 +5142,30 @@ function naechsteMitgliedsnr() {
 // ------------------------------------------------------------------ Pächterwechsel-Assistent
 // Führt Schritt für Schritt durch den Wechsel eines Gartens. Der Stand kommt aus dem Fahrplan der Kündigung; jeder
 // Schritt hat einen Knopf, der die vorhandene Funktion öffnet. Nach jeder Aktion zeigt der Assistent den neuen Stand.
+async function beitragskontoDialog(p) {
+  let k;
+  try { k = await api('GET', `/api/admin/paechter/${encodeURIComponent(p.id)}/konto`); } catch (e) { handleErr(e); return; }
+  const dat = (iso) => (iso ? isoDatum(iso).toLocaleDateString('de-DE') : '–');
+  const saldoText = k.saldo > 0.004 ? `Noch zu zahlen: ${eur(k.saldo)}` : k.saldo < -0.004 ? `Guthaben des Pächters: ${eur(-k.saldo)}` : 'Ausgeglichen';
+  const tabelle = k.zeilen.length ? h('div', { class: 'tablewrap', style: 'max-height:42vh' }, h('table', { class: 'data' },
+    h('thead', null, h('tr', null, ['Jahr', 'Rechnung', 'Datum', 'Fällig', 'Betrag', 'Bezahlt', 'Offen', 'Mahnungen'].map((t) => h('th', null, t)))),
+    h('tbody', null, k.zeilen.map((z) => h('tr', null,
+      h('td', null, String(z.jahr)), h('td', null, z.nummer), h('td', null, dat(z.datum)), h('td', null, dat(z.faellig)),
+      h('td', { class: 'num' }, eur(z.betrag)),
+      h('td', { class: 'num' }, z.bezahltAm ? `${eur(z.bezahlt)} (${dat(z.bezahltAm)})` : '–'),
+      h('td', { class: 'num' }, Math.abs(z.offen) > 0.004 ? eur(z.offen) : '–'),
+      h('td', null, z.mahnstufe ? String(z.mahnstufe) : '–')))))) : h('p', { class: 'hint' }, 'Für diesen Pächter gibt es noch keine Rechnungen.');
+  const vz = k.vorauszahlungen.length ? h('p', { class: 'hint' }, 'Vorauszahlungen: ' + k.vorauszahlungen.map((v) => `${v.jahr}: ${eur(v.summe)} (${v.anzahl}×${v.gebucht ? '' : ', teils vorgemerkt'})`).join(' · ')) : null;
+  await modal(`Beitragsübersicht – ${k.name}`, h('div', null,
+    h('p', { class: 'hint' }, [k.gartennr ? `Garten ${k.gartennr}` : '', k.mitgliedsnr ? `Mitgliedsnr. ${k.mitgliedsnr}` : ''].filter(Boolean).join(' · ')),
+    tabelle, vz, h('p', null, h('b', null, saldoText))),
+  [{ label: 'Schließen', value: null },
+    { label: 'PDF', cls: 'primary', value: true, action: async () => {
+      await pdfDrucken({ url: `/api/admin/paechter/${encodeURIComponent(p.id)}/konto/pdf`, oeffnenUrl: `/api/admin/paechter/${encodeURIComponent(p.id)}/konto/pdf/oeffnen`, titel: 'Beitragsübersicht', meldung: () => 'Die Beitragsübersicht wurde im PDF-Programm geöffnet.' });
+      return false;
+    } }]);
+}
+
 async function wechselAssistent(p) {
   const holen = async () => (await api('GET', '/api/admin/kuendigungen')).kuendigungen.find((x) => x.paechterId === p.id && !x.abgeschlossen) || null;
   let k;
@@ -6622,7 +6650,8 @@ function cockpitKarte(st, istAdmin) {
       h('button', { class: 'btn small', onclick: () => zurueck(a, 0) }, 'Wieder anzeigen'))))) : null;
   return h('div', null, ...teile,
     alle ? null : h('button', { class: 'btn small', style: 'margin-top:6px', onclick: () => { S.aufgabenAlle = true; render(); } }, `Alle ${S.aufgaben.length} anzeigen`),
-    zbBox);
+    zbBox,
+    h('p', { class: 'hint', style: 'margin:8px 0 0' }, h('a', { href: '/api/admin/fristen.ics', download: 'Vereinsfristen.ics', title: 'Mängelfristen, Kündigungstermine und Zahlungsfristen als Kalenderdatei mit Erinnerung am Vortag' }, 'Fristen als Kalenderdatei')));
 }
 
 // ------------------------------------------------------------------ Übersicht: Besichtigungen
