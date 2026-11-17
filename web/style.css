@@ -77,6 +77,13 @@ header.top .brand span { font-size: 12px; opacity: .8; display: block; max-width
   display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line);
   padding: 9px 12px; font: inherit; cursor: pointer;
 }
+.globalsearch-results .gs-zeile { border-bottom: 1px solid var(--line); }
+.globalsearch-results .gs-zeile .gs-item { border-bottom: 0; padding-bottom: 3px; }
+.globalsearch-results .gs-aktionen { display: flex; gap: 6px; padding: 0 12px 8px; }
+.globalsearch-results .gs-chip {
+  border: 1px solid var(--line-strong); background: var(--card); border-radius: 999px; padding: 2px 10px; font: inherit; font-size: 12px; color: var(--green-dark); cursor: pointer;
+}
+.globalsearch-results .gs-chip:hover { background: var(--green-soft); }
 .globalsearch-results .gs-item:last-child { border-bottom: 0; }
 .globalsearch-results .gs-item:hover { background: var(--green-soft); }
 .globalsearch-results .gs-item .hint { float: right; }

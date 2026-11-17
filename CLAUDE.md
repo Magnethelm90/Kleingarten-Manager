@@ -119,6 +119,7 @@
   Vereinsverwaltung); runde `.subtabs` nur noch für Filter/Ansichten. Seitenleiste 244 px.
 - Klicks gespart: Zahlungen »Alle überfälligen auswählen« (Mahnung), `ausgabeDialog` ist Schleife um `ausgabeDialogEinmal` (Knopf »Speichern und nächste«, Datum/Kategorie bleiben), `issue()` zeigt im Abschluss »Postversand drucken« / »E-Mails vorbereiten«.
 - Menü weiter gestrafft (14 Einträge): Pächter (+Warteliste), Anlage = Mängel & Lauben | Schlüssel & Geräte, Berichte & Jahresabschluss = Berichte & Meldungen | Jahreswechsel, Einstellungen = Preise & Einstellungen | Import, Export, Sicherung. Neue Seiten als Reiter in bestehende NAV-Einträge hängen.
+- Verbesserungen (Nov 2026): Spenden-/Kassenbuch-Dialog mit »Speichern und nächste« (Muster `xxxDialog` = Schleife um `xxxDialogEinmal`, liefert true wenn etwas gespeichert), Übersicht/Schnelleingabe springen zum ersten/nächsten unvollständigen Pächter, Suchtreffer mit Chips Rechnung/Zahlung/Akte (`.gs-zeile`), letzte Seite in localStorage `km-seite` (`seiteMerken/seiteWiederherstellen`), Leer-Hinweise für Vorauszahlungen/Jubiläen. `navLabel` nur für Label »Mängel & Lauben«.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

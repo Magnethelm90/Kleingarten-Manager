@@ -413,7 +413,7 @@ const NAV = [
 // Bereiche: ausgeschaltete Zusatzbereiche (Einstellungen → Bereiche) erscheinen nicht im Menü.
 const modulAn = (name) => !S.state || !S.state.module || S.state.module[name] !== false;
 const navSichtbar = (x, st) => (!x.nur || x.nur(st)) && (!x.modul || modulAn(x.modul));
-const navLabel = (x) => (x.admin === 'maengel' && !modulAn('bauten') ? 'Mängel' : x.label);
+const navLabel = (x) => (x.label === 'Mängel & Lauben' && !modulAn('bauten') ? 'Mängel' : x.label);
 // Ein Menüpunkt kann mehrere Seiten als Reiter bündeln (x.reiter); der erste Reiter ist die Seite selbst.
 const navPasst = (y, tab = S.tab, adminTab = S.adminTab) => (y.admin ? tab === 'admin' && y.admin === adminTab : y.tab === tab);
 const navEintrag = (tab, adminTab) => NAV.flatMap((g) => g.items).find((x) => (x.reiter || [x]).some((y) => navPasst(y, tab, adminTab)));
@@ -542,6 +542,7 @@ function render() {
   const ansicht = S.tab === 'admin' ? 'admin/' + S.adminTab : S.tab;
   if (ansicht !== S.letzteAnsicht) {
     S.letzteAnsicht = ansicht;
+    seiteMerken(st);
     const main = app.querySelector('main');
     if (main && !bewegungReduziert()) { main.classList.add('ansicht-neu'); zahlenAnimieren(main); }
   }
@@ -738,10 +739,18 @@ function globalSearchBox(st) {
     results.classList.add('open');
     const treffer = weitereFuer === S.globalSearchQ.trim() ? weitere : [];
     if (!m.length && !treffer.length) { results.append(h('div', { class: 'gs-empty' }, 'Nichts gefunden.')); return; }
-    for (const p of m)
-      results.append(h('button', { class: 'gs-item', type: 'button', onclick: () => goTo(p) },
-        h('b', null, p.gartennr || p.mitgliedsnr), ' ', p.name,
-        h('span', { class: 'hint' }, p.mitgliedsnr)));
+    for (const p of m) {
+      // Hauptklick: Zählerstände; daneben die häufigsten Ziele für diesen Pächter
+      const ziel = (fn) => (e) => { e.stopPropagation(); S.globalSearchQ = ''; fn(); };
+      const knoepfe = [
+        { t: 'Rechnung', fn: () => { S.tab = 'rechnungen'; S.invTab = 'pruefen'; S.invView = 'archiv'; S.selInvoice = p.id; render(); } },
+        istAdmin ? { t: 'Zahlung', fn: () => { S.tab = 'zahlungen'; S.payQ = p.mitgliedsnr; S.payFilter = 'alle'; render(); } } : null,
+        istAdmin && p.gartennr ? { t: 'Akte', fn: () => { gartenakteDialog(p.gartennr); render(); } } : null].filter(Boolean);
+      results.append(h('div', { class: 'gs-zeile' },
+        h('button', { class: 'gs-item', type: 'button', onclick: () => goTo(p) },
+          h('b', null, p.gartennr || p.mitgliedsnr), ' ', p.name, h('span', { class: 'hint' }, p.mitgliedsnr)),
+        h('span', { class: 'gs-aktionen' }, knoepfe.map((k) => h('button', { class: 'gs-chip', type: 'button', title: `${k.t} von ${p.name}`, onclick: ziel(k.fn) }, k.t)))));
+    }
     for (const t of treffer)
       results.append(h('button', { class: 'gs-item', type: 'button', onclick: () => gehZu(t) },
         h('b', null, t.art), ' ', t.titel, t.text ? h('span', { class: 'hint' }, t.text) : null));
@@ -1068,7 +1077,9 @@ function jahresFortschritt(st, istAdmin) {
   const bezahlt = forderungen.filter((e) => !payIsOpen(e)).length;
   const go = (tab, extra) => () => { S.tab = tab; Object.assign(S, extra || {}); render(); };
   const stationen = [
-    { titel: 'Zählerstände', wert: vollst, von: n, text: `${vollst} von ${n} vollständig`, los: 'Zählerstände eintragen', go: go('eingabe') },
+    // führt gleich zum ersten Pächter, bei dem noch etwas fehlt (Schnelleingabe)
+    { titel: 'Zählerstände', wert: vollst, von: n, text: `${vollst} von ${n} vollständig`, los: 'Zählerstände eintragen',
+      go: go('eingabe', { eingabeMode: 'schnell', quickId: ([...st.paechter].sort(cmpNr).find((p) => !(st.results[p.id] && st.results[p.id].vollstaendig)) || {}).id || S.quickId }) },
     { titel: 'Rechnungen', wert: ausgestellt, von: vollst || n, text: `${ausgestellt} von ${vollst} ausgestellt`, los: 'Rechnungen ausstellen', go: go('rechnungen', { invTab: 'pruefen' }) },
     // nur Guthaben ausgestellt: es gibt nichts einzusammeln, die Station gilt als erledigt
     forderungen.length || !ausgestellt
@@ -1455,7 +1466,14 @@ function viewSchnell() {
         h('div', { class: 'spacer' }),
         h('button', { class: 'btn', onclick: () => verlaufDialog(p) }, 'Verlauf'),
         h('button', { class: 'btn', onclick: () => { S.tab = 'rechnungen'; S.selInvoice = p.id; S.invTab = 'pruefen'; S.invView = 'archiv'; render(); } }, 'Rechnung ansehen'),
-        h('button', { class: 'btn primary', onclick: () => { input.focus(); } }, 'Fertig – nächste Nummer')));
+        h('button', { class: 'btn primary', onclick: () => {
+          // zum nächsten Pächter mit fehlenden Angaben springen (nach der Nummer), sonst zurück ins Suchfeld
+          const aktuell = S.state.results;
+          const ab = list.findIndex((x) => x.id === p.id);
+          const unvoll = (x) => !(aktuell[x.id] && aktuell[x.id].vollstaendig);
+          const naechster = list.slice(ab + 1).find(unvoll) || list.find((x) => x.id !== p.id && unvoll(x));
+          if (naechster) choose(naechster); else { toast('Alle Pächter sind vollständig.', 'ok'); input.focus(); }
+        } }, 'Fertig – nächster offener')));
     updateCalc(card, st.results[p.id]);
     box.append(card);
 
@@ -2622,10 +2640,21 @@ async function loadSpenden() {
   render();
 }
 
-function spendeDialog(x) {
+// Mehrere Spenden nacheinander erfassen (»Speichern und nächste«); liefert true, wenn etwas gespeichert wurde.
+async function spendeDialog(x) {
+  let vorlage = null, r, gespeichert = false;
+  do {
+    r = await spendeDialogEinmal(x, vorlage);
+    if (r) gespeichert = true;
+    vorlage = r === 'weiter' ? { datum: spendeDialogEinmal.letzt } : null;
+  } while (r === 'weiter');
+  return gespeichert;
+}
+
+function spendeDialogEinmal(x, vorlage) {
   const st = S.state;
   const isNew = !x || !x.id;
-  const cur = { datum: todayIso(), betrag: '', name: '', strasse: '', plzOrt: '', paechterId: '', verzicht: false, notiz: '', ...(x || {}) };
+  const cur = { datum: (vorlage && vorlage.datum) || todayIso(), betrag: '', name: '', strasse: '', plzOrt: '', paechterId: '', verzicht: false, notiz: '', ...(x || {}) };
   const gesperrt = !!cur.bestaetigtAm;
   const f = {
     paechter: h('select', { disabled: gesperrt }, [h('option', { value: '' }, '– kein Pächter / andere Person –'),
@@ -2651,17 +2680,20 @@ function spendeDialog(x) {
       fld('Name *', f.name, null, true), fld('Straße', f.strasse), fld('PLZ und Ort', f.plzOrt),
       h('div', { class: 'field wide' }, h('label', { class: 'check' }, f.verzicht, ' Verzicht auf Erstattung von Aufwendungen (Aufwandsspende)')),
       fld('Notiz', f.notiz, null, true)));
-  return modal(isNew ? 'Spende erfassen' : 'Spende bearbeiten', body, [
-    { label: 'Abbrechen', value: false },
-    { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+  const speichern = async () => {
       const betrag = parseNum(f.betrag.value);
       if (betrag == null || Number.isNaN(betrag) || betrag <= 0) { toast('Bitte einen Betrag größer als 0 eintragen.', 'err'); return false; }
       const daten = { ...cur, paechterId: f.paechter.value, datum: f.datum.value, betrag, name: f.name.value, strasse: f.strasse.value, plzOrt: f.plzOrt.value, verzicht: f.verzicht.checked, notiz: f.notiz.value };
       try {
         if (isNew) await api('POST', '/api/admin/spenden', daten); else await api('PUT', `/api/admin/spenden/${cur.id}`, daten);
         toast('Gespeichert', 'ok');
+        spendeDialogEinmal.letzt = f.datum.value;
       } catch (e) { handleErr(e); return false; }
-    } }]);
+  };
+  return modal(isNew ? 'Spende erfassen' : 'Spende bearbeiten', body, [
+    { label: 'Abbrechen', value: false },
+    isNew ? { label: 'Speichern und nächste', value: 'weiter', action: speichern } : null,
+    { label: 'Speichern', cls: 'primary', value: true, action: speichern }].filter(Boolean));
 }
 
 async function bestaetigungAusstellen(liste) {
@@ -3626,6 +3658,9 @@ function adminVorauszahlung() {
       await reload();
     } catch (e) { handleErr(e); sepaSchalter.checked = !sepaSchalter.checked; }
   });
+  if (!d.zeilen.length) {
+    return h('div', null, leer('euro', 'Noch keine Pächter für Vorauszahlungen', 'Vorauszahlungen werden je Pächter mit einem Monatsbetrag geplant. Lege zuerst die Pächter an.', 'Pächter anlegen', () => { adminTabWaehlen('paechter'); render(); }));
+  }
   return h('div', null,
     h('p', { class: 'hint' }, 'Monatliche Vorauszahlungen, die Pächter selbst überweisen (z. B. per Dauerauftrag). Monatsbetrag je Pächter eintragen; eingegangene Zahlungen erkennt der Kontoauszug (Name und Betrag), sonst »+ Zahlung«. Alles wird als Abschlag auf die Jahresrechnung gebucht.'),
     d.vorgemerkt ? h('div', { class: 'banner info' }, `${anz(d.vorgemerkt, 'Zahlung', 'Zahlungen')} für ${jahr} ${d.vorgemerkt === 1 ? 'ist' : 'sind'} vorgemerkt – das Abrechnungsjahr ist im Programm noch nicht angelegt. Sie werden beim Jahreswechsel automatisch gebucht.`) : null,
@@ -4690,28 +4725,42 @@ function anfangsbestandHinweis(k, pruefMode) {
 
 // ---- Barkasse: Kassenbuch für Bargeld mit fortlaufenden Belegnummern
 
-function barbuchungDialog(b) {
+async function barbuchungDialog(b) {
+  let vorlage = null, r, gespeichert = false;
+  do {
+    r = await barbuchungDialogEinmal(b, vorlage);
+    if (r) gespeichert = true;
+    vorlage = r === 'weiter' ? barbuchungDialogEinmal.letzt : null;
+  } while (r === 'weiter');
+  return gespeichert;
+}
+
+function barbuchungDialogEinmal(b, vorlage) {
   const jahr = S.kasseYear;
-  const ausgabe = !b || b.betrag < 0;
+  const ausgabe = b ? b.betrag < 0 : !(vorlage && vorlage.art === 'ein');
   const f = {
-    datum: h('input', { type: 'date', value: b ? b.datum : todayIso() }),
+    datum: h('input', { type: 'date', value: b ? b.datum : (vorlage && vorlage.datum) || todayIso() }),
     art: h('select', null, h('option', { value: 'aus', selected: ausgabe }, 'Ausgabe'), h('option', { value: 'ein', selected: !ausgabe }, 'Einnahme')),
     betrag: h('input', { type: 'text', inputmode: 'decimal', value: b ? numIn(Math.abs(b.betrag)) : '', style: 'width:8em' }),
     text: h('input', { type: 'text', maxlength: 200, value: b ? b.text : '', placeholder: 'z. B. Sommerfest: Getränkeverkauf' }),
-    kat: h('input', { type: 'text', maxlength: 60, value: b ? b.kategorie || '' : '', list: 'bar-kategorien', placeholder: 'z. B. Feste' }),
+    kat: h('input', { type: 'text', maxlength: 60, value: b ? b.kategorie || '' : (vorlage && vorlage.kat) || '', list: 'bar-kategorien', placeholder: 'z. B. Feste' }),
   };
   const fld = (label, el, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), el);
-  return modal(b ? `Beleg ${b.belegNr} bearbeiten` : 'Barkasse: Buchung', h('div', { class: 'form' },
-    h('datalist', { id: 'bar-kategorien' }, ['Feste', 'Instandhaltung', 'Anschaffung', 'Verwaltung', 'Pfand', 'Umbuchung'].map((k) => h('option', { value: k }))),
-    fld('Datum', f.datum), fld('Art', f.art), fld('Betrag in €', h('div', { class: 'inputunit' }, f.betrag, h('span', null, '€'))), fld('Kategorie', f.kat),
-    fld('Buchungstext *', f.text, true)),
-  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+  const speichern = async () => {
     const v = parseNum(f.betrag.value);
     if (v == null || Number.isNaN(v) || v <= 0) { toast('Bitte einen Betrag größer 0 eintragen.', 'err'); return false; }
     try {
       S.barkasse = await api('POST', `/api/admin/barkasse?year=${jahr}`, { id: b ? b.id : '', datum: f.datum.value, text: f.text.value, kategorie: f.kat.value, betrag: f.art.value === 'aus' ? -v : v });
+      barbuchungDialogEinmal.letzt = { datum: f.datum.value, art: f.art.value, kat: f.kat.value };
     } catch (e) { handleErr(e); return false; }
-  } }]);
+  };
+  return modal(b ? `Beleg ${b.belegNr} bearbeiten` : 'Barkasse: Buchung', h('div', { class: 'form' },
+    h('datalist', { id: 'bar-kategorien' }, ['Feste', 'Instandhaltung', 'Anschaffung', 'Verwaltung', 'Pfand', 'Umbuchung'].map((k) => h('option', { value: k }))),
+    fld('Datum', f.datum), fld('Art', f.art), fld('Betrag in €', h('div', { class: 'inputunit' }, f.betrag, h('span', null, '€'))), fld('Kategorie', f.kat),
+    fld('Buchungstext *', f.text, true)),
+  [{ label: 'Abbrechen', value: false },
+    b ? null : { label: 'Speichern und nächste', value: 'weiter', action: speichern },
+    { label: 'Speichern', cls: 'primary', value: true, action: speichern }].filter(Boolean));
 }
 
 function barkasseKarte(pruefMode) {
@@ -5306,7 +5355,7 @@ function adminJubilaeen() {
     h('p', { class: 'hint' }, 'Mitglied-seit-Datum aus der Gartenhistorie (frühester Eintrag je Pächter). Nützlich für die Mitgliederversammlung, z. B. um langjährige Mitglieder zu ehren. Steht erst ab Einführung der Gartenhistorie-Funktion zur Verfügung – bei Pächtern von davor fehlt das Datum, sie stehen unten in einer eigenen Liste.'),
     h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
       h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Name', 'Garten', 'Mitglied seit', 'Dabei seit'].map((t) => h('th', null, t)))),
-      rows.length ? tbody : h('tbody', null, h('tr', null, h('td', { colspan: 5, class: 'empty' }, 'Noch keine Daten.'))))),
+      rows.length ? tbody : h('tbody', null, h('tr', null, h('td', { colspan: 5, class: 'empty' }, leer('stern', 'Noch keine Mitgliedsjahre', st.paechter.length ? 'Das Eintrittsdatum kommt aus der Gartenhistorie. Bei Pächtern ohne Eintrag erscheint es, sobald ein Garten zugewiesen ist.' : 'Lege zuerst die Pächter an. Danach siehst du hier, wer wie lange dabei ist.', st.paechter.length ? null : 'Pächter anlegen', () => { adminTabWaehlen('paechter'); render(); })))))),
     ohneDatum.length ? h('div', { class: 'card', style: 'margin-top:12px' },
       h('h3', { style: 'margin-top:0' }, 'Ohne bekanntes Eintrittsdatum'),
       h('p', { class: 'hint' }, ohneDatum.map((p) => `${p.mitgliedsnr} ${p.name}`).join(', '))) : null);
@@ -7195,9 +7244,24 @@ function besichtigungenKarte(st, istAdmin) {
 
 // ------------------------------------------------------------------ Start
 
+// Letzte Seite merken: nach dem Neustart des Programms öffnet sich die zuletzt besuchte Seite (nur im Browserspeicher dieses Rechners).
+function seiteMerken(st) {
+  if (st.gesperrt || st.leer || (st.hasPassword && !st.loggedIn)) return;
+  try { localStorage.setItem('km-seite', JSON.stringify({ tab: S.tab, admin: S.tab === 'admin' ? S.adminTab : null })); } catch (e) { /* ohne Speicher einfach nicht merken */ }
+}
+function seiteWiederherstellen() {
+  const st = S.state;
+  if (st.gesperrt || st.leer || (st.hasPassword && !st.loggedIn)) return;
+  let z; try { z = JSON.parse(localStorage.getItem('km-seite') || 'null'); } catch (e) { z = null; }
+  if (!z || typeof z !== 'object') return;
+  const eintrag = NAV.flatMap((g) => g.items).flatMap((x) => x.reiter || [x]).find((y) => (z.admin ? y.admin === z.admin : y.tab && y.tab === z.tab));
+  if (!eintrag || !navSichtbar(eintrag, st) || z.tab === 'uebersicht') return;
+  if (eintrag.admin) adminTabWaehlen(eintrag.admin); else S.tab = eintrag.tab;
+}
+
 (async function start() {
   document.body.append(h('div', { id: 'toasts', role: 'status', 'aria-live': 'polite' }));
-  try { await load(); render(); } catch (e) {
+  try { await load(); seiteWiederherstellen(); render(); } catch (e) {
     document.getElementById('app').replaceChildren(h('div', { class: 'center card' }, h('h2', null, 'Verbindung fehlgeschlagen'), h('p', null, e.message)));
   }
 })();
