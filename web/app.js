@@ -870,7 +870,7 @@ function jubilaeumBanner(st, istAdmin) {
   }
   if (!treffer.length) return null;
   return h('div', { class: 'banner info' },
-    `${treffer.length} Mitglied(er) haben ${jahr} ein rundes Jubiläum: ${treffer.join(', ')}.`, ' ',
+    `${anz(treffer.length, 'Mitglied hat', 'Mitglieder haben')} ${jahr} ein rundes Jubiläum: ${treffer.join(', ')}.`, ' ',
     h('button', { class: 'btn small', onclick: () => { adminTabWaehlen('jubilaeen'); render(); } }, 'Zu den Jubiläen'), ' ',
     h('button', { class: 'btn small', onclick: () => { S.jubilaeumDismissed = true; render(); } }, 'Ausblenden'));
 }
@@ -895,6 +895,9 @@ async function beispieldatenEntfernen() {
     await reload();
   } catch (e) { handleErr(e); }
 }
+
+// »3 Rechnungen« / »1 Rechnung« statt »3 Rechnung(en)«
+function anz(n, eins, viele) { return `${n} ${n === 1 ? eins : viele}`; }
 
 function demoBanner(st) {
   if (!st.demo) return null;
@@ -1505,7 +1508,7 @@ const fmtWhen = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toL
 
 function issueSummary(r) {
   return h('div', null,
-    h('p', null, `${r.created.length} Rechnung(en) ausgestellt und gespeichert. Die PDF-Dateien liegen hier:`), h('p', { class: 'mono' }, r.folder),
+    h('p', null, `${anz(r.created.length, 'Rechnung', 'Rechnungen')} ausgestellt und gespeichert. Die PDF-Dateien liegen hier:`), h('p', { class: 'mono' }, r.folder),
     (r.skipped || []).length ? h('div', { class: 'banner warn' }, h('b', null, `${r.skipped.length} nicht ausgestellt:`),
       h('ul', { class: 'plain' }, r.skipped.map((x) => h('li', null, `${x.name}: ${x.reason}`)))) : null);
 }
@@ -2169,7 +2172,7 @@ async function pdfDrucken({ url, oeffnenUrl, titel, meldung, body }) {
 // Alle Rechnungen mit Postversand als eine PDF-Datei zum Ausdrucken (nach Mitgliedsnummer sortiert).
 const postRechnungenDrucken = (year) => pdfDrucken({
   url: `/api/admin/rechnungen-druck?year=${year}`, oeffnenUrl: `/api/admin/rechnungen-druck/oeffnen?year=${year}`,
-  titel: 'Rechnungen Postversand', meldung: (r) => `${r.anzahl} Rechnung(en) im PDF-Programm geöffnet – dort drucken.`,
+  titel: 'Rechnungen Postversand', meldung: (r) => `${anz(r.anzahl, 'Rechnung', 'Rechnungen')} im PDF-Programm geöffnet – dort drucken.`,
 });
 
 // Ablesebogen für den Rundgang: alle Gärten mit Zählernummern und Vorjahresständen, leere Felder zum Eintragen.
@@ -2305,7 +2308,7 @@ function viewAusstellen() {
   const open = list.filter((p) => st.results[p.id] && st.results[p.id].vollstaendig && !issuedOf(p));
   const nIss = list.filter((p) => issuedOf(p)).length;
   const allBtn = h('button', { class: 'btn primary', disabled: !open.length, onclick: async () => {
-    const ok = await confirmBox(`${open.length} Rechnung(en) werden jetzt ausgestellt und als PDF gespeichert. Unvollständige Rechnungen werden übersprungen. Fortfahren?`, 'Ausstellen');
+    const ok = await confirmBox(`${anz(open.length, 'Rechnung wird', 'Rechnungen werden')} jetzt ausgestellt und als PDF gespeichert. Unvollständige Rechnungen werden übersprungen. Fortfahren?`, 'Ausstellen');
     if (!ok) return;
     allBtn.disabled = true;
     try { await issue([], false); } catch (e) { handleErr(e); }
@@ -2712,7 +2715,7 @@ function adminSpenden() {
       h('button', { class: 'btn', disabled: !auswahl.length || !!d.hinweis, title: 'Eine Spende: Einzelbestätigung; mehrere desselben Spenders: Sammelbestätigung', onclick: () => bestaetigungAusstellen(auswahl) },
         auswahl.length > 1 ? `Sammelbestätigung (${auswahl.length})` : 'Bestätigung für Auswahl'),
       h('button', { class: 'btn', disabled: !!d.hinweis || !l.some((x) => !x.bestaetigtAm && !x.bereinigt), title: 'Alle noch offenen Spenden des Jahres, je Spender eine Bestätigung', onclick: () => spendenJahrespaket(jahr) }, 'Alle offenen des Jahres …'),
-      h('div', { class: 'spacer' }), h('span', { class: 'stat' }, `${l.length} Spende(n) · ${eur(summe)}`)),
+      h('div', { class: 'spacer' }), h('span', { class: 'stat' }, `${anz(l.length, 'Spende', 'Spenden')} · ${eur(summe)}`)),
     l.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
       h('thead', null, h('tr', null, ['', 'Datum', 'Spender', 'Betrag', 'Bestätigung', ''].map((x) => h('th', null, x)))),
       h('tbody', null, l.map((x) => h('tr', null,
@@ -3582,7 +3585,7 @@ function adminVorauszahlung() {
   });
   return h('div', null,
     h('p', { class: 'hint' }, 'Monatliche Vorauszahlungen, die Pächter selbst überweisen (z. B. per Dauerauftrag). Monatsbetrag je Pächter eintragen; eingegangene Zahlungen erkennt der Kontoauszug (Name und Betrag), sonst »+ Zahlung«. Alles wird als Abschlag auf die Jahresrechnung gebucht.'),
-    d.vorgemerkt ? h('div', { class: 'banner info' }, `${d.vorgemerkt} Zahlung(en) für ${jahr} sind vorgemerkt – das Abrechnungsjahr ist im Programm noch nicht angelegt. Sie werden beim Jahreswechsel automatisch gebucht.`) : null,
+    d.vorgemerkt ? h('div', { class: 'banner info' }, `${anz(d.vorgemerkt, 'Zahlung', 'Zahlungen')} für ${jahr} ${d.vorgemerkt === 1 ? 'ist' : 'sind'} vorgemerkt – das Abrechnungsjahr ist im Programm noch nicht angelegt. Sie werden beim Jahreswechsel automatisch gebucht.`) : null,
     h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), jahrSel,
       h('button', { class: 'btn', onclick: () => { S.tab = 'zahlungen'; render(); }, title: 'Unter »Zahlungen« → »Kontoauszug einlesen«' }, 'Kontoauszug einlesen →'),
       h('div', { class: 'spacer' }), h('span', { class: 'stat' }, `${mitSoll} mit Monatsbetrag · eingegangen ${eur(d.summe)}${d.rueckstand ? ' · Rückstand ' + eur(d.rueckstand) : ''}`)),
@@ -3711,7 +3714,7 @@ function adminSepa() {
   };
   const erstellen = async () => {
     const v = S.sepaVorschau;
-    if (!(await confirmBox(`${v.posten.length} Lastschrift(en) über ${eur(v.summe)} zum ${deDate(v.faellig)} erstellen? ${v.art === 'vorauszahlung' ? 'Die Beträge werden als Vorauszahlung auf die Jahresrechnung gebucht.' : 'Die Rechnungen werden als bezahlt vermerkt.'} Danach die Datei im Online-Banking hochladen.`, 'Erstellen'))) return;
+    if (!(await confirmBox(`${anz(v.posten.length, 'Lastschrift', 'Lastschriften')} über ${eur(v.summe)} zum ${deDate(v.faellig)} erstellen? ${v.art === 'vorauszahlung' ? 'Die Beträge werden als Vorauszahlung auf die Jahresrechnung gebucht.' : 'Die Rechnungen werden als bezahlt vermerkt.'} Danach die Datei im Online-Banking hochladen.`, 'Erstellen'))) return;
     try {
       const l = await api('POST', '/api/admin/sepa/lauf', { art: v.art, faellig: v.faellig });
       S.sepaVorschau = null; S.sepa = null; await reload();
@@ -3741,7 +3744,7 @@ function adminSepa() {
           h('div', { class: 'tablewrap', style: 'max-height:300px;overflow:auto' }, h('table', null,
             h('thead', null, h('tr', null, ['Kontoinhaber', 'IBAN', 'Verwendungszweck', 'Betrag'].map((x) => h('th', null, x)))),
             h('tbody', null, v.posten.map((x) => h('tr', null, h('td', null, x.name), h('td', { class: 'klein' }, ibanKurz(x.iban)), h('td', { class: 'klein wrap' }, x.zweck), h('td', { class: 'num' }, eur(x.betrag))))))),
-          h('div', { class: 'toolbar', style: 'margin-top:10px' }, h('b', null, `${v.posten.length} Lastschrift(en) · ${eur(v.summe)}`), h('div', { class: 'spacer' }),
+          h('div', { class: 'toolbar', style: 'margin-top:10px' }, h('b', null, `${anz(v.posten.length, 'Lastschrift', 'Lastschriften')} · ${eur(v.summe)}`), h('div', { class: 'spacer' }),
             h('button', { class: 'btn primary', onclick: erstellen }, 'Lauf erstellen und Datei speichern'))]
           : h('p', { class: 'hint' }, 'Nichts einzuziehen.')) : h('p', { class: 'hint' }, 'Fälligkeitsdatum wählen und »Vorschau« klicken. Die Bank braucht die Datei rechtzeitig vor dem Termin (meist einen Bankarbeitstag vorher). Pächter müssen die Termine vorher kennen – dafür gibt es die Vorabankündigung.')),
 
@@ -3820,7 +3823,7 @@ function kontoauszugVorschau(v) {
   const zaehlerEl = h('b', null);
   const zaehlen = () => {
     const l = zeilen.filter((z) => z.an.checked);
-    zaehlerEl.textContent = `${l.length} Zahlung(en) · ${eur(l.reduce((a, z) => a + z.b.betrag, 0))}`;
+    zaehlerEl.textContent = `${anz(l.length, 'Zahlung', 'Zahlungen')} · ${eur(l.reduce((a, z) => a + z.b.betrag, 0))}`;
   };
   zaehlen();
   const n = (st) => v.buchungen.filter((b) => b.status === st).length;
@@ -3842,7 +3845,7 @@ function kontoauszugVorschau(v) {
       if (!zahlungen.length) { toast('Es ist nichts angehakt.', 'err'); return false; }
       try {
         const r = await api('POST', '/api/admin/kontoauszug/buchen', { zahlungen });
-        toast(`${r.gebucht} Zahlung(en) über ${eur(r.summe)} übernommen${r.vorauszahlungen ? ` – davon ${r.vorauszahlungen} Vorauszahlung(en)` : ''}${r.spenden ? ` – davon ${r.spenden} als Spende; Anschrift unter »Spenden« ergänzen` : ''}`, 'ok');
+        toast(`${anz(r.gebucht, 'Zahlung', 'Zahlungen')} über ${eur(r.summe)} übernommen${r.vorauszahlungen ? ` – davon ${anz(r.vorauszahlungen, 'Vorauszahlung', 'Vorauszahlungen')}` : ''}${r.spenden ? ` – davon ${r.spenden} als Spende; Anschrift unter »Spenden« ergänzen` : ''}`, 'ok');
       } catch (e) { handleErr(e); return false; }
     } }]);
 }
@@ -4077,11 +4080,11 @@ function adminDatenschutz() {
   const list = [...st.paechter].sort(cmpNr);
   const sel = h('select', { style: 'min-width:260px' }, list.map((p) => h('option', { value: p.id }, `${p.mitgliedsnr}  ${p.name}`)));
   const bereinigen = async () => {
-    const ok = await confirmBox(`Bei ${d.faelligRechnungen} Rechnung(en) und ${d.faelligJahre} Jahresunterlage(n) ist die Aufbewahrungsfrist (${d.aufbewahrungJahre} Jahre) abgelaufen. Name und Anschrift werden dort entfernt, die PDF-Dateien gelöscht, auch in den Sicherungen. Die Beträge bleiben für die Statistik. Das kann nicht rückgängig gemacht werden.`, 'Jetzt bereinigen', true);
+    const ok = await confirmBox(`Bei ${anz(d.faelligRechnungen, 'Rechnung', 'Rechnungen')} und ${anz(d.faelligJahre, 'Jahresunterlage', 'Jahresunterlagen')} ist die Aufbewahrungsfrist (${d.aufbewahrungJahre} Jahre) abgelaufen. Name und Anschrift werden dort entfernt, die PDF-Dateien gelöscht, auch in den Sicherungen. Die Beträge bleiben für die Statistik. Das kann nicht rückgängig gemacht werden.`, 'Jetzt bereinigen', true);
     if (!ok) return;
     try {
       const r = await api('POST', '/api/admin/datenschutz/bereinigen');
-      toast(`Bereinigt: ${r.rechnungen} Rechnung(en), ${r.jahre} Jahresunterlage(n), ${r.dateien} PDF-Datei(en), ${r.sicherungen} Sicherung(en)`, 'ok');
+      toast(`Bereinigt: ${anz(r.rechnungen, 'Rechnung', 'Rechnungen')}, ${anz(r.jahre, 'Jahresunterlage', 'Jahresunterlagen')}, ${anz(r.dateien, 'PDF-Datei', 'PDF-Dateien')}, ${anz(r.sicherungen, 'Sicherung', 'Sicherungen')}`, 'ok');
       S.datenschutz = null; S.archivAlle = null; await reload();
     } catch (e) { handleErr(e); }
   };
@@ -4111,9 +4114,9 @@ function adminDatenschutz() {
       !d ? h('p', { class: 'hint' }, d === false ? 'Konnte nicht geladen werden.' : 'Wird geladen …') : h('div', null,
         h('ul', { style: 'margin:0 0 10px;padding-left:20px;line-height:1.6' },
           li(`Im Papierkorb wartend: ${d.papierkorb} Pächter`),
-          d.wartelisteNachfragen ? li(h('b', null, `Warteliste: ${d.wartelisteNachfragen} Eintrag/Einträge seit über 2 Jahren nicht bestätigt – nachfragen oder löschen (unter »Warteliste«).`)) : null,
+          d.wartelisteNachfragen ? li(h('b', null, `Warteliste: ${anz(d.wartelisteNachfragen, 'Eintrag', 'Einträge')} seit über 2 Jahren nicht bestätigt – nachfragen oder löschen (unter »Warteliste«).`)) : null,
           li(d.faelligRechnungen + d.faelligJahre > 0
-            ? h('b', null, `Aufbewahrungsfrist abgelaufen: ${d.faelligRechnungen} Rechnung(en), ${d.faelligJahre} Jahresunterlage(n) (ausgestellt bis ${d.bereinigtBisJahr})`)
+            ? h('b', null, `Aufbewahrungsfrist abgelaufen: ${anz(d.faelligRechnungen, 'Rechnung', 'Rechnungen')}, ${anz(d.faelligJahre, 'Jahresunterlage', 'Jahresunterlagen')} (ausgestellt bis ${d.bereinigtBisJahr})`)
             : 'Keine Unterlagen mit abgelaufener Aufbewahrungsfrist.'),
           d.naechsteFrist ? li(`Die nächsten Rechnungen werden ${d.naechsteFrist} freigegeben.`) : null),
         h('button', { class: 'btn danger', disabled: d.faelligRechnungen + d.faelligJahre === 0, onclick: bereinigen }, 'Abgelaufene Unterlagen bereinigen'))),
@@ -4576,7 +4579,7 @@ function ausgabeDialog(a) {
     fld('Kategorie', h('div', null, kategorie, katList)),
     h('div', { class: 'field' }, h('label', null, 'Betrag'), h('div', { class: 'inputunit' }, betrag, h('span', null, '€'))),
     h('div', { class: 'field wide', style: 'border:none' },
-      h('label', { style: 'display:flex;align-items:center;gap:6px;font-weight:normal' }, wiederkehrend, 'Jährlich wiederkehrend'),
+      h('label', { class: 'check' }, wiederkehrend, ' Jährlich wiederkehrend'),
       h('span', { class: 'fhint' }, 'Wird beim Jahreswechsel automatisch als Vorschlag fürs neue Jahr angelegt (gleiche Beschreibung, Kategorie und Betrag, ungeprüft, ohne Beleg) – z. B. für Kontoführungsgebühren. Lässt sich dort weiterhin anpassen oder löschen.')),
     h('div', { class: 'field wide' }, h('label', null, 'Belege (Fotos oder PDF, z. B. Vorder- und Rückseite, optional)'),
       isNew ? null : belegeBox,
@@ -4811,7 +4814,7 @@ function adminKassenbericht(pruefMode) {
     k.guthabenAusgezahlt ? card('An Pächter ausgezahlt', eur(k.guthabenAusgezahlt), 'Guthaben') : null,
     k.vorauszahlungen ? card('Vorauszahlungen', eur(k.vorauszahlungen), 'monatliche Raten der Pächter', 'ok') : null,
     k.spenden ? card('Spenden', eur(k.spenden), `an den Verein${vorjahr ? vjDelta(k.spenden, vorjahr.spenden || 0) : ''}`, 'ok') : null,
-    card('Sonstige Ausgaben', eur(k.ausgabenSumme), `${k.ausgaben.length} Buchung(en)${vorjahr ? vjDelta(k.ausgabenSumme, vorjahr.ausgabenSumme) : ''}`, k.ausgabenSumme ? 'warn' : 'ok'));
+    card('Sonstige Ausgaben', eur(k.ausgabenSumme), `${anz(k.ausgaben.length, 'Buchung', 'Buchungen')}${vorjahr ? vjDelta(k.ausgabenSumme, vorjahr.ausgabenSumme) : ''}`, k.ausgabenSumme ? 'warn' : 'ok'));
 
   const anfInput = h('input', { type: 'text', inputmode: 'decimal', value: numIn(k.anfangsbestand), style: 'width:140px', autocomplete: 'off' });
   const saveAnfang = async () => {
@@ -4834,7 +4837,7 @@ function adminKassenbericht(pruefMode) {
       h('td', null, x.beschreibung, x.wiederkehrend ? h('span', { title: 'Jährlich wiederkehrend', style: 'margin-left:4px;cursor:help', class: 'notiz-zeichen' }, '↻') : null),
       h('td', null, x.kategorie),
       h('td', { class: 'r' }, eur(x.betrag)),
-      h('td', null, x.belege && x.belege.length ? h('a', { href: `/api/admin/beleg/${x.id}?year=${S.kasseYear}&idx=0`, target: '_blank', title: `${x.belege.length} Beleg(e) ansehen` }, x.belege.length > 1 ? `${x.belege.length} Belege` : 'Beleg') : null),
+      h('td', null, x.belege && x.belege.length ? h('a', { href: `/api/admin/beleg/${x.id}?year=${S.kasseYear}&idx=0`, target: '_blank', title: `${anz(x.belege.length, 'Beleg', 'Belege')} ansehen` }, x.belege.length > 1 ? `${x.belege.length} Belege` : 'Beleg') : null),
       h('td', { title: x.geprueft ? `Geprüft am ${deDate(x.geprueftAm)}` : 'Von der Kassenprüfung abhaken' },
         h('input', { type: 'checkbox', checked: x.geprueft, onchange: (e) => toggleGeprueft(x, e.target.checked) })),
       h('td', null, pruefMode ? null : h('button', { class: 'btn small', onclick: async () => { const r = await ausgabeDialog(x); if (r !== false && r !== undefined) await refreshKasse(); } }, 'Bearbeiten'))));
@@ -5663,10 +5666,10 @@ function adminWarteliste() {
   };
   return h('div', null,
     h('p', { class: 'hint' }, 'Interessenten für einen Garten, in der Reihenfolge ihrer Anmeldung. Wird ein Garten frei, klickst du beim nächsten auf »Garten vergeben«: Der Pächterwechsel übernimmt Name und Kontakt und nimmt den Eintrag von der Liste.'),
-    nachfragen ? h('div', { class: 'banner warn' }, `${nachfragen} Eintrag/Einträge seit über 2 Jahren nicht bestätigt. Bitte nachfragen, ob noch Interesse besteht, und sonst löschen – nicht mehr benötigte Daten sollen nicht unbegrenzt liegen bleiben.`) : null,
+    nachfragen ? h('div', { class: 'banner warn' }, `${anz(nachfragen, 'Eintrag', 'Einträge')} seit über 2 Jahren nicht bestätigt. Bitte nachfragen, ob noch Interesse besteht, und sonst löschen – nicht mehr benötigte Daten sollen nicht unbegrenzt liegen bleiben.`) : null,
     h('div', { class: 'toolbar' },
       h('button', { class: 'btn primary', onclick: neu }, '+ Auf die Warteliste setzen'),
-      h('span', { class: 'stat' }, `${l.length} Interessent(en)`)),
+      h('span', { class: 'stat' }, `${anz(l.length, 'Interessent', 'Interessenten')}`)),
     l.length ? h('div', { class: 'tablewrap' }, h('table', null,
       h('thead', null, h('tr', null, ['Platz', 'Name und Wunsch', 'Kontakt', 'Angemeldet', 'Besichtigung', ''].map((x) => h('th', null, x)))),
       h('tbody', null, l.map((b) => h('tr', null,
@@ -6294,7 +6297,7 @@ function viewTermine() {
   const uebernehmen = async () => {
     try {
       const r = await api('POST', '/api/admin/termine-uebernehmen', { von: jahr - 1, nach: jahr });
-      toast(r.uebernommen ? `${r.uebernommen} Termin(e) übernommen – bitte die Daten kurz prüfen.` : 'Alle Termine des Vorjahres sind schon eingetragen.', 'ok');
+      toast(r.uebernommen ? `${anz(r.uebernommen, 'Termin', 'Termine')} übernommen – bitte die Daten kurz prüfen.` : 'Alle Termine des Vorjahres sind schon eingetragen.', 'ok');
       await reload();
     } catch (e) { handleErr(e); }
   };
@@ -6331,20 +6334,39 @@ function viewTermine() {
             h('div', { class: 'hint' }, [terminZeit(t), t.ort].filter(Boolean).join(' · ')),
             t.notiz ? h('div', { class: 'hint' }, t.notiz) : null),
           h('span', { class: 'chip termin-art' }, t.art),
-          istAdmin ? h('div', { class: 'termin-aktionen' },
-            t.art === 'Versammlung' || t.art === 'Vorstand' ? h('button', { class: 'btn small', title: 'Einladung mit Tagesordnung als PDF', onclick: () => einladungDrucken(t) }, 'Einladung') : null,
-            t.art === 'Versammlung' || t.art === 'Vorstand' ? h('button', { class: 'btn small', title: 'Liste aller Pächter zum Unterschreiben', onclick: () => anwesenheitDrucken(t) }, 'Anwesenheit') : null,
-            t.art === 'Versammlung' ? h('a', { class: 'btn small', title: 'Einladung, Anwesenheitsliste, Jahresbericht, Prüfbericht und Protokoll als ZIP', href: `/api/admin/termine/${encodeURIComponent(t.id)}/paket` }, 'Paket') : null,
-            t.art === 'Versammlung' || t.art === 'Vorstand' ? h('button', { class: 'btn small' + (t.datum <= heute ? ' primary' : ''), title: 'Protokoll schreiben – Beschlüsse landen im Beschlussbuch', onclick: () => sitzungDialog(t) }, 'Protokoll') : null,
-            t.art === 'Arbeitseinsatz' ? h('button', { class: 'btn small', title: 'Liste zum Eintragen von Beginn und Ende', onclick: () => stundenlisteDrucken(t) }, 'Stundenliste') : null,
-            t.art === 'Arbeitseinsatz' ? h('button', { class: 'btn small primary', title: 'Abhaken, wer dabei war, und die Stunden buchen', onclick: async () => { if (await stundenDialog(t)) await reload(); } }, 'Stunden eintragen') : null,
-            h('button', { class: 'btn small', onclick: () => neu(t) }, 'Bearbeiten'),
-            h('button', { class: 'btn small danger', onclick: () => loeschen(t) }, 'Löschen')) : null);
+          istAdmin ? terminAktionen(t, vorbei, neu, loeschen) : null);
       })))))
       : h('div', { class: 'card' }, leer('kalender', `Noch keine Termine für ${jahr}`,
         vorjahr && istAdmin ? `Aus ${jahr - 1} sind ${vorjahr} Termine eingetragen. Mit einem Klick übernimmst du sie auf dieselben Wochentage.` : 'Trag Arbeitseinsätze, Versammlungen und Feste ein. Daraus wird ein Aushang zum Ausdrucken und eine Kalenderdatei.',
         istAdmin ? (vorjahr ? `Termine aus ${jahr - 1} übernehmen` : '+ Termin eintragen') : null,
         vorjahr ? uebernehmen : () => neu({ datum: `${jahr}-01-01` }))));
+}
+
+// Knöpfe je Termin: die eine passende Hauptaktion sichtbar (vor dem Termin vorbereiten, danach nachbereiten),
+// »Bearbeiten« und alles Weitere im Mehr-Menü – damit nicht sieben Knöpfe nebeneinanderstehen.
+function terminAktionen(t, vorbei, neu, loeschen) {
+  const sitzung = t.art === 'Versammlung' || t.art === 'Vorstand';
+  const einsatz = t.art === 'Arbeitseinsatz';
+  const a = {
+    einladung: { label: 'Einladung drucken', titel: 'Einladung mit Tagesordnung als PDF', aktion: () => einladungDrucken(t) },
+    anwesenheit: { label: 'Anwesenheitsliste drucken', aktion: () => anwesenheitDrucken(t) },
+    paket: { label: 'Versammlungspaket (ZIP)', aktion: () => { location.href = `/api/admin/termine/${encodeURIComponent(t.id)}/paket`; } },
+    protokoll: { label: 'Protokoll', titel: 'Protokoll schreiben – Beschlüsse landen im Beschlussbuch', aktion: () => sitzungDialog(t) },
+    stundenliste: { label: 'Stundenliste drucken', titel: 'Liste zum Eintragen von Beginn und Ende', aktion: () => stundenlisteDrucken(t) },
+    stunden: { label: 'Stunden eintragen', titel: 'Abhaken, wer dabei war, und die Stunden buchen', aktion: async () => { if (await stundenDialog(t)) await reload(); } },
+  };
+  let haupt = null; let weitere = [];
+  if (sitzung) {
+    haupt = vorbei ? a.protokoll : a.einladung;
+    weitere = [vorbei ? a.einladung : a.protokoll, a.anwesenheit, t.art === 'Versammlung' ? a.paket : null];
+  } else if (einsatz) {
+    haupt = vorbei ? a.stunden : a.stundenliste;
+    weitere = [vorbei ? a.stundenliste : a.stunden];
+  }
+  return h('div', { class: 'termin-aktionen' },
+    haupt ? h('button', { class: 'btn small primary', title: haupt.titel || '', onclick: haupt.aktion }, haupt.label) : null,
+    h('button', { class: 'btn small', onclick: () => neu(t) }, 'Bearbeiten'),
+    mehrMenue([...weitere.filter(Boolean).map((x) => ({ label: x.label, aktion: x.aktion })), { label: 'Löschen', gefahr: true, aktion: () => loeschen(t) }]));
 }
 
 // Übersicht: die nächsten Termine der kommenden acht Wochen
@@ -7038,7 +7060,7 @@ function cockpitKarte(st, istAdmin) {
   if (!S.aufgaben.length) {
     return h('div', { class: 'cockpit-leer' }, h('span', { class: 'cockpit-ico ok' }, icon('fertig', 20)),
       h('div', null, h('b', null, 'Gerade steht nichts an'), h('div', { class: 'hint' }, 'Termine, Fristen, Zahlungen und Spenden sind im grünen Bereich.'),
-        (S.aufgabenZurueck || []).length ? h('div', { class: 'hint' }, `${S.aufgabenZurueck.length} Hinweis(e) sind zurückgestellt.`) : null));
+        (S.aufgabenZurueck || []).length ? h('div', { class: 'hint' }, `${anz(S.aufgabenZurueck.length, 'Hinweis ist', 'Hinweise sind')} zurückgestellt.`) : null));
   }
   const alle = S.aufgabenAlle || S.aufgaben.length <= 5;
   const l = alle ? S.aufgaben : S.aufgaben.slice(0, 5);

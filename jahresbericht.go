@@ -381,7 +381,7 @@ func buildJahresbericht(d jahresberichtDaten) ([]byte, error) {
 	case 0:
 		punkt("Kein Pächterwechsel in diesem Jahr.")
 	default:
-		txt := fmt.Sprintf("%d Gartenübergabe(n): ", n)
+		txt := mehrzahl(n, "Gartenübergabe", "Gartenübergaben") + ": "
 		for i, u := range d.Uebergaben {
 			if i > 0 {
 				txt += ", "
@@ -391,7 +391,7 @@ func buildJahresbericht(d jahresberichtDaten) ([]byte, error) {
 		punkt(txt)
 	}
 	if d.Warteliste > 0 {
-		punkt(fmt.Sprintf("%d Interessent(en) auf der Warteliste für einen Garten.", d.Warteliste))
+		punkt(mehrzahl(d.Warteliste, "Interessent", "Interessenten") + " auf der Warteliste für einen Garten.")
 	} else {
 		punkt("Die Warteliste ist leer.")
 	}

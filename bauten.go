@@ -205,10 +205,10 @@ func (s *Store) bautenAufgabenLocked(_ time.Time, add func(stufe, titel, text, z
 		ohne += g.Ungenehmigt
 	}
 	if ueber > 0 {
-		add("warn", fmt.Sprintf("%d Laube(n) größer als 24 m²", ueber),
+		add("warn", mehrzahl(ueber, "Laube", "Lauben")+" größer als 24 m²",
 			"Laube mit überdachtem Freisitz überschreitet die Grenze des Bundeskleingartengesetzes. Bestandsschutz prüfen oder Rückbau besprechen.", "admin:maengel:bauten", "Laubenkataster")
 	}
 	if ohne > 0 {
-		add("info", fmt.Sprintf("%d Bauwerk(e) ohne Genehmigung", ohne), "Bei der nächsten Begehung klären, ob eine Genehmigung nachgeholt werden kann.", "admin:maengel:bauten", "Laubenkataster")
+		add("info", mehrzahl(ohne, "Bauwerk", "Bauwerke")+" ohne Genehmigung", "Bei der nächsten Begehung klären, ob eine Genehmigung nachgeholt werden kann.", "admin:maengel:bauten", "Laubenkataster")
 	}
 }

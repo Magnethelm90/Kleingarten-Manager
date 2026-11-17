@@ -161,7 +161,7 @@ func (s *Store) pruefungLocked(jahr int) (pruefAnsicht, bool) {
 			if a.Offen == 0 {
 				pu.Hinweis = "Keine offenen Rechnungen."
 			} else {
-				pu.Hinweis = fmt.Sprintf("%d Rechnung(en) offen, zusammen %s.", a.Offen, fmtEUR(a.OffenSumme))
+				pu.Hinweis = mehrzahl(a.Offen, "Rechnung", "Rechnungen") + " offen, zusammen " + fmtEUR(a.OffenSumme) + "."
 			}
 		case "beschluesse":
 			pu.Hinweis = fmt.Sprintf("%d Beschlüsse im Beschlussbuch", beschluesse)
@@ -174,7 +174,7 @@ func (s *Store) pruefungLocked(jahr int) (pruefAnsicht, bool) {
 			if spenden == 0 {
 				pu.Hinweis = "Keine Spenden erfasst."
 			} else {
-				pu.Hinweis = fmt.Sprintf("%d Spende(n), %d noch ohne Zuwendungsbestätigung.", spenden, ohne)
+				pu.Hinweis = fmt.Sprintf("%s, %d noch ohne Zuwendungsbestätigung.", mehrzahl(spenden, "Spende", "Spenden"), ohne)
 				pu.Warnung = ohne > 0
 			}
 		}
@@ -407,7 +407,7 @@ func (s *Store) pruefungAufgabenLocked(heute time.Time, add func(stufe, titel, t
 			}
 		}
 		if n > 0 {
-			add("info", fmt.Sprintf("%d Ausgabe(n) ohne Beleg", n), "Quittung einscannen oder fotografieren und an die Ausgabe hängen – so geht die Kassenprüfung schneller.", "admin:kassenbericht:ohnebeleg", "Belege ergänzen")
+			add("info", mehrzahl(n, "Ausgabe", "Ausgaben")+" ohne Beleg", "Quittung einscannen oder fotografieren und an die Ausgabe hängen – so geht die Kassenprüfung schneller.", "admin:kassenbericht:ohnebeleg", "Belege ergänzen")
 		}
 	}
 }
