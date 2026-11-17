@@ -211,12 +211,18 @@ let dialogZaehler = 0;
 // Zuletzt gewählte Werte in Dialogen merken (nur dieser Rechner, nur Auswahlen ohne personenbezogene Angaben).
 const merkeLesen = (k, vorgabe) => { try { return localStorage.getItem('km-zuletzt-' + k) || vorgabe; } catch (e) { return vorgabe; } };
 const merkeSchreiben = (k, v) => { try { localStorage.setItem('km-zuletzt-' + k, v); } catch (e) { /* ohne Speicher geht es auch */ } };
+// Entwürfe: Wird ein Formular-Dialog mit Eingaben ohne Speichern geschlossen, bleiben die Eingaben bis zum Neuladen
+// im Arbeitsspeicher (nicht auf der Festplatte – sie können personenbezogen sein). Beim nächsten Öffnen desselben
+// Dialogs mit denselben Ausgangswerten wird angeboten, sie zurückzuholen.
+const entwuerfe = new Map();
 function modal(title, body, buttons) {
   return new Promise((resolve) => {
     const titelId = 'dlg-titel-' + (++dialogZaehler);
     const dlg = h('dialog', { 'aria-labelledby': titelId });
     const vorher = document.activeElement;
+    let gespeichert = false;
     const close = (val) => {
+      entwurfMerken();
       dlg.close(); dlg.remove(); resolve(val);
       // Fokus zurück an die Stelle, von der aus der Dialog geöffnet wurde (Tastaturbedienung).
       if (vorher && vorher.isConnected && typeof vorher.focus === 'function') vorher.focus();
@@ -227,6 +233,7 @@ function modal(title, body, buttons) {
         class: 'btn ' + (b.cls || ''), type: 'button',
         onclick: async () => {
           if (b.action && (await b.action()) === false) return;
+          if (/primary/.test(b.cls || '')) gespeichert = true;
           close(b.value);
         },
       }, b.label));
@@ -235,15 +242,23 @@ function modal(title, body, buttons) {
     // »cancel« kommt auch von Datei-Feldern im Dialog (Auswahl abgebrochen) – nur das eigene Esc schließt.
     // Formular-Dialoge (mit »primary«-Knopf): Wer Eingaben gemacht hat und mit Esc schließt, wird vorher gefragt.
     const istFormular = buttons.some((b) => b && /primary/.test(b.cls || ''));
-    const feldWerte = () => [...dlg.querySelectorAll('.dbody input, .dbody select, .dbody textarea')]
-      .filter((f) => f.type !== 'file' && f.type !== 'search').map((f) => (f.type === 'checkbox' || f.type === 'radio' ? f.checked : f.value)).join('\u0001');
+    const felder = () => [...dlg.querySelectorAll('.dbody input, .dbody select, .dbody textarea')].filter((f) => f.type !== 'file' && f.type !== 'search');
+    const feldWerte = () => felder().map((f) => (f.type === 'checkbox' || f.type === 'radio' ? f.checked : f.value)).join('\u0001');
     let anfang = '';
+    const entwurfSchluessel = () => (typeof title === 'string' ? title : dlg.querySelector('.dhead').textContent) + '\u0002' + anfang;
+    function entwurfMerken() {
+      if (!istFormular || !anfang || dlg.querySelector('.dbody input[type=file]')) return;
+      const k = entwurfSchluessel();
+      if (gespeichert || feldWerte() === anfang) { if (gespeichert) entwuerfe.delete(k); return; }
+      entwuerfe.set(k, felder().map((f) => (f.type === 'checkbox' || f.type === 'radio' ? f.checked : f.value)));
+      if (entwuerfe.size > 20) entwuerfe.delete(entwuerfe.keys().next().value);
+    }
     dlg.addEventListener('cancel', async (e) => {
       if (e.target !== dlg) return;
       e.preventDefault();
       if (istFormular && anfang !== feldWerte() && !dlg.dataset.frage) {
         dlg.dataset.frage = '1';
-        const ok = await confirmBox('Die Eingaben in diesem Fenster sind noch nicht gespeichert. Wirklich schließen?', 'Verwerfen', true);
+        const ok = await confirmBox('Die Eingaben in diesem Fenster sind noch nicht gespeichert. Wirklich schließen? Beim nächsten Öffnen lassen sie sich zurückholen, bis das Programm beendet wird.', 'Schließen', true);
         delete dlg.dataset.frage;
         if (!ok) return;
       }
@@ -252,6 +267,17 @@ function modal(title, body, buttons) {
     document.body.append(dlg);
     dlg.showModal();
     anfang = feldWerte();
+    const alt = istFormular && entwuerfe.get(entwurfSchluessel());
+    if (alt) {
+      const hinweis = h('div', { class: 'banner info entwurf' }, 'Hier gibt es ungespeicherte Eingaben vom letzten Öffnen. ',
+        h('button', { class: 'btn small', type: 'button', onclick: () => {
+          const fs = felder();
+          if (fs.length === alt.length) fs.forEach((f, i) => { if (f.type === 'checkbox' || f.type === 'radio') f.checked = alt[i]; else f.value = alt[i]; });
+          hinweis.remove();
+        } }, 'Zurückholen'),
+        ' ', h('button', { class: 'btn small', type: 'button', onclick: () => { entwuerfe.delete(entwurfSchluessel()); hinweis.remove(); } }, 'Verwerfen'));
+      dlg.querySelector('.dbody').prepend(hinweis);
+    }
   });
 }
 
