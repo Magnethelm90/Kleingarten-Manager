@@ -58,7 +58,7 @@ func (a *App) handleFristenICS(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		b.WriteString("BEGIN:VEVENT\r\n")
-		fmt.Fprintf(&b, "UID:frist-%s@%s\r\nDTSTAMP:%s\r\n", f.Kennung, appID, stamp)
+		fmt.Fprintf(&b, "UID:frist-%s@%s\r\nDTSTAMP:%s\r\n", icsUID(f.Kennung), appID, stamp)
 		fmt.Fprintf(&b, "DTSTART;VALUE=DATE:%s\r\nDTEND;VALUE=DATE:%s\r\n", d.Format("20060102"), d.AddDate(0, 0, 1).Format("20060102"))
 		fmt.Fprintf(&b, "SUMMARY:%s\r\nDESCRIPTION:%s\r\n", icsEscape(f.Titel), icsEscape(f.Text))
 		b.WriteString("BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-P1D\r\nDESCRIPTION:" + icsEscape(f.Titel) + "\r\nEND:VALARM\r\n")

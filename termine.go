@@ -271,7 +271,7 @@ func (a *App) handleTermineICS(w http.ResponseWriter, r *http.Request) {
 		}
 		tag := strings.ReplaceAll(t.Datum, "-", "")
 		b.WriteString("BEGIN:VEVENT\r\n")
-		fmt.Fprintf(&b, "UID:termin-%s@%s\r\n", t.ID, appID)
+		fmt.Fprintf(&b, "UID:termin-%s@%s\r\n", icsUID(t.ID), appID)
 		fmt.Fprintf(&b, "DTSTAMP:%s\r\n", stamp)
 		if t.Von == "" {
 			d, _ := parseDate(t.Datum)

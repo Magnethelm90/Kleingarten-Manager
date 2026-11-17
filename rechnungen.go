@@ -594,6 +594,17 @@ func (a *App) handleMahnung(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(buf.Bytes())
 }
 
+// icsUID: IDs stammen aus den Daten (auch aus eingespielten Sicherungen) – nur harmlose Zeichen in die UID-Zeile,
+// damit keine eigenen Kalenderzeilen eingeschleust werden können.
+func icsUID(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' {
+			return r
+		}
+		return -1
+	}, s)
+}
+
 // icsEscape maskiert Sonderzeichen nach RFC 5545 (Komma, Semikolon, Backslash,
 // Zeilenumbruch) für Text-Felder in einer .ics-Datei.
 func icsEscape(s string) string {
@@ -633,7 +644,7 @@ func (a *App) handleICSExport(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		b.WriteString("BEGIN:VEVENT\r\n")
-		fmt.Fprintf(&b, "UID:%s@%s\r\n", x.ID, appID)
+		fmt.Fprintf(&b, "UID:%s@%s\r\n", icsUID(x.ID), appID)
 		fmt.Fprintf(&b, "DTSTAMP:%s\r\n", now)
 		fmt.Fprintf(&b, "DTSTART;VALUE=DATE:%s\r\n", due)
 		fmt.Fprintf(&b, "SUMMARY:%s\r\n", icsEscape(fmt.Sprintf("Zahlungsziel %s %s (%s)", x.Paechter.Mitgliedsnr, x.Paechter.Name, fmtEUR(openAmount(x)))))

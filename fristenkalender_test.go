@@ -28,3 +28,9 @@ func TestFristenKalender(t *testing.T) {
 		t.Fatal("Erinnerung oder Abschluss fehlt")
 	}
 }
+
+func TestICSUID(t *testing.T) {
+	if got := icsUID("ab12\r\nBEGIN:VEVENT;x"); got != "ab12BEGINVEVENTx" {
+		t.Errorf("icsUID: %q", got)
+	}
+}
