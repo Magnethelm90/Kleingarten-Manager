@@ -240,6 +240,8 @@ type Data struct {
 	Beschluesse []Beschluss              `json:"beschluesse,omitempty"`
 	Vertraege   []Vertrag                `json:"vertraege,omitempty"`
 	Haushalt    map[string]Haushaltsplan `json:"haushalt,omitempty"`
+	// Mitgliederbefragungen mit anonymen Strichlisten-Summen (siehe befragung.go)
+	Befragungen []Befragung `json:"befragungen,omitempty"`
 	// Kündigungen mit Fahrplan bis zur Übergabe (siehe kuendigung.go)
 	KuendigungsRegel KuendigungsRegel `json:"kuendigungsRegel"`
 	Kuendigungen     []Kuendigung     `json:"kuendigungen,omitempty"`

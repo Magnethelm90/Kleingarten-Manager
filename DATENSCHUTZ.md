@@ -145,6 +145,8 @@ zugehörigen Mangel oder Papierkorbeintrag werden automatisch gelöscht. Beim en
 ihre Mängel samt Foto auch aus dem Papierkorb. Die Fotos sind nicht in den JSON-Sicherungen enthalten, wohl aber in der
 Vereinsakte (Momentaufnahme des Datenordners). Die Warteliste hat bewusst keinen Papierkorb.
 
+**Aufnahmeantrag und Mitgliederbefragung:** Der Aufnahmeantrag wird bei jedem Aufruf aus dem Wartelisten-Eintrag erzeugt und nicht gespeichert. Die Mitgliederbefragung speichert nur Fragen und Strichlisten-Summen, keine Namen und keine Einzelbögen; es gibt daher nichts, was einer Person zuzuordnen wäre. Freitext-Anmerkungen soll der Vorstand ohne Namen zusammenfassen.
+
 **Wiederherstellungs-Probe, Mängel-Fahrplan, Arbeitsstunden:** Die Probe speichert nur Datum und Ergebnis. Der
 Mängel-Fahrplan speichert nur, an welchem Tag welches Schreiben verschickt wurde. Nachgetragene Stunden stehen bei
 der Ablesung des Pächters und im Änderungsprotokoll (mit Gartennummer, ohne Namen).

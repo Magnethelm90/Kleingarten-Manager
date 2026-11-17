@@ -79,6 +79,8 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Mehrere Vorstände ohne Cloud:** Liegt der Datenordner auf einem USB-Stick oder Netzlaufwerk, erkennt das Programm,
   wenn er gerade an einem anderen Rechner geöffnet ist, und verhindert, dass Änderungen überschrieben werden
 - **Willkommensmappe** für neue Pächter (Garten, Zähler, Termine, Lageplan mit markiertem Garten, Ansprechpartner) und
+  **Aufnahmeantrag** (Vordruck mit Einwilligungen, wird dem Gartenangebot beigelegt), **Mitgliederbefragung**
+  (Fragebogen, Erfassungsbogen zum Auszählen, anonyme Auswertung für die Versammlung),
   **Exposé** für freie Gärten (Foto, Größe, Ablöse, laufende Kosten, Lage) für Interessenten der Warteliste
 
 ### Abrechnung

@@ -1801,7 +1801,11 @@ async function freienGartenVergeben(nr) {
     h('div', { class: 'field wide' }, h('button', { type: 'button', class: 'btn small', onclick: () => pdfDrucken({
       url: `/api/admin/warteliste/${encodeURIComponent(f.wer.value)}/brief?art=angebot&garten=${encodeURIComponent(nr)}`,
       oeffnenUrl: `/api/admin/warteliste/${encodeURIComponent(f.wer.value)}/brief/oeffnen?art=angebot&garten=${encodeURIComponent(nr)}`,
-      titel: 'Gartenangebot', meldung: () => 'Das Angebot wurde im PDF-Programm geöffnet.' }) }, 'Angebotsschreiben drucken')),
+      titel: 'Gartenangebot', meldung: () => 'Das Angebot wurde im PDF-Programm geöffnet.' }) }, 'Angebotsschreiben drucken'), ' ',
+      h('button', { type: 'button', class: 'btn small', onclick: () => pdfDrucken({
+        url: `/api/admin/warteliste/${encodeURIComponent(f.wer.value)}/brief?art=aufnahmeantrag&garten=${encodeURIComponent(nr)}`,
+        oeffnenUrl: `/api/admin/warteliste/${encodeURIComponent(f.wer.value)}/brief/oeffnen?art=aufnahmeantrag&garten=${encodeURIComponent(nr)}`,
+        titel: 'Aufnahmeantrag', meldung: () => 'Der Aufnahmeantrag wurde im PDF-Programm geöffnet.' }) }, 'Aufnahmeantrag beilegen')),
     fld('Übergeben am', f.seit), fld('Mitgliedsnummer *', f.mitgliedsnr), fld('Gartengröße in m² *', f.groesse),
     fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz)),
   [{ label: 'Abbrechen', value: false }, { label: 'Garten vergeben', cls: 'primary', value: true, action: async () => {
@@ -5675,7 +5679,7 @@ function adminWarteliste() {
           h('button', { class: 'btn small primary', onclick: () => gartenVergeben(b) }, 'Garten vergeben'), ' ',
           h('button', { class: 'btn small', onclick: async () => { if (await bewerberDialog(b)) { S.warteliste = null; S.dashWarteliste = null; render(); } } }, 'Bearbeiten'), ' ',
           mehrMenue([
-            ...[['angebot', 'Brief: Garten anbieten'], ['nachfrage', 'Brief: Interesse nachfragen'], ['bestaetigung', 'Brief: Anmeldung bestätigen']].map(([art, label]) => ({
+            ...[['angebot', 'Brief: Garten anbieten'], ['nachfrage', 'Brief: Interesse nachfragen'], ['bestaetigung', 'Brief: Anmeldung bestätigen'], ['aufnahmeantrag', 'Aufnahmeantrag (Vordruck)']].map(([art, label]) => ({
               label, aktion: () => pdfDrucken({ url: `/api/admin/warteliste/${encodeURIComponent(b.id)}/brief?art=${art}`, oeffnenUrl: `/api/admin/warteliste/${encodeURIComponent(b.id)}/brief/oeffnen?art=${art}`,
                 titel: label, meldung: () => 'Der Brief wurde im PDF-Programm geöffnet – dort drucken oder als PDF verschicken.' }) })),
             { label: 'Interesse heute bestätigt', aktion: () => bestaetigen(b) },
@@ -6692,6 +6696,91 @@ async function stundenkontoDialog(jahr) {
     { label: 'Schließen', cls: 'primary', value: true }]);
 }
 
+// ------------------------------------------------------------------ Mitgliederbefragung (Berichte)
+
+const BEFRAGUNG_ARTEN = { janein: 'Ja / Nein', skala: 'Skala 1–5', wahl: 'Auswahl', text: 'Freitext' };
+const befragungOptionen = (f) => (f.art === 'janein' ? ['Ja', 'Nein', 'Enthaltung'] : f.art === 'skala' ? ['1 – trifft nicht zu', '2', '3', '4', '5 – trifft voll zu'] : f.art === 'wahl' ? (f.optionen || []) : []);
+
+function befragungPdf(b, art, titel) {
+  return pdfDrucken({ url: `/api/admin/befragungen/${encodeURIComponent(b.id)}/pdf?art=${art}`, oeffnenUrl: `/api/admin/befragungen/${encodeURIComponent(b.id)}/pdf/oeffnen?art=${art}`,
+    titel, meldung: () => `${titel} im PDF-Programm geöffnet – dort drucken.` });
+}
+
+async function befragungenDialog() {
+  let liste = [];
+  const inhalt = h('div');
+  const laden = async () => { liste = await api('GET', '/api/admin/befragungen'); };
+  const zeichnen = () => {
+    inhalt.replaceChildren(
+      h('p', { class: 'hint' }, 'Drei Schritte: Fragebogen drucken und verteilen, ausgefüllte Bögen mit dem Erfassungsbogen auszählen, Zahlen eintragen – die Auswertung kommt ohne Namen in die Versammlungsunterlagen.'),
+      liste.length ? h('div', null, liste.map((b) => h('div', { class: 'bericht-kachel' },
+        h('div', null, h('b', null, b.titel), h('p', { class: 'hint' }, `${b.fragen.length} Fragen${b.datum ? ' · bis ' + deDate(b.datum) : ''} · ${b.rueckgabe ? b.rueckgabe + ' Bögen ausgezählt' : 'noch nicht ausgezählt'}`)),
+        h('div', { class: 'row' },
+          h('button', { class: 'btn small', onclick: () => befragungPdf(b, 'fragebogen', 'Fragebogen') }, 'Fragebogen'),
+          h('button', { class: 'btn small', onclick: () => befragungPdf(b, 'erfassung', 'Erfassungsbogen') }, 'Erfassungsbogen'),
+          h('button', { class: 'btn small', onclick: () => ergebnis(b) }, 'Ergebnis eintragen'),
+          h('button', { class: 'btn small', disabled: !b.rueckgabe, onclick: () => befragungPdf(b, 'auswertung', 'Auswertung') }, 'Auswertung'),
+          h('button', { class: 'btn small', onclick: () => bearbeiten(b) }, 'Bearbeiten'),
+          h('button', { class: 'btn small', onclick: () => loeschen(b) }, 'Löschen'))))) : h('p', { class: 'hint' }, 'Noch keine Befragung angelegt.'));
+  };
+  const speichern = async (b) => { await api('POST', '/api/admin/befragungen', b); await laden(); zeichnen(); };
+  const loeschen = async (b) => {
+    if (!(await confirmBox(`Befragung »${b.titel}« mit allen Ergebnissen löschen?`, 'Löschen', true))) return;
+    try { await api('DELETE', `/api/admin/befragungen/${b.id}`); await laden(); zeichnen(); } catch (e) { handleErr(e); }
+  };
+  const ergebnis = async (b) => {
+    const bogen = h('input', { type: 'number', min: '0', max: '100000', value: b.rueckgabe || '', style: 'width:6em' });
+    const felder = b.fragen.map((f) => {
+      const opt = befragungOptionen(f);
+      return { f, opt, zahlen: opt.map((_, k) => h('input', { type: 'number', min: '0', max: '100000', value: (f.zaehlung && f.zaehlung[k]) || '', style: 'width:5em' })),
+        anm: h('textarea', { rows: 2, maxlength: 1500, placeholder: f.art === 'text' ? 'Zusammenfassung der Antworten' : 'Anmerkung (optional)' }, f.anmerkung || '') };
+    });
+    const ok = await breiterDialog(`Ergebnis: ${b.titel}`, h('div', { class: 'form' },
+      h('div', { class: 'field wide' }, h('label', null, 'Anzahl ausgefüllter Bögen'), bogen),
+      felder.map((x, i) => h('div', { class: 'field wide' }, h('label', null, `${i + 1}. ${x.f.text}`),
+        x.opt.map((o, k) => h('div', { class: 'row' }, h('span', { style: 'min-width:12em' }, o), x.zahlen[k])), x.anm))),
+    [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+      try {
+        await speichern({ ...b, rueckgabe: Number(bogen.value) || 0, fragen: b.fragen.map((f, i) => ({ ...f, zaehlung: felder[i].zahlen.map((z) => Number(z.value) || 0), anmerkung: felder[i].anm.value })) });
+      } catch (e) { handleErr(e); return false; }
+    } }]);
+    if (ok) toast('Ergebnis gespeichert', 'ok');
+  };
+  const bearbeiten = async (b) => {
+    const neu = !b;
+    const f = {
+      titel: h('input', { type: 'text', maxlength: 120, value: b ? b.titel : '', placeholder: 'z. B. Wünsche für die Anlage' }),
+      datum: h('input', { type: 'date', value: b ? b.datum : '' }),
+      einl: h('textarea', { rows: 3, maxlength: 1500, placeholder: 'Kurzer Text oben auf dem Fragebogen (optional)' }, b ? b.einleitung || '' : ''),
+    };
+    let fragen = b ? b.fragen.map((x) => ({ ...x })) : [{ text: '', art: 'janein' }];
+    const reihen = h('div');
+    const zeile = () => {
+      reihen.replaceChildren(...fragen.map((q, i) => h('div', { class: 'row', style: 'align-items:flex-start;margin-bottom:.5em' },
+        h('input', { type: 'text', maxlength: 300, value: q.text, placeholder: `Frage ${i + 1}`, style: 'flex:1 1 16em', oninput: (e) => { q.text = e.target.value; } }),
+        h('select', { onchange: (e) => { q.art = e.target.value; zeile(); } }, Object.entries(BEFRAGUNG_ARTEN).map(([k, v]) => h('option', { value: k, selected: q.art === k }, v))),
+        q.art === 'wahl' ? h('input', { type: 'text', value: (q.optionen || []).join('; '), placeholder: 'Antworten mit ; trennen', style: 'flex:1 1 14em', oninput: (e) => { q.optionen = e.target.value.split(';').map((s) => s.trim()).filter(Boolean); } }) : null,
+        h('button', { type: 'button', class: 'btn small', title: 'Frage entfernen', disabled: fragen.length < 2, onclick: () => { fragen.splice(i, 1); zeile(); } }, 'Entfernen'))));
+    };
+    zeile();
+    const ok = await breiterDialog(neu ? 'Neue Befragung' : 'Befragung bearbeiten', h('div', { class: 'form' },
+      h('div', { class: 'field wide' }, h('label', null, 'Titel *'), f.titel),
+      h('div', { class: 'field' }, h('label', null, 'Abgabe bis'), f.datum),
+      h('div', { class: 'field wide' }, h('label', null, 'Einleitung'), f.einl),
+      h('div', { class: 'field wide' }, h('label', null, 'Fragen'), reihen,
+        h('button', { type: 'button', class: 'btn small', onclick: () => { if (fragen.length < 30) { fragen.push({ text: '', art: 'janein' }); zeile(); } } }, '+ Frage'),
+        h('span', { class: 'fhint' }, 'Wer Fragen nach dem Auszählen ändert, sollte die Ergebnisse danach prüfen.'))),
+    [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+      try { await speichern({ id: b ? b.id : '', titel: f.titel.value, datum: f.datum.value, einleitung: f.einl.value, rueckgabe: b ? b.rueckgabe : 0, fragen }); } catch (e) { handleErr(e); return false; }
+    } }]);
+    if (ok) toast('Befragung gespeichert', 'ok');
+  };
+  try { await laden(); } catch (e) { handleErr(e); return; }
+  zeichnen();
+  const r = await breiterDialog('Mitgliederbefragung', inhalt, [{ label: '+ Neue Befragung', value: 'neu', action: () => { bearbeiten(null); return false; } }, { label: 'Schließen', cls: 'primary', value: true }]);
+  return r;
+}
+
 async function kostenvergleichDialog() {
   let k;
   try { k = await api('GET', '/api/admin/kostenvergleich'); } catch (e) { handleErr(e); return; }
@@ -6799,6 +6888,8 @@ function adminBerichte() {
         h('div', { class: 'row' }, h('button', { class: 'btn', onclick: kostenvergleichDialog }, 'Ansehen'), pdfKnopf('kostenvergleich', 'Kostenvergleich'))),
       kachel('daten', 'Wartungs-Check', 'Ist alles in Ordnung? Datenordner, Sicherungen, zweiter Ordner, Passwort und Programmversion auf einen Blick.',
         h('div', { class: 'row' }, h('button', { class: 'btn', onclick: wartungsCheck }, 'Prüfen'), pdfKnopf('wartung', 'Wartungs-Check'))),
+      kachel('personen', 'Mitgliederbefragung', 'Fragebogen zum Ausdrucken, Erfassungsbogen zum Auszählen und anonyme Auswertung für die Versammlung.',
+        h('button', { class: 'btn', onclick: befragungenDialog }, 'Öffnen')),
       kachel('daten', 'Papierkorb', 'Gelöschte Mängel, Termine, Beschlüsse und Verträge 30 Tage lang zurückholen.',
         h('button', { class: 'btn', onclick: papierkorbDialog }, 'Öffnen')),
       kachel('uhr', `Arbeitsstunden ${jahr}`, 'Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt. Einzelne Stunden lassen sich nachtragen.',

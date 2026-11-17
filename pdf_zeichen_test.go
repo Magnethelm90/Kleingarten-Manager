@@ -66,7 +66,8 @@ func TestAllePDFsMitSchwierigenZeichen(t *testing.T) {
 		"/api/admin/expose":                "?gartennr=" + nrs[0],
 		"/api/admin/gartenakte":            "?gartennr=" + nrs[0],
 		"/api/admin/wahl/stimmzettel":      "?amt=" + url.QueryEscape(schwierig) + "&kandidat=" + url.QueryEscape(schwierig) + "&kandidat=B&anzahl=8",
-		"/api/admin/warteliste/{id}/brief": "?art=angebot&garten=" + nrs[0],
+		"/api/admin/warteliste/{id}/brief": "?art=aufnahmeantrag&garten=" + nrs[0],
+		"/api/admin/befragungen/{id}/pdf":  "?art=auswertung",
 	}
 	param := regexp.MustCompile(`\{(\w+)\}`)
 	pdfs := 0

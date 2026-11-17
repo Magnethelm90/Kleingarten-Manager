@@ -15,6 +15,7 @@ var wartelistenBriefe = []struct{ Key, Titel string }{
 	{"angebot", "Angebot eines Gartens"},
 	{"nachfrage", "Nachfrage zum Interesse"},
 	{"bestaetigung", "Bestätigung der Anmeldung"},
+	{"aufnahmeantrag", "Aufnahmeantrag (Vordruck)"},
 }
 
 func (s *Store) bewerberNachIDLocked(id string) (Bewerber, bool) {
@@ -126,6 +127,10 @@ func (a *App) wartelistenBriefPDF(r *http.Request) ([]byte, string, error) {
 	garten := trim(strings.TrimSpace(r.URL.Query().Get("garten")), 20)
 	if garten == "" {
 		garten = b.BesichtigungGarten
+	}
+	if art == "aufnahmeantrag" {
+		pdf, err := buildAufnahmeantrag(s, b, garten, time.Now().Format("2006-01-02"))
+		return pdf, safeName("Aufnahmeantrag_"+b.Name, 80) + ".pdf", err
 	}
 	pdf, err := buildWartelistenBrief(s, b, art, garten, time.Now().Format("2006-01-02"))
 	return pdf, safeName("Warteliste_"+art+"_"+b.Name, 80) + ".pdf", err

@@ -69,6 +69,23 @@ func (a *App) handleVersammlungspaket(w http.ResponseWriter, r *http.Request) {
 		_, _ = f.Write(pdf)
 		n++
 	}
+	for i, bf := range a.befragungenImJahr(jahr) {
+		a.st.mu.Lock()
+		s := a.st.d.Settings
+		a.st.mu.Unlock()
+		pdf, err := buildBefragung(s, bf, "auswertung")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		f, err := zw.Create(fmt.Sprintf("6_Befragung_%d_%s.pdf", i+1, safeName(bf.Titel, 60)))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		_, _ = f.Write(pdf)
+		n++
+	}
 	if err := zw.Close(); err != nil {
 		writeErr(w, err)
 		return

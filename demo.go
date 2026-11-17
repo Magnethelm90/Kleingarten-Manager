@@ -17,7 +17,7 @@ import (
 func (s *Store) datenbestandLeer() bool {
 	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 || len(s.d.Einsatzstunden) > 0 || len(s.d.Spenden) > 0 || len(s.d.Vorauszahlungen) > 0 ||
 		len(s.d.Rundschreiben) > 0 || len(s.d.Schluessel) > 0 || len(s.d.Geraete) > 0 ||
-		len(s.d.Kuendigungen) > 0 || len(s.d.Beschluesse) > 0 || len(s.d.Vertraege) > 0 || len(s.d.Haushalt) > 0 || len(s.d.Aemter) > 0 || len(s.d.Bauwerke) > 0 || len(s.d.Sitzungen) > 0 || len(s.d.Kassenpruefungen) > 0 || s.d.Pachtgrenze.ErwerbsobstbauJeQm > 0 || s.d.LageKarte.Bild != "" || len(s.d.LageKarte.Objekte) > 0 {
+		len(s.d.Kuendigungen) > 0 || len(s.d.Beschluesse) > 0 || len(s.d.Vertraege) > 0 || len(s.d.Befragungen) > 0 || len(s.d.Haushalt) > 0 || len(s.d.Aemter) > 0 || len(s.d.Bauwerke) > 0 || len(s.d.Sitzungen) > 0 || len(s.d.Kassenpruefungen) > 0 || s.d.Pachtgrenze.ErwerbsobstbauJeQm > 0 || s.d.LageKarte.Bild != "" || len(s.d.LageKarte.Objekte) > 0 {
 		return false
 	}
 	for _, j := range s.d.Jahre {
@@ -238,6 +238,14 @@ func (s *Store) ladeBeispieldaten() {
 		{ID: newID(), Datum: fmt.Sprintf("%d-03-14", jahr), Gremium: "Mitgliederversammlung", Nummer: fmt.Sprintf("MV %d/2", jahr), Titel: "12 Pflichtstunden Gemeinschaftsarbeit, 10 € je fehlende Stunde", Ja: 29, Nein: 6, Enthaltung: 2, Ergebnis: "angenommen", Stichworte: "Gemeinschaftsarbeit"},
 		{ID: newID(), Datum: fmt.Sprintf("%d-05-02", jahr), Gremium: "Vorstand", Nummer: fmt.Sprintf("V %d/1", jahr), Titel: "Neuer Rasenmäher für den Verein bis 400 €", Text: "Angebote von zwei Händlern eingeholt, der günstigere wird gekauft.", Ergebnis: "angenommen", Stichworte: "Anschaffung, Geräte"},
 	}
+	s.d.Befragungen = []Befragung{{ID: newID(), Titel: "Wünsche für die Anlage", Datum: fmt.Sprintf("%d-03-15", jahr), Rueckgabe: 24,
+		Einleitung: "Der Vorstand möchte wissen, was den Pächtern in der Anlage wichtig ist. Die Befragung ist anonym.",
+		Fragen: []BefragungFrage{
+			{Text: "Sollen die Gemeinschaftsarbeiten häufiger stattfinden?", Art: "janein", Zaehlung: []int{9, 13, 2}},
+			{Text: "Wie zufrieden sind Sie mit dem Zustand der Wege?", Art: "skala", Zaehlung: []int{1, 3, 6, 9, 5}},
+			{Text: "Was soll als Nächstes angeschafft werden?", Art: "wahl", Optionen: []string{"Bank am Eingang", "Kompostplatz", "Spielgerät", "Insektenhotel"}, Zaehlung: []int{7, 8, 3, 6}},
+			{Text: "Was möchten Sie dem Vorstand noch sagen?", Art: "text", Anmerkung: "Mehrfach genannt: Wunsch nach einem Sommerfest."},
+		}}}
 	s.d.Vertraege = []Vertrag{
 		{ID: newID(), Art: "Versicherung", Bezeichnung: "Vereinshaftpflicht", Partner: "Musterversicherung AG", Nummer: "VH-123456", Beginn: "2019-01-01", Ende: fmt.Sprintf("%d-12-31", jahr), FristMonate: 3, Verlaengert: 12, Kosten: 186.4, Turnus: "jährlich"},
 		{ID: newID(), Art: "Strom", Bezeichnung: "Stromliefervertrag Anlage", Partner: "Stadtwerke Musterstadt", Beginn: vorTagen(-640), Ende: heute.AddDate(0, 3, 20).Format("2006-01-02"), FristMonate: 3, Verlaengert: 12, Kosten: 38, Turnus: "monatlich"},

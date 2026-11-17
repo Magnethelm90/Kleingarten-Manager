@@ -108,6 +108,7 @@
   Posten, Hinweis `wechselHinweis`), berichte_pdf.go (PDF für Jahresmeldung, Kostenvergleich, Arbeitsstunden, Wartungs-Check; `pdfKnopf`
   in Berichte). Design-Prüfung: `.cards` ist jetzt ein Grid (gleich breite Kennzahlen), Berichte-Kacheln mit Knöpfen unten, Handy-Kopfzeile
   kompakter (2 Zeilen), Kennzahlen auf dem Handy zweispaltig. Kein Kautions-Feld im Programm (bewusst nicht ergänzt).
+- Ideen-Paket 7 (Nov 2026): aufnahmeantrag.go (Vordruck mit Einwilligungen, über `GET …/warteliste/{id}/brief?art=aufnahmeantrag`, Knopf im Dialog »Garten vergeben« und im Briefe-Menü der Warteliste), befragung.go (Data.Befragungen, Fragearten janein/skala/wahl/text, nur anonyme Strichlisten-Summen; PDFs fragebogen/erfassung/auswertung über `GET /api/admin/befragungen/{id}/pdf?art=`; Auswertung kommt ins Versammlungspaket; Dialog `befragungenDialog` als Kachel in Berichte). fpdf-Schrift »lib« hat KEINEN Kursivschnitt (nur "" und "B").
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)
