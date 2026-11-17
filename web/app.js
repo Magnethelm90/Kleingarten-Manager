@@ -233,7 +233,7 @@ function modal(title, body, buttons) {
         class: 'btn ' + (b.cls || ''), type: 'button',
         onclick: async () => {
           if (b.action && (await b.action()) === false) return;
-          if (/primary/.test(b.cls || '')) gespeichert = true;
+          if (b.action) gespeichert = true; // Knöpfe mit Aktion speichern oder verarbeiten die Eingaben
           close(b.value);
         },
       }, b.label));
@@ -242,7 +242,8 @@ function modal(title, body, buttons) {
     // »cancel« kommt auch von Datei-Feldern im Dialog (Auswahl abgebrochen) – nur das eigene Esc schließt.
     // Formular-Dialoge (mit »primary«-Knopf): Wer Eingaben gemacht hat und mit Esc schließt, wird vorher gefragt.
     const istFormular = buttons.some((b) => b && /primary/.test(b.cls || ''));
-    const felder = () => [...dlg.querySelectorAll('.dbody input, .dbody select, .dbody textarea')].filter((f) => f.type !== 'file' && f.type !== 'search');
+    // Passwörter, Dateien und versteckte Felder werden weder verglichen noch als Entwurf gemerkt.
+    const felder = () => [...dlg.querySelectorAll('.dbody input, .dbody select, .dbody textarea')].filter((f) => !['file', 'search', 'password', 'hidden'].includes(f.type));
     const feldWerte = () => felder().map((f) => (f.type === 'checkbox' || f.type === 'radio' ? f.checked : f.value)).join('\u0001');
     let anfang = '';
     const entwurfSchluessel = () => (typeof title === 'string' ? title : dlg.querySelector('.dhead').textContent) + '\u0002' + anfang;
@@ -271,9 +272,19 @@ function modal(title, body, buttons) {
     if (alt) {
       const hinweis = h('div', { class: 'banner info entwurf' }, 'Hier gibt es ungespeicherte Eingaben vom letzten Öffnen. ',
         h('button', { class: 'btn small', type: 'button', onclick: () => {
-          const fs = felder();
-          if (fs.length === alt.length) fs.forEach((f, i) => { if (f.type === 'checkbox' || f.type === 'radio') f.checked = alt[i]; else f.value = alt[i]; });
           hinweis.remove();
+          // Feld für Feld setzen und die üblichen Ereignisse auslösen: Viele Dialoge übernehmen Eingaben erst über
+          // oninput/onchange in ihre Daten. Baut ein Dialog dabei Felder um, wird abgebrochen statt falsch zugeordnet.
+          for (let i = 0; i < alt.length; i++) {
+            const fs = felder();
+            if (fs.length !== alt.length) { toast('Die Eingaben ließen sich nicht vollständig zurückholen – bitte prüfen.', 'err'); return; }
+            const f = fs[i];
+            const auswahl = f.type === 'checkbox' || f.type === 'radio';
+            if (auswahl ? f.checked === alt[i] : f.value === alt[i]) continue;
+            if (auswahl) f.checked = alt[i]; else f.value = alt[i];
+            f.dispatchEvent(new Event('input', { bubbles: true }));
+            f.dispatchEvent(new Event('change', { bubbles: true }));
+          }
         } }, 'Zurückholen'),
         ' ', h('button', { class: 'btn small', type: 'button', onclick: () => { entwuerfe.delete(entwurfSchluessel()); hinweis.remove(); } }, 'Verwerfen'));
       dlg.querySelector('.dbody').prepend(hinweis);
