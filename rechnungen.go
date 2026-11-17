@@ -48,7 +48,22 @@ type Rechnung struct {
 	// EmailAm: wann die E-Mail zu dieser Rechnung zuletzt im E-Mail-Programm vorbereitet wurde (RFC3339).
 	// Ob sie wirklich abgeschickt wurde, weiß das Programm nicht.
 	EmailAm string `json:"emailAm,omitempty"`
+
+	// Mahnungen: bisher erstellte Zahlungserinnerungen und Mahnungen (Stufe 1 bis 3) samt Zahlungsfrist
+	Mahnungen []Mahnung `json:"mahnungen,omitempty"`
 }
+
+// Mahnung vermerkt, wann welche Stufe erstellt und bis wann Zahlung verlangt wurde.
+type Mahnung struct {
+	Stufe int    `json:"stufe"` // 1 Zahlungserinnerung, 2 Mahnung, 3 letzte Mahnung
+	Datum string `json:"datum"`
+	Frist string `json:"frist"`
+}
+
+var mahnTitel = []string{"", "Zahlungserinnerung", "Mahnung", "Letzte Mahnung"}
+
+// naechsteMahnstufe ist die Stufe der nächsten Mahnung (höchstens 3).
+func (r *Rechnung) naechsteMahnstufe() int { return min(len(r.Mahnungen)+1, 3) }
 
 // issuedInfo beschreibt die gültige Rechnung eines Pächters im aktuellen Jahr.
 type issuedInfo struct {
@@ -75,12 +90,13 @@ type archiveEntry struct {
 	Datei       string  `json:"datei"`
 
 	// Versand: Versandart laut ausgestellter Rechnung (steht auf dem Papier), nicht laut aktuellen Stammdaten
-	Versand       string   `json:"versand"`
-	Faellig       string   `json:"faellig"`
-	BezahltAm     string   `json:"bezahltAm"`
-	BezahltBetrag *float64 `json:"bezahltBetrag"`
-	Notiz         string   `json:"notiz"`
-	EmailAm       string   `json:"emailAm,omitempty"`
+	Versand       string    `json:"versand"`
+	Faellig       string    `json:"faellig"`
+	BezahltAm     string    `json:"bezahltAm"`
+	BezahltBetrag *float64  `json:"bezahltBetrag"`
+	Notiz         string    `json:"notiz"`
+	EmailAm       string    `json:"emailAm,omitempty"`
+	Mahnungen     []Mahnung `json:"mahnungen,omitempty"`
 }
 
 func archiveEntryFrom(r *Rechnung) archiveEntry {
@@ -88,7 +104,7 @@ func archiveEntryFrom(r *Rechnung) archiveEntry {
 		ID: r.ID, Jahr: r.Jahr, Mitgliedsnr: r.Paechter.Mitgliedsnr, Name: r.Paechter.Name, Nummer: r.Nummer,
 		Version: r.Version, Status: r.Status, Ausgestellt: r.Ausgestellt, Gesamt: r.Result.Gesamt, Datei: r.Datei,
 		Versand: r.Paechter.Versand, Faellig: r.Settings.Zahlungsziel, BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz,
-		EmailAm: r.EmailAm,
+		EmailAm: r.EmailAm, Mahnungen: r.Mahnungen,
 	}
 }
 
@@ -476,7 +492,9 @@ func (a *App) handlePayment(w http.ResponseWriter, r *http.Request) {
 // mehreren ein ZIP mit einer Mahnung pro Pächter.
 func (a *App) handleMahnung(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		IDs []string `json:"ids"`
+		IDs       []string `json:"ids"`
+		Frist     string   `json:"frist"`     // bis wann gezahlt werden soll; leer = 14 Tage ab heute
+		Vermerken bool     `json:"vermerken"` // Mahnung als verschickt vermerken (nächste Stufe, Cockpit)
 	}
 	if err := readJSON(w, r, &in); err != nil {
 		writeErr(w, err)
@@ -486,10 +504,15 @@ func (a *App) handleMahnung(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, bad("Bitte mindestens eine Rechnung auswählen"))
 		return
 	}
+	heute := time.Now().Format("2006-01-02")
+	if _, err := parseDate(in.Frist); err != nil || in.Frist < heute {
+		in.Frist = time.Now().AddDate(0, 0, 14).Format("2006-01-02")
+	}
 	type mahnJob struct {
 		settings Settings
 		p        Paechter
 		rec      *Rechnung
+		stufe    int
 	}
 	var jobs []mahnJob
 	a.st.mu.Lock()
@@ -504,7 +527,7 @@ func (a *App) handleMahnung(w http.ResponseWriter, r *http.Request) {
 			if x.Result.Gesamt < 0 || openAmount(x) <= 0 {
 				continue // Guthaben oder schon vollständig bezahlt: keine Mahnung nötig
 			}
-			jobs = append(jobs, mahnJob{settings: x.Settings, p: x.Paechter, rec: x})
+			jobs = append(jobs, mahnJob{settings: x.Settings, p: x.Paechter, rec: x, stufe: x.naechsteMahnstufe()})
 		}
 	}
 	a.st.mu.Unlock()
@@ -520,14 +543,27 @@ func (a *App) handleMahnung(w http.ResponseWriter, r *http.Request) {
 	}
 	var out []built
 	for _, j := range jobs {
-		pdf, err := buildMahnung(j.settings, j.p, j.rec)
+		pdf, err := buildMahnung(j.settings, j.p, j.rec, j.stufe, in.Frist)
 		if err != nil {
 			writeErr(w, bad(j.p.Name+": "+err.Error()))
 			return
 		}
-		out = append(out, built{safeName("Mahnung_"+invoiceNumber(j.settings, j.p)+"_"+j.p.Name, 80) + ".pdf", pdf})
+		out = append(out, built{safeName(strings.ReplaceAll(mahnTitel[j.stufe], " ", "")+"_"+invoiceNumber(j.settings, j.p)+"_"+j.p.Name, 80) + ".pdf", pdf})
 	}
 
+	if in.Vermerken {
+		a.st.mu.Lock()
+		for _, j := range jobs {
+			j.rec.Mahnungen = append(j.rec.Mahnungen, Mahnung{Stufe: j.stufe, Datum: heute, Frist: in.Frist})
+		}
+		a.st.audit("%d Mahnung(en) erstellt", len(jobs))
+		err := a.st.saveLocked()
+		a.st.mu.Unlock()
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
 	if len(out) == 1 {
 		w.Header().Set("Content-Type", "application/pdf")
 		w.Header().Set("Content-Disposition", `inline; filename="`+out[0].name+`"`)

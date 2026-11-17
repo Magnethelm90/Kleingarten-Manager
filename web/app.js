@@ -2254,16 +2254,29 @@ async function paymentDialog(e) {
   ].filter(Boolean));
 }
 
+const MAHN_TITEL = ['', 'Zahlungserinnerung', 'Mahnung', 'Letzte Mahnung'];
 async function mahnungErzeugen(ids) {
   if (!ids.length) { toast('Bitte mindestens eine offene Rechnung auswählen.', 'err'); return; }
+  const archiv = new Map((S.state.archive || []).map((e) => [e.id, e]));
+  const stufen = [0, 0, 0, 0];
+  for (const id of ids) { const e = archiv.get(id); stufen[Math.min(((e && e.mahnungen) ? e.mahnungen.length : 0) + 1, 3)]++; }
+  const frist = h('input', { type: 'date', value: isoInTagen(14) });
+  const vermerken = h('input', { type: 'checkbox', checked: true });
+  const text = [1, 2, 3].filter((i) => stufen[i]).map((i) => `${stufen[i]} × ${MAHN_TITEL[i]}`).join(', ');
+  if (!(await modal('Mahnung erzeugen', h('div', { class: 'form' },
+    h('p', { class: 'hint' }, `Es entstehen: ${text}. Die Stufe richtet sich danach, wie oft die Rechnung schon gemahnt wurde.`),
+    h('div', { class: 'field' }, h('label', null, 'Zahlen bis'), frist),
+    h('label', { class: 'inline' }, vermerken, ' Als verschickt vermerken (nächste Stufe, Erinnerung im Cockpit)')),
+  [{ label: 'Abbrechen', value: false }, { label: 'Erzeugen', cls: 'primary', value: true }]))) return;
   try {
-    const r = await fetch('/api/admin/mahnung', { method: 'POST', headers: { 'X-GA-Request': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+    const r = await fetch('/api/admin/mahnung', { method: 'POST', headers: { 'X-GA-Request': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, frist: frist.value, vermerken: vermerken.checked }) });
     if (!r.ok) { const d = await r.json().catch(() => null); throw new Error((d && d.error) || `Fehler ${r.status}`); }
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
     if ((r.headers.get('content-type') || '').includes('pdf')) openDocument(url, 'Mahnung');
     else { const a = h('a', { href: url, download: 'Mahnungen.zip' }); document.body.append(a); a.click(); a.remove(); }
     setTimeout(() => URL.revokeObjectURL(url), 30000);
+    if (vermerken.checked) { S.mahnSel.clear(); await reload(); }
   } catch (e) { handleErr(e); }
 }
 
@@ -2331,7 +2344,8 @@ function viewZahlungen() {
         h('td', { class: 'r' }, (e.gesamt < 0 ? '−' : '') + eur(payTotal(e))),
         h('td', null, deDate(e.faellig)),
         h('td', null, h('span', { class: 'badge ' + (partial ? 'warn' : !open ? 'ok' : late ? 'err' : 'neu') },
-          partial ? `Teilzahlung, offen ${eur(payOpen(e))}` : !open ? (e.gesamt < 0 ? 'ausgezahlt' : 'bezahlt') : late ? 'überfällig' : e.gesamt < 0 ? 'Guthaben offen' : 'offen')),
+          partial ? `Teilzahlung, offen ${eur(payOpen(e))}` : !open ? (e.gesamt < 0 ? 'ausgezahlt' : 'bezahlt') : late ? 'überfällig' : e.gesamt < 0 ? 'Guthaben offen' : 'offen'),
+          open && e.mahnungen && e.mahnungen.length ? h('div', { class: 'hint', title: 'Letzte Mahnung' }, `${MAHN_TITEL[e.mahnungen[e.mahnungen.length - 1].stufe]} ${deDate(e.mahnungen[e.mahnungen.length - 1].datum)}, Frist ${deDate(e.mahnungen[e.mahnungen.length - 1].frist)}`) : null),
         h('td', { class: 'paycell' }, chk, date),
         h('td', { class: 'note', title: e.notiz || '' }, e.notiz || ''),
         h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await paymentDialog(e); if (r !== false && r !== undefined) draw(); } }, 'Details'))));

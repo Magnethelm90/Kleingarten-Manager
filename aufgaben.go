@@ -87,7 +87,7 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 
 	// Rechnungen: überfällige Zahlungen, ausstehende Schlussrechnungen
 	heuteISO := heute.Format("2006-01-02")
-	ueberfaellig, summe := 0, 0.0
+	ueberfaellig, summe, mahnFrist := 0, 0.0, 0
 	hatRechnung := map[string]bool{}
 	for _, r := range s.d.Rechnungen {
 		if r.Status != statusGueltig {
@@ -97,12 +97,18 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 			hatRechnung[r.PaechterID] = true
 		}
 		if r.Result.Gesamt > 0 && openAmount(r) > 0.005 && r.Settings.Zahlungsziel != "" && r.Settings.Zahlungsziel < heuteISO && !r.Bereinigt {
+			if n := len(r.Mahnungen); n > 0 && r.Mahnungen[n-1].Frist >= heuteISO {
+				continue // gemahnt, die Frist läuft noch
+			}
 			ueberfaellig++
 			summe += openAmount(r)
+			if len(r.Mahnungen) > 0 {
+				mahnFrist++
+			}
 		}
 	}
 	if ueberfaellig > 0 {
-		add("warn", mehrzahl(ueberfaellig, "Rechnung überfällig", "Rechnungen überfällig"), fmt.Sprintf("Zusammen %s offen. Kontoauszug einlesen oder Mahnung erzeugen.", fmtEUR(round2(summe))), "tab:zahlungen", "Zahlungen")
+		add("warn", mehrzahl(ueberfaellig, "Rechnung überfällig", "Rechnungen überfällig"), fmt.Sprintf("Zusammen %s offen. Kontoauszug einlesen oder Mahnung erzeugen.", fmtEUR(round2(summe)))+mahnFristText(mahnFrist), "tab:zahlungen", "Zahlungen")
 	}
 	schluss := 0
 	for _, p := range s.d.Paechter {
@@ -248,4 +254,12 @@ func (a *App) handleAufgaben(w http.ResponseWriter, r *http.Request) {
 		l = []aufgabe{}
 	}
 	writeJSON(w, 200, l)
+}
+
+// mahnFristText: Zusatz für den Cockpit-Hinweis, wenn eine Mahnfrist verstrichen ist.
+func mahnFristText(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" Bei %s ist die Frist der letzten Mahnung verstrichen – nächste Stufe erzeugen.", mehrzahl(n, "Rechnung", "Rechnungen"))
 }

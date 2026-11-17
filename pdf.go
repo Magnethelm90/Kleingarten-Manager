@@ -494,7 +494,10 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 // buildMahnung erzeugt eine einfache Zahlungserinnerung für eine offene,
 // bereits ausgestellte Rechnung (nutzt dieselbe Kopfzeile und denselben
 // GiroCode wie die Rechnung selbst).
-func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
+func buildMahnung(s Settings, p Paechter, rec *Rechnung, stufe int, frist string) ([]byte, error) {
+	if stufe < 1 || stufe > 3 {
+		stufe = 1
+	}
 	offen := openAmount(rec)
 	if offen <= 0 {
 		return nil, errors.New("diese Rechnung ist bereits vollständig bezahlt")
@@ -505,7 +508,7 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	tr := func(s string) string { return s }
 	pdf.SetMargins(leftX, 12, 20)
 	pdf.SetAutoPageBreak(false, 0)
-	pdf.SetTitle(tr("Zahlungserinnerung "+invoiceNumber(s, p)), true)
+	pdf.SetTitle(tr(mahnTitel[stufe]+" "+invoiceNumber(s, p)), true)
 	pdf.SetAuthor(tr(s.VereinName), true)
 	pdf.SetCreator(appName, true)
 	pdf.AddPage()
@@ -561,7 +564,7 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	font("B", 13)
 	pdf.SetTextColor(markenfarbe(s.Farbe))
 	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, 7, tr("Zahlungserinnerung"), "", 0, "L", false, 0, "")
+	pdf.CellFormat(rightX-leftX, 7, tr(mahnTitel[stufe]), "", 0, "L", false, 0, "")
 	pdf.SetTextColor(0, 0, 0)
 	next(9)
 	font("", 10)
@@ -573,6 +576,12 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	} else {
 		body = fmt.Sprintf("Für die Rechnung %s vom %s über %s ist bei uns noch kein Zahlungseingang zu verzeichnen.",
 			invoiceNumber(s, p), germanDate(s.Rechnungsdatum), fmtEUR(offen))
+	}
+	switch stufe {
+	case 2:
+		body += " Wir hatten Sie bereits an die Zahlung erinnert."
+	case 3:
+		body += " Trotz Erinnerung und Mahnung ist die Zahlung nicht eingegangen. Dies ist unsere letzte Mahnung; danach müssen wir weitere Schritte nach Pachtvertrag und Satzung prüfen."
 	}
 	pdf.SetXY(leftX, y)
 	pdf.MultiCell(rightX-leftX, 5.2, tr(body), "", "L", false)
@@ -592,9 +601,13 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 			textW = rightX - leftX - qrSize - 5
 		}
 	}
-	pay := fmt.Sprintf("Bitte den offenen Betrag von %s umgehend auf das Konto der %s, IBAN: %s; BIC: %s, Verwendungszweck: %s (*) überweisen. "+
+	bis := "umgehend"
+	if frist != "" {
+		bis = "bis zum " + germanDate(frist)
+	}
+	pay := fmt.Sprintf("Bitte den offenen Betrag von %s %s auf das Konto der %s, IBAN: %s; BIC: %s, Verwendungszweck: %s (*) überweisen. "+
 		"Sollte die Zahlung zwischenzeitlich bereits erfolgt sein, betrachten Sie dieses Schreiben als gegenstandslos.",
-		fmtEUR(offen), s.BankName, s.IBAN, s.BIC, invoiceNumber(s, p))
+		fmtEUR(offen), bis, s.BankName, s.IBAN, s.BIC, invoiceNumber(s, p))
 	qrTop := y
 	font("", 10)
 	pdf.SetXY(leftX, y)
@@ -618,7 +631,7 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	text(leftX, rightX-leftX, "Der Vorstand", "L")
 	next(rowH + 3)
 	font("", 8)
-	text(leftX, rightX-leftX, "Die Zahlungserinnerung wird maschinell erstellt und ist ohne Unterschrift gültig.", "L")
+	text(leftX, rightX-leftX, "Dieses Schreiben wird maschinell erstellt und ist ohne Unterschrift gültig.", "L")
 
 	if y > 290 {
 		return nil, errors.New("Mahnung passt nicht auf eine Seite")
