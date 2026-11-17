@@ -133,6 +133,10 @@ davon gespeichert, außer den übernommenen Zählerständen.
 ist vertraulich zu behandeln; der Jahresbericht darin enthält keine Namen. Die Briefe an Bewerber werden nicht
 gespeichert, sie entstehen bei jedem Aufruf neu aus der Warteliste und verschwinden mit dem Eintrag.
 
+**Bankabgleich lernt:** Ordnet der Vorstand beim Kontoauszug eine Zahlung zu, merkt sich das Programm den Absendernamen laut Bank
+nur als Prüfsumme (kein Klartext) zusammen mit der Pächter-ID. Beim nächsten Auszug erscheint daraus ein Vorschlag, der immer
+geprüft werden muss. Beim endgültigen Löschen einer Person werden diese Merkzettel entfernt.
+
 **Mängelfotos und Papierkorb:** Zu einem Mangel kann ein Foto hinterlegt werden (Ordner `Maengelfotos/`). Beim Hochladen wird
 das Bild neu kodiert: Standort- und Kameradaten (EXIF) fallen weg, die Größe wird begrenzt. Das Foto soll nur den Mangel zeigen,
 keine Personen. Es erscheint im Schreiben an den Pächter. Gelöschte Mängel, Termine, Beschlüsse und Verträge liegen 30 Tage im

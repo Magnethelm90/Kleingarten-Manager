@@ -296,7 +296,7 @@ func (s *Store) zuordnenLocked(bs []kontoBuchung) []offeneRechnung {
 			mehrere := false
 			for _, x := range offen {
 				name := kompakt(x.Paechter.Name)
-				if len([]rune(name)) < 4 || !strings.Contains(text, name) || absf(openAmount(x)-vergeben[x.ID]-b.Betrag) >= 0.005 {
+				if len([]rune(name)) < 4 || !(strings.Contains(text, name) || nameTokensEnthalten(text, x.Paechter.Name)) || absf(openAmount(x)-vergeben[x.ID]-b.Betrag) >= 0.005 {
 					continue
 				}
 				if kandidat != nil {
@@ -304,9 +304,29 @@ func (s *Store) zuordnenLocked(bs []kontoBuchung) []offeneRechnung {
 				}
 				kandidat = x
 			}
+			hinweis := "über Name und Betrag gefunden – bitte prüfen"
+			if kandidat == nil {
+				// gelernte Zuordnung oder Mitgliedsnummer im Verwendungszweck
+				pid, nr := s.d.KontoGelernt[lernSchluessel(b.Name)], mitgliedsnrAusZweck(b.Zweck)
+				for _, x := range offen {
+					passt := (pid != "" && x.PaechterID == pid) || (nr != "" && strings.TrimLeft(x.Paechter.Mitgliedsnr, "0") == nr)
+					if !passt || absf(openAmount(x)-vergeben[x.ID]-b.Betrag) >= 0.005 {
+						continue
+					}
+					if kandidat != nil {
+						mehrere = true
+					}
+					kandidat = x
+				}
+				if kandidat != nil && pid != "" && kandidat.PaechterID == pid {
+					hinweis = "Absender von früher bekannt – bitte prüfen"
+				} else {
+					hinweis = "Mitgliedsnummer im Verwendungszweck – bitte prüfen"
+				}
+			}
 			if kandidat != nil && !mehrere {
 				b.RechnungID, b.Status = kandidat.ID, "vorschlag"
-				b.Hinweis = "über Name und Betrag gefunden – bitte prüfen"
+				b.Hinweis = hinweis
 				vergeben[kandidat.ID] += b.Betrag
 			} else if vzOk {
 				b.Status, b.PaechterID = "vorauszahlung", vp.ID
@@ -443,6 +463,7 @@ func (a *App) handleKontoauszugBuchen(w http.ResponseWriter, r *http.Request) {
 				writeErr(w, err) // vorher geprüft; tritt praktisch nicht auf
 				return
 			}
+			a.st.kontoLernenLocked(z.Name, z.Vorauszahl)
 			vorauszahlungen++
 			continue
 		}
@@ -456,6 +477,7 @@ func (a *App) handleKontoauszugBuchen(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		x := rech[z.RechnungID]
+		a.st.kontoLernenLocked(z.Name, x.PaechterID)
 		bezahlt := round2(paidAmount(x) + z.Betrag)
 		if x.BezahltAm == "" || z.Datum > x.BezahltAm {
 			x.BezahltAm = z.Datum

@@ -3539,8 +3539,8 @@ function kontoauszugVorschau(v) {
       const zahlungen = zeilen.filter((z) => z.an.checked && z.wahl.value).map((z) => {
         const basis = { datum: z.b.datum, betrag: z.b.betrag, fingerprint: z.b.fingerprint };
         if (z.wahl.value === 'spende') return { ...basis, spende: true, name: z.b.name };
-        if (z.wahl.value.startsWith('vz:')) return { ...basis, vorauszahlung: z.wahl.value.slice(3) };
-        return { ...basis, rechnungId: z.wahl.value };
+        if (z.wahl.value.startsWith('vz:')) return { ...basis, vorauszahlung: z.wahl.value.slice(3), name: z.b.name };
+        return { ...basis, rechnungId: z.wahl.value, name: z.b.name };
       });
       if (!zahlungen.length) { toast('Es ist nichts angehakt.', 'err'); return false; }
       try {

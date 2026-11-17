@@ -214,6 +214,8 @@ type Data struct {
 	Einsatzstunden []EinsatzStunden `json:"einsatzstunden,omitempty"`
 	// KontoFingerprints: gekürzte Hashes bereits übernommener Kontobuchungen (kein Klartext), gegen doppeltes Buchen
 	KontoFingerprints []string `json:"kontoFingerprints,omitempty"`
+	// KontoGelernt: Prüfsumme des Absendernamens laut Bank → Pächter-ID (kontolernen.go), kein Klartext
+	KontoGelernt map[string]string `json:"kontoGelernt,omitempty"`
 	// Spenden und Angaben zur Gemeinnützigkeit für Zuwendungsbestätigungen (siehe spenden.go)
 	Spenden           []Spende          `json:"spenden,omitempty"`
 	Gemeinnuetzigkeit Gemeinnuetzigkeit `json:"gemeinnuetzigkeit"`

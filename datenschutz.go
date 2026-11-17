@@ -94,7 +94,7 @@ func (d *Data) entfernePerson(id string) bool {
 		d.Paechter = append(d.Paechter[:idx], d.Paechter[idx+1:]...)
 	}
 	changed := idx >= 0
-	if d.papierkorbPersonEntfernen(id) {
+	if d.papierkorbPersonEntfernen(id) || d.kontoGelerntPersonEntfernen(id) {
 		changed = true
 	}
 	for i := range d.GartenHistorie {
