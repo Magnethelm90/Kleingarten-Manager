@@ -42,7 +42,7 @@ func (a *App) saisonlistePDF(r *http.Request) ([]byte, string, error) {
 	titel := fmt.Sprintf("%s %d", v.Titel, time.Now().Year())
 	pdf := neuesPDF(s, titel, true)
 	kopf := []string{"Garten", "Pächter", "Wasserzähler", "Erledigt", "Datum", "Zählerstand", "Bemerkung / Schaden"}
-	breiten := []float64{16, 52, 36, 20, 24, 30, 96}
+	breiten := []float64{16, 48, 34, 18, 22, 28, 91}
 	zeilen := make([][]string, 0, len(l))
 	for _, p := range l {
 		zeilen = append(zeilen, []string{p.Gartennr, p.Name, p.WasserzaehlerNr, "☐", "", "", ""})

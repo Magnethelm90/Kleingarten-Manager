@@ -5936,6 +5936,7 @@ function adminMaengel() {
       h('button', { class: 'btn', onclick: begehungslisteDrucken }, 'Begehungsliste drucken'),
       h('button', { class: 'btn', onclick: begehungDurchfuehren, title: 'Garten für Garten durchgehen und Mängel und Nutzung gleich eintragen, z. B. mit dem Laptop beim Rundgang' }, 'Begehung durchführen'),
       auswahl.size ? h('button', { class: 'btn primary', onclick: sammelErledigt }, `${auswahl.size} als erledigt markieren`) : null,
+      auswahl.size ? h('button', { class: 'btn', onclick: () => { const q = [...auswahl].map(encodeURIComponent).join(','); pdfDrucken({ url: `/api/admin/maengel-liste?ids=${q}`, oeffnenUrl: `/api/admin/maengel-liste/oeffnen?ids=${q}`, titel: 'Mängelliste', meldung: () => 'Die Mängelliste wurde im PDF-Programm geöffnet – dort drucken.' }); } }, 'Auswahl drucken') : null,
       offen.length > 1 ? h('button', { class: 'btn', onclick: () => { if (auswahl.size === offen.length) auswahl.clear(); else offen.forEach((m) => auswahl.add(m.id)); render(); } }, auswahl.size === offen.length ? 'Auswahl aufheben' : 'Alle auswählen') : null,
       h('div', { class: 'spacer' }),
       h('span', { class: 'stat' }, `${offen.length} offen · ${erledigt.length} erledigt`)),

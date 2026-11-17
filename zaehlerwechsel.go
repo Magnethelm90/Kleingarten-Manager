@@ -58,7 +58,7 @@ func (a *App) wechselProtokollPDF(r *http.Request) ([]byte, string, error) {
 	titel := fmt.Sprintf("Zählerwechsel-Protokoll %d", jahr)
 	pdf := neuesPDF(s, titel, true)
 	kopf := []string{"Garten", "Pächter", "Zähler", "Neue Nummer", "Endstand alt", "Anfangsstand neu", "Unterschrift Wart", "Unterschrift Pächter"}
-	breiten := []float64{16, 50, 18, 34, 26, 30, 44, 44}
+	breiten := []float64{16, 48, 18, 34, 26, 28, 44, 43}
 	zeilen := make([][]string, 0, len(l))
 	for _, z := range l {
 		zeilen = append(zeilen, []string{z.Gartennr, z.Name, z.Art, z.NeueNr, z.AltEnde, z.NeuStart, "", ""})

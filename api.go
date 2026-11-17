@@ -1990,6 +1990,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/admin/maengel/{id}/foto", a.admin(a.handleMangelFotoLoeschen))
 	mux.HandleFunc("GET /api/admin/kostenvergleich", a.adminOrPruef(a.handleKostenvergleich))
 	mux.HandleFunc("GET /api/admin/maengel", a.admin(a.handleMaengelListe))
+	mux.HandleFunc("GET /api/admin/maengel-liste", a.admin(a.pdfAnzeigen(a.maengelListePDF)))
+	mux.HandleFunc("POST /api/admin/maengel-liste/oeffnen", a.admin(a.pdfOeffnen(a.maengelListePDF)))
 	mux.HandleFunc("POST /api/admin/maengel", a.admin(a.handleMangelSpeichern(true)))
 	mux.HandleFunc("POST /api/admin/maengel-schreiben", a.admin(a.handleMaengelStufe))
 	mux.HandleFunc("PUT /api/admin/maengel/{id}", a.admin(a.handleMangelSpeichern(false)))

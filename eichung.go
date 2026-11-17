@@ -235,11 +235,20 @@ func (s *Store) eichungAufgabenLocked(heute time.Time, add func(stufe, titel, te
 
 // pdfListe setzt eine einfache Tabelle mit Kopfzeile, Seitenumbruch und Fußzeile.
 func pdfListe(pdf *fpdf.Fpdf, s Settings, titel, hinweis string, kopf []string, breiten []float64, zeilen [][]string, groesse float64) {
-	_, hoehe := pdf.GetPageSize()
+	seitenBreite, hoehe := pdf.GetPageSize()
 	unten := hoehe - 18
 	breite := 0.0
 	for _, b := range breiten {
 		breite += b
+	}
+	// Zu breite Spalten anteilig verkleinern, damit nichts über den rechten Rand läuft
+	if verfuegbar := seitenBreite - 2*leftX; breite > verfuegbar {
+		f := verfuegbar / breite
+		breiten = append([]float64(nil), breiten...)
+		for i := range breiten {
+			breiten[i] *= f
+		}
+		breite = verfuegbar
 	}
 	zeileH := groesse * 0.75
 	seite := func() float64 {
