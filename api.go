@@ -1938,6 +1938,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("PUT /api/admin/spenden/{id}", a.admin(a.handleSpendeSpeichern(false)))
 	mux.HandleFunc("DELETE /api/admin/spenden/{id}", a.admin(a.handleSpendeLoeschen))
 	mux.HandleFunc("POST /api/admin/spenden/bestaetigen", a.admin(a.handleSpendenBestaetigen))
+	mux.HandleFunc("GET /api/admin/spenden/jahr", a.admin(a.handleSpendenJahr))
+	mux.HandleFunc("GET /api/admin/spenden/jahrespaket", a.admin(a.handleSpendenJahrespaket))
 	mux.HandleFunc("GET /api/admin/zuwendungsbestaetigung", a.admin(a.pdfAnzeigen(a.zuwendungsbestaetigungPDF)))
 	mux.HandleFunc("POST /api/admin/zuwendungsbestaetigung/oeffnen", a.admin(a.pdfOeffnen(a.zuwendungsbestaetigungPDF)))
 	mux.HandleFunc("GET /api/admin/vereinsinfo", a.admin(a.handleVereinsinfo))

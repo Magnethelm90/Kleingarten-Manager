@@ -135,6 +135,7 @@ func (a *App) handleAblesungHandyImport(w http.ResponseWriter, r *http.Request) 
 	var b handyBericht
 	b.Hinweise = []string{}
 	gleich := func(p, q *float64) bool { return p != nil && q != nil && *p == *q }
+	var geaenderte []string
 	for _, x := range in.Staende {
 		p := aktiv[x.ID]
 		ab := j.Ablesungen[x.ID]
@@ -154,9 +155,24 @@ func (a *App) handleAblesungHandyImport(w http.ResponseWriter, r *http.Request) 
 		pruefe("Strom", x.Strom, ab.StromVJ, &ab.StromAkt, ab.StromAkt)
 		if geaendert {
 			j.Ablesungen[x.ID] = ab
+			geaenderte = append(geaenderte, x.ID)
 			b.Uebernommen++
 		} else {
 			b.Unveraendert++
+		}
+	}
+	// Auffällige Verbräuche (meist Tippfehler beim Rundgang) gleich mit melden
+	if len(geaenderte) > 0 {
+		v, _ := a.st.viewLocked(in.Jahr)
+		results := map[string]Result{}
+		for _, p := range v.Paechter {
+			results[p.ID] = calculate(v.Settings, p, v.Ablesungen[p.ID])
+		}
+		plausi := plausiLocked(v, results, a.st.historyLocked())
+		for _, id := range geaenderte {
+			for _, t := range plausi[id] {
+				b.Hinweise = append(b.Hinweise, "Garten "+aktiv[id].Gartennr+": "+t)
+			}
 		}
 	}
 	a.st.audit("Zählerstände aus der Handy-Ablesung übernommen (%d Gärten)", b.Uebernommen)

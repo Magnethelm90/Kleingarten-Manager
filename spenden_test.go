@@ -1,9 +1,11 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -98,6 +100,33 @@ func TestSpendenUndZuwendungsbestaetigung(t *testing.T) {
 		"bescheid": "freistellung", "bescheidDatum": time.Now().AddDate(-1, 0, 0).Format("2006-01-02"), "veranlagung": "2022–2024"}
 	if rec := do(h, "PUT", "/api/admin/spenden/gemeinnuetzigkeit", g); rec.Code != 200 {
 		t.Fatalf("Gemeinnützigkeit: %d %s", rec.Code, rec.Body.String())
+	}
+	// Jahrespaket: je Spender eine Bestätigung, ohne Anschrift nur im Hinweis, nichts wird vermerkt
+	jg := decode[struct {
+		Gruppen []spendenGruppe `json:"gruppen"`
+		Fehlt   []string        `json:"fehlt"`
+	}](t, do(h, "GET", "/api/admin/spenden/jahr?jahr="+strconv.Itoa(jahr), nil))
+	gefunden := map[string]int{}
+	for _, g := range jg.Gruppen {
+		gefunden[g.Name] = len(g.IDs)
+	}
+	if gefunden[p.Name] != 2 || gefunden["Bäckerei Korn"] != 1 || len(jg.Fehlt) == 0 {
+		t.Errorf("Jahresgruppen: %+v", jg)
+	}
+	rec := do(h, "GET", "/api/admin/spenden/jahrespaket?jahr="+strconv.Itoa(jahr), nil)
+	zr, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if rec.Code != 200 || err != nil || len(zr.File) != len(jg.Gruppen)+1 {
+		t.Fatalf("Jahrespaket: %d %v", rec.Code, err)
+	}
+	app.st.mu.Lock()
+	for _, x := range app.st.d.Spenden {
+		if x.BestaetigtAm != "" && x.ID == s1.ID {
+			t.Error("das Paket darf nichts als bestätigt vermerken")
+		}
+	}
+	app.st.mu.Unlock()
+	if rec := do(h, "GET", "/api/admin/spenden/jahrespaket?jahr=1950", nil); rec.Code != 400 {
+		t.Errorf("leeres Jahr: %d", rec.Code)
 	}
 	// Einzel- und Sammelbestätigung
 	dir := os.Getenv("GA_PDF_DIR")

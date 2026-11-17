@@ -2526,6 +2526,27 @@ async function bestaetigungAusstellen(liste) {
   S.spenden = null; render();
 }
 
+// Alle offenen Spenden eines Jahres: ZIP mit einer Bestätigung je Spender, danach auf Wunsch als ausgestellt vermerken.
+async function spendenJahrespaket(jahr) {
+  let d;
+  try { d = await api('GET', `/api/admin/spenden/jahr?jahr=${jahr}`); } catch (e) { handleErr(e); return; }
+  if (!d.gruppen.length) { toast(`Für ${jahr} gibt es keine offenen Spenden mit Anschrift.`, 'err'); return; }
+  const link = h('a', { class: 'btn primary', href: `/api/admin/spenden/jahrespaket?jahr=${jahr}`, download: '' }, 'ZIP herunterladen');
+  const ok = await modal(`Zuwendungsbestätigungen ${jahr}`, h('div', null,
+    h('p', null, `${d.gruppen.length} Spender mit noch nicht bestätigten Spenden – je Spender eine Einzel- oder Sammelbestätigung als PDF in einer ZIP-Datei.`),
+    h('ul', null, d.gruppen.map((g) => h('li', null, `${g.name}${g.ids.length > 1 ? ` (${g.ids.length} Spenden, Sammelbestätigung)` : ''}`))),
+    d.fehlt.length ? h('div', { class: 'banner warn' }, h('b', null, 'Nicht enthalten: '), d.fehlt.join(' · ')) : h('span'),
+    h('p', null, link),
+    h('p', { class: 'hint' }, 'Erst ausdrucken und unterschreiben. Danach hier vermerken, dass die Bestätigungen ausgestellt sind – sonst erscheinen die Spenden weiter als offen.')),
+  [{ label: 'Schließen', value: false }, { label: 'Als ausgestellt vermerken', cls: 'primary', value: true }]);
+  if (!ok) return;
+  try {
+    for (const g of d.gruppen) await api('POST', '/api/admin/spenden/bestaetigen', { ids: g.ids });
+    toast(`${d.gruppen.length} Bestätigungen als ausgestellt vermerkt`, 'ok');
+  } catch (e) { handleErr(e); }
+  S.spenden = null; render();
+}
+
 function gemeinnuetzigkeitKarte(g, offen) {
   const f = {
     anschrift: h('textarea', { rows: 2, style: 'width:100%', placeholder: 'Straße Hausnummer\nPLZ Ort' }, g.anschrift || ''),
@@ -2587,6 +2608,7 @@ function adminSpenden() {
       h('label', null, 'Jahr'), jahrSel,
       h('button', { class: 'btn', disabled: !auswahl.length || !!d.hinweis, title: 'Eine Spende: Einzelbestätigung; mehrere desselben Spenders: Sammelbestätigung', onclick: () => bestaetigungAusstellen(auswahl) },
         auswahl.length > 1 ? `Sammelbestätigung (${auswahl.length})` : 'Bestätigung für Auswahl'),
+      h('button', { class: 'btn', disabled: !!d.hinweis || !l.some((x) => !x.bestaetigtAm && !x.bereinigt), title: 'Alle noch offenen Spenden des Jahres, je Spender eine Bestätigung', onclick: () => spendenJahrespaket(jahr) }, 'Alle offenen des Jahres …'),
       h('div', { class: 'spacer' }), h('span', { class: 'stat' }, `${l.length} Spende(n) · ${eur(summe)}`)),
     l.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
       h('thead', null, h('tr', null, ['', 'Datum', 'Spender', 'Betrag', 'Bestätigung', ''].map((x) => h('th', null, x)))),
