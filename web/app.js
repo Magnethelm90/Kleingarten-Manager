@@ -385,23 +385,26 @@ const NAV = [
     { tab: 'termine', label: 'Termine', ic: 'kalender' },
     { admin: 'paechter', label: 'Pächter', ic: 'personen', tour: 'admin', reiter: [
       { admin: 'paechter', label: 'Alle Pächter' },
+      { admin: 'warteliste', modul: 'warteliste', label: 'Warteliste' },
       { admin: 'kuendigungen', label: 'Kündigungen' },
       { admin: 'jubilaeen', modul: 'jubilaeen', label: 'Jubiläen' }] },
-    { admin: 'warteliste', modul: 'warteliste', label: 'Warteliste', ic: 'warteliste' },
-    { admin: 'maengel', label: 'Mängel & Lauben', ic: 'warnung' },
+    { admin: 'maengel', label: 'Anlage', ic: 'warnung', reiter: [
+      { admin: 'maengel', label: 'Mängel & Lauben' },
+      { admin: 'inventar', modul: 'inventar', label: 'Schlüssel & Geräte' }] },
     { admin: 'rundschreiben', modul: 'rundschreiben', label: 'Rundschreiben', ic: 'brief' },
-    { admin: 'inventar', modul: 'inventar', label: 'Schlüssel & Geräte', ic: 'schluessel' },
     { admin: 'verwaltung', label: 'Vereinsverwaltung', ic: 'akte' }] },
   { gruppe: 'Kasse & Berichte', items: [
     { admin: 'kassenbericht', label: 'Kasse', ic: 'kasse', reiter: [
       { admin: 'kassenbericht', label: 'Kassenbericht' },
       { admin: 'haushalt', modul: 'haushalt', label: 'Haushaltsplan' },
       { admin: 'spenden', modul: 'spenden', label: 'Spenden' }] },
-    { admin: 'berichte', label: 'Berichte & Meldungen', ic: 'bericht' },
-    { admin: 'jahreswechsel', label: 'Jahreswechsel', ic: 'fertig' }] },
+    { admin: 'berichte', label: 'Berichte & Jahresabschluss', ic: 'bericht', reiter: [
+      { admin: 'berichte', label: 'Berichte & Meldungen' },
+      { admin: 'jahreswechsel', label: 'Jahreswechsel' }] }] },
   { gruppe: 'Einstellungen', items: [
-    { admin: 'einstellungen', label: 'Preise & Einstellungen', ic: 'regler' },
-    { admin: 'daten', label: 'Import, Export, Sicherung', ic: 'daten' },
+    { admin: 'einstellungen', label: 'Einstellungen', ic: 'regler', reiter: [
+      { admin: 'einstellungen', label: 'Preise & Einstellungen' },
+      { admin: 'daten', label: 'Import, Export, Sicherung' }] },
     { admin: 'sicherheit', label: 'Sicherheit & Datenschutz', ic: 'sicherung', reiter: [
       { admin: 'sicherheit', label: 'Passwort' },
       { admin: 'datenschutz', label: 'Datenschutz' },
@@ -453,7 +456,7 @@ function reiterKopf() {
   const e = navEintrag(S.tab, S.adminTab);
   const sicht = e && e.reiter ? e.reiter.filter((y) => navSichtbar(y, S.state)) : [];
   if (sicht.length < 2) return null;
-  return reiterLeiste(sicht.map((y) => ({ label: y.label, aktiv: navPasst(y), geh: () => navGeh(y) })), navLabel(e));
+  return reiterLeiste(sicht.map((y) => ({ label: navLabel(y), aktiv: navPasst(y), geh: () => navGeh(y) })), navLabel(e));
 }
 
 // Einheitliche Reiter für Teile einer Seite (Filter und Ansichten bleiben die runden »subtabs«).

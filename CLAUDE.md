@@ -118,6 +118,7 @@
   Überschrift, `reiterLeiste()` (Klasse `.reiter`, Unterstrich) für ALLE Seitenteile (auch Rechnungen/Archiv, Mängel/Lauben, Schlüssel/Geräte,
   Vereinsverwaltung); runde `.subtabs` nur noch für Filter/Ansichten. Seitenleiste 244 px.
 - Klicks gespart: Zahlungen »Alle überfälligen auswählen« (Mahnung), `ausgabeDialog` ist Schleife um `ausgabeDialogEinmal` (Knopf »Speichern und nächste«, Datum/Kategorie bleiben), `issue()` zeigt im Abschluss »Postversand drucken« / »E-Mails vorbereiten«.
+- Menü weiter gestrafft (14 Einträge): Pächter (+Warteliste), Anlage = Mängel & Lauben | Schlüssel & Geräte, Berichte & Jahresabschluss = Berichte & Meldungen | Jahreswechsel, Einstellungen = Preise & Einstellungen | Import, Export, Sicherung. Neue Seiten als Reiter in bestehende NAV-Einträge hängen.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)
