@@ -3919,7 +3919,7 @@ function viewPruefShell() {
 
 function paechterDialog(p, vorlage) {
   const isNew = !p;
-  const cur = p || { mitgliedsnr: '', gartennr: '', anrede: 'Herr', name: '', strasse: '', plzOrt: S.state.settings.ort, versand: 'Emailsendung',
+  const cur = p || { mitgliedsnr: '', gartennr: '', anrede: 'Herr', name: '', strasse: '', plzOrt: S.state.settings.ort, versand: 'Postversand',
     email: '', telefon: '', gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '', notiz: '', ...(vorlage || {}) };
   const t = (val, ph) => h('input', { type: 'text', value: val || '', placeholder: ph || '', maxlength: 100, autocomplete: 'off' });
   const f = {
@@ -3934,6 +3934,13 @@ function paechterDialog(p, vorlage) {
     wz: t(cur.wasserzaehlerNr), sz: t(cur.stromzaehlerNr),
     notiz: h('textarea', { rows: 2, maxlength: 300, style: 'width:100%' }, cur.notiz || ''),
   };
+  // Neuer Pächter: Versandart folgt der E-Mail-Adresse (ohne Adresse = Post), bis sie von Hand gewählt wird.
+  if (!p) {
+    if (!(vorlage && vorlage.versand)) f.versand.value = f.email.value.trim() ? 'Emailsendung' : 'Postversand';
+    let vonHand = false;
+    f.versand.addEventListener('change', () => { vonHand = true; });
+    f.email.addEventListener('input', () => { if (!vonHand) f.versand.value = f.email.value.trim() ? 'Emailsendung' : 'Postversand'; });
+  }
   f.gartengroesse.setAttribute('inputmode', 'decimal');
   f.umlage.setAttribute('inputmode', 'decimal');
   const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);

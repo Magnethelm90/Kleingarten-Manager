@@ -1414,7 +1414,7 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 		} else {
 			p.ID = newID()
 			if p.Versand == "" {
-				p.Versand = "Emailsendung" // wie beim Anlegen im Formular
+				p.Versand = versandNachEmail(p.Email) // ohne E-Mail-Adresse per Post
 			}
 			a.st.eichjahrUebernehmenLocked(&p)
 			a.st.d.Paechter = append(a.st.d.Paechter, p)
