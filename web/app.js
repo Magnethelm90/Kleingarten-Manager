@@ -5708,18 +5708,27 @@ function terminDialog(t) {
     ort: h('input', { type: 'text', value: cur.ort, maxlength: 100, placeholder: 'z. B. Vereinsheim' }),
     notiz: h('textarea', { rows: 2, maxlength: 300, style: 'width:100%', placeholder: 'z. B. Bitte Arbeitshandschuhe mitbringen' }, cur.notiz || ''),
     tops: h('textarea', { rows: 5, maxlength: 3000, style: 'width:100%', placeholder: 'Ein Punkt pro Zeile, z. B.\nBegrüßung\nKassenbericht\nVerschiedenes' }, cur.tops || ''),
+    serie: h('select', null, [['', 'einmalig'], ['woechentlich', 'jede Woche'], ['14tage', 'alle zwei Wochen'], ['monatlich', 'jeden Monat am selben Tag'], ['monatlich_wochentag', 'jeden Monat am selben Wochentag (z. B. erster Dienstag)']].map(([v, l]) => h('option', { value: v }, l))),
+    serieBis: h('input', { type: 'date', value: isoInTagen(365) }),
   };
   const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
   const body = h('div', { class: 'form' },
     fld('Titel *', f.titel, null, true), fld('Datum *', f.datum), fld('Art', f.art),
     fld('Beginn', f.von, 'leer = ganztägig'), fld('Ende', f.bis), fld('Ort', f.ort),
     fld('Hinweis (für alle sichtbar – keine Namen oder persönlichen Angaben)', f.notiz, null, true),
-    fld('Tagesordnung für die Einladung (optional)', f.tops, 'Leer lassen: bei Versammlungen werden die üblichen Punkte eingesetzt. Für alle sichtbar – keine Namen.', true));
+    fld('Tagesordnung für die Einladung (optional)', f.tops, 'Leer lassen: bei Versammlungen werden die üblichen Punkte eingesetzt. Für alle sichtbar – keine Namen.', true),
+    isNew ? fld('Wiederholung', f.serie, 'Legt einzelne Termine an (höchstens 60), die du danach einzeln ändern oder löschen kannst.') : null,
+    isNew ? fld('Serie bis', f.serieBis) : null);
   return modal(isNew ? 'Termin eintragen' : 'Termin bearbeiten', body, [
     { label: 'Abbrechen', value: false },
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
       const data = { datum: f.datum.value, von: f.von.value, bis: f.bis.value, titel: f.titel.value, art: f.art.value, ort: f.ort.value, notiz: f.notiz.value.trim(), tops: f.tops.value };
       try {
+        if (isNew && f.serie.value) {
+          const r = await api('POST', '/api/admin/termine-serie', { ...data, rhythmus: f.serie.value, bis: f.serieBis.value });
+          toast(`${r.angelegt} Termine angelegt`, 'ok');
+          return true;
+        }
         if (isNew) await api('POST', '/api/admin/termine', data);
         else await api('PUT', `/api/admin/termine/${cur.id}`, data);
         toast('Gespeichert', 'ok');
