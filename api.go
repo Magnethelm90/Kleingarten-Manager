@@ -1907,6 +1907,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/termine", a.admin(a.handleTerminCreate))
 	mux.HandleFunc("PUT /api/admin/termine/{id}", a.admin(a.handleTerminUpdate))
 	mux.HandleFunc("DELETE /api/admin/termine/{id}", a.admin(a.handleTerminDelete))
+	mux.HandleFunc("GET /api/admin/suche", a.admin(a.handleSuche))
 	mux.HandleFunc("POST /api/admin/termine-serie", a.admin(a.handleTerminSerie))
 	mux.HandleFunc("POST /api/admin/termine-uebernehmen", a.admin(a.handleTermineUebernehmen))
 	mux.HandleFunc("GET /api/admin/termine/{id}/einladung", a.admin(a.pdfAnzeigen(a.einladungPDF)))

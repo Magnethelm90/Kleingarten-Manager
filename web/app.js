@@ -613,21 +613,40 @@ function globalSearchBox(st) {
     S.globalSearchQ = '';
     render();
   };
+  const istAdmin = !st.hasPassword || st.loggedIn;
+  let weitere = [], weitereFuer = '', timer = null;
+  const gehZu = (t) => {
+    S.globalSearchQ = '';
+    if (t.garten) { gartenakteDialog(t.garten); render(); return; }
+    zielOeffnen(t.ziel);
+  };
   const draw = () => {
     results.replaceChildren();
     const m = find(S.globalSearchQ);
     if (!S.globalSearchQ.trim()) { results.classList.remove('open'); return; }
     results.classList.add('open');
-    if (!m.length) { results.append(h('div', { class: 'gs-empty' }, 'Nichts gefunden.')); return; }
+    const treffer = weitereFuer === S.globalSearchQ.trim() ? weitere : [];
+    if (!m.length && !treffer.length) { results.append(h('div', { class: 'gs-empty' }, 'Nichts gefunden.')); return; }
     for (const p of m)
       results.append(h('button', { class: 'gs-item', type: 'button', onclick: () => goTo(p) },
         h('b', null, p.gartennr || p.mitgliedsnr), ' ', p.name,
         h('span', { class: 'hint' }, p.mitgliedsnr)));
+    for (const t of treffer)
+      results.append(h('button', { class: 'gs-item', type: 'button', onclick: () => gehZu(t) },
+        h('b', null, t.art), ' ', t.titel, t.text ? h('span', { class: 'hint' }, t.text) : null));
+  };
+  const weitereSuchen = () => {
+    clearTimeout(timer);
+    const q = S.globalSearchQ.trim();
+    if (!istAdmin || q.length < 2) return;
+    timer = setTimeout(async () => {
+      try { weitere = await api('GET', `/api/admin/suche?q=${encodeURIComponent(q)}`); weitereFuer = q; if (S.globalSearchQ.trim() === q) draw(); } catch (e) { /* Suche ist nur eine Hilfe */ }
+    }, 200);
   };
   const input = h('input', {
-    type: 'search', placeholder: 'Suchen', title: 'Pächter suchen (Name, Mitglieds- oder Gartennummer)', class: 'gs-input', autocomplete: 'off',
+    type: 'search', placeholder: 'Suchen', title: 'Suchen: Pächter, Mängel, Beschlüsse, Verträge, Termine, Dokumente …', class: 'gs-input', autocomplete: 'off',
     value: S.globalSearchQ,
-    oninput: (e) => { S.globalSearchQ = e.target.value; draw(); },
+    oninput: (e) => { S.globalSearchQ = e.target.value; draw(); weitereSuchen(); },
     onkeydown: (e) => {
       if (e.key === 'Escape') { S.globalSearchQ = ''; input.value = ''; draw(); input.blur(); }
       if (e.key !== 'Enter') return;
