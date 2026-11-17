@@ -256,11 +256,15 @@ func (a *App) uebergabeprotokollPDF(id string) ([]byte, string, error) {
 		}
 	}
 	s := a.st.d.Settings
+	var offen []Mangel
+	if u != nil {
+		offen = maengelAmTag(a.st.d.Maengel, u.Gartennr, u.Datum)
+	}
 	a.st.mu.Unlock()
 	if u == nil {
 		return nil, "", notFound("Übergabe nicht gefunden")
 	}
-	pdf, err := buildUebergabeprotokoll(s, *u)
+	pdf, err := buildUebergabeprotokoll(s, *u, offen...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -296,7 +300,8 @@ func (a *App) handleUebergabeprotokollOeffnen(w http.ResponseWriter, r *http.Req
 
 // buildUebergabeprotokoll erzeugt das Übergabeprotokoll (A4 hoch) mit Zählerständen, Schlüsseln, Ablöse,
 // Bemerkungen, einer kurzen Checkliste und Unterschriftsfeldern für beide Pächter und den Vorstand.
-func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
+// offen: Mängel des Gartens, die am Übergabetag offen waren (für den Nachdruck alter Protokolle nach damaligem Stand).
+func buildUebergabeprotokoll(s Settings, u Uebergabe, offen ...Mangel) ([]byte, error) {
 	pdf := fpdf.New("P", "mm", "A4", "")
 	pdf.AddUTF8FontFromBytes("lib", "", fontRegular)
 	pdf.AddUTF8FontFromBytes("lib", "B", fontBold)
@@ -419,6 +424,37 @@ func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
 	}
 	y += 5
 
+	if len(offen) > 0 {
+		ueberschrift("Offene Mängel am Übergabetag (aus der Begehung)")
+		for _, m := range offen {
+			if y > 245 {
+				pdf.AddPage()
+				y = 30
+			}
+			txt := m.Art + ": " + m.Beschreibung + " (festgestellt " + germanDate(m.Datum)
+			if m.Frist != "" {
+				txt += ", Frist " + germanDate(m.Frist)
+			}
+			txt += ")"
+			pdf.SetDrawColor(80, 80, 80)
+			pdf.SetLineWidth(0.3)
+			pdf.Rect(leftX+1, y+1.3, 3.6, 3.6, "D")
+			font("", 9.5)
+			pdf.SetXY(leftX+7, y)
+			pdf.MultiCell(rightX-leftX-7, 5.2, txt, "", "L", false)
+			y = pdf.GetY() + 1.2
+		}
+		font("", 8.5)
+		pdf.SetTextColor(100, 100, 100)
+		zeile(leftX, rightX-leftX, 5, "Abhaken, was bei der Übergabe behoben ist; Offenes übernimmt der neue Pächter nur nach Vereinbarung.", "L")
+		pdf.SetTextColor(0, 0, 0)
+		y += 9
+		if y > 220 {
+			pdf.AddPage()
+			y = 30
+		}
+	}
+
 	ueberschrift("Zustand des Gartens, Bemerkungen")
 	font("", 10)
 	start := y
@@ -429,7 +465,11 @@ func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
 	}
 	// Platz für handschriftliche Ergänzungen, mindestens drei Linien
 	pdf.SetDrawColor(190, 194, 188)
-	for i := 0; i < 3 || y < start+20; i++ {
+	linien, platz := 3, 20.0
+	if len(offen) > 0 {
+		linien, platz = 2, 12 // Mängelliste braucht Platz, Unterschriften sollen möglichst auf Seite 1 bleiben
+	}
+	for i := 0; i < linien || y < start+platz; i++ {
 		y += 7
 		pdf.Line(leftX, y, rightX, y)
 	}
@@ -452,12 +492,12 @@ func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
 	}
 
 	// Unterschriften
-	if y+14 > 258 {
+	if y+8 > 260 {
 		// lange Bemerkungen: Unterschriften auf eine zweite Seite statt in den Seitenrand
 		pdf.AddPage()
 		y = 30
 	} else {
-		y = max(y+14, 255)
+		y = max(y+8, 255)
 	}
 	font("", 10)
 	zeile(leftX, rightX-leftX, 6, s.Ort+", den ______________________", "L")
@@ -477,4 +517,17 @@ func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
 	pdf.SetXY(leftX, 287)
 	pdf.CellFormat(rightX-leftX, 4, s.VereinName+" · Übergabeprotokoll · erstellt mit dem Kleingarten-Manager", "", 0, "C", false, 0, "")
 	return pdfBytes(pdf)
+}
+
+// maengelAmTag: Mängel eines Gartens, die am Stichtag festgestellt und noch nicht erledigt waren.
+func maengelAmTag(alle []Mangel, gartennr, tag string) []Mangel {
+	var out []Mangel
+	for _, m := range alle {
+		if m.Gartennr == gartennr && m.Datum <= tag && (m.ErledigtAm == "" || m.ErledigtAm > tag) {
+			m.FotoBytes = nil
+			out = append(out, m)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Datum < out[j].Datum })
+	return out
 }

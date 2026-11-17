@@ -246,3 +246,27 @@ func TestUebergabeFristBereinigung(t *testing.T) {
 		t.Error("Bereinigung muss idempotent sein")
 	}
 }
+
+func TestUebergabeprotokollMitMaengeln(t *testing.T) {
+	alle := []Mangel{
+		{Gartennr: "4", Datum: "2026-03-01", Art: "Hecke", Beschreibung: "zu hoch"},
+		{Gartennr: "4", Datum: "2026-03-01", Art: "Laube", Beschreibung: "erledigt vorher", ErledigtAm: "2026-04-01"},
+		{Gartennr: "4", Datum: "2026-03-01", Art: "Wege", Beschreibung: "erst danach erledigt", ErledigtAm: "2026-06-01"},
+		{Gartennr: "4", Datum: "2026-07-01", Art: "Abfall", Beschreibung: "erst nach der Übergabe festgestellt"},
+		{Gartennr: "5", Datum: "2026-03-01", Art: "Hecke", Beschreibung: "anderer Garten"},
+	}
+	l := maengelAmTag(alle, "4", "2026-05-01")
+	if len(l) != 2 || l[0].Art != "Hecke" || l[1].Art != "Wege" {
+		t.Fatalf("Stichtag falsch: %+v", l)
+	}
+	// viele lange Mängel: Seitenumbruch ohne Absturz
+	var viele []Mangel
+	for i := 0; i < 60; i++ {
+		viele = append(viele, Mangel{Gartennr: "4", Datum: "2026-03-01", Art: "Pflege", Beschreibung: strings.Repeat("Sehr lange Beschreibung ", 12)})
+	}
+	u := Uebergabe{Gartennr: "4", Datum: "2026-05-01", AltName: "Alt", NeuName: "Neu", Bemerkungen: strings.Repeat("Bemerkung ", 200)}
+	pdf, err := buildUebergabeprotokoll(defaultSettings(), u, viele...)
+	if err != nil || !bytes.HasPrefix(pdf, []byte("%PDF")) {
+		t.Fatalf("PDF: %v", err)
+	}
+}
