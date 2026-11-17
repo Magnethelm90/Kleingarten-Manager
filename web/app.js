@@ -6353,18 +6353,25 @@ async function kostenvergleichDialog() {
 }
 
 async function papierkorbDialog() {
-  let liste;
-  const laden = async () => { liste = await api('GET', '/api/admin/papierkorb'); };
+  let liste, pliste;
+  const laden = async () => {
+    liste = await api('GET', '/api/admin/papierkorb');
+    pliste = await api('GET', '/api/admin/paechter-papierkorb');
+  };
   try { await laden(); } catch (e) { handleErr(e); return; }
   const inhalt = h('div');
   const zeichnen = () => {
     inhalt.replaceChildren(
-      h('p', { class: 'hint' }, 'Gelöschte Mängel, Termine, Beschlüsse und Verträge bleiben 30 Tage hier liegen und lassen sich zurückholen. Gelöschte Pächter findest du unter »Pächter«, die Warteliste hat aus Datenschutzgründen keinen Papierkorb.'),
-      !liste.length ? leer('Der Papierkorb ist leer.') : h('table', { class: 'tbl' },
+      h('p', { class: 'hint' }, 'Gelöschte Mängel, Termine, Beschlüsse und Verträge bleiben 30 Tage hier liegen und lassen sich zurückholen. Gelöschte Pächter bleiben, bis du sie unter »Pächter« endgültig löschst. Die Warteliste hat aus Datenschutzgründen keinen Papierkorb.'),
+      !liste.length && !pliste.length ? leer('Der Papierkorb ist leer.') : h('table', { class: 'tbl' },
         h('thead', null, h('tr', null, ['Art', 'Eintrag', 'Gelöscht', 'Noch', ''].map((t) => h('th', null, t)))),
-        h('tbody', null, liste.map((z) => h('tr', null,
-          h('td', null, z.artText), h('td', null, z.titel), h('td', null, deDate(z.geloeschtAm)), h('td', null, `${z.nochTage} Tage`),
-          h('td', { class: 'r' }, h('button', { class: 'btn small', onclick: () => zurueckholen(z) }, 'Zurückholen')))))));
+        h('tbody', null,
+          pliste.map((p) => h('tr', null,
+            h('td', null, 'Pächter'), h('td', null, `${p.name}${p.gartennr ? ' (Garten ' + p.gartennr + ')' : ''}`), h('td', null, deDate(p.geloeschtAm)), h('td', null, 'unbegrenzt'),
+            h('td', { class: 'r' }, h('button', { class: 'btn small', onclick: () => paechterZurueck(p) }, 'Zurückholen')))),
+          liste.map((z) => h('tr', null,
+            h('td', null, z.artText), h('td', null, z.titel), h('td', null, deDate(z.geloeschtAm)), h('td', null, `${z.nochTage} Tage`),
+            h('td', { class: 'r' }, h('button', { class: 'btn small', onclick: () => zurueckholen(z) }, 'Zurückholen')))))));
   };
   const zurueckholen = async (z) => {
     try {
@@ -6372,8 +6379,14 @@ async function papierkorbDialog() {
       await laden(); zeichnen(); await reload(); toast(`${z.artText} zurückgeholt`, 'ok');
     } catch (e) { handleErr(e); }
   };
+  const paechterZurueck = async (p) => {
+    try {
+      await api('POST', `/api/admin/paechter/${encodeURIComponent(p.id)}/wiederherstellen`);
+      S.papierkorb = null; await laden(); zeichnen(); await reload(); toast('Pächter zurückgeholt', 'ok');
+    } catch (e) { handleErr(e); }
+  };
   const leeren = async () => {
-    if (!liste.length || !(await confirmBox('Alle Einträge im Papierkorb werden endgültig gelöscht.', 'Papierkorb leeren', true))) return;
+    if (!liste.length || !(await confirmBox('Mängel, Termine, Beschlüsse und Verträge im Papierkorb werden endgültig gelöscht. Pächter bleiben unberührt.', 'Papierkorb leeren', true))) return;
     try { await api('DELETE', '/api/admin/papierkorb'); await laden(); zeichnen(); } catch (e) { handleErr(e); }
   };
   zeichnen();

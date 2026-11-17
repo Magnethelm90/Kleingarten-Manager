@@ -76,6 +76,11 @@
   Upload wird neu kodiert = EXIF/GPS weg, Orphan-Aufräumen `fotosAufraeumenLocked` nach Foto-/Papierkorb-/Personenlöschung),
   Wechsel-Assistent (app.js `wechselAssistent`, nur Frontend über den Kündigungs-Fahrplan; Pächter-»Mehr«-Menü).
   Falle: `replaceChildren(..., null)` schreibt den Text »null« – statt null ein leeres Element übergeben.
+- Ideen-Paket 3 (Nov 2026): Mahnwesen (Rechnung.Mahnungen, Stufen 1–3, `buildMahnung(..., stufe, frist)`, Body `vermerken`, Cockpit
+  `mahnFristText`), Bankabgleich lernt (kontolernen.go, Data.KontoGelernt = Hash→Pächter-ID, kein Klartext; Mitgliedsnr im Zweck,
+  Namens-Tokens), Gartenakte-Zeitleiste (gartenzeitleiste.go), Terminserien (terminserie.go, legt Einzeltermine an, keine Regel),
+  Gesamtsuche (suche.go, GET /api/admin/suche, im Kopf-Suchfeld nur für Admin), Wartungs-Check (wartung.go), gemeinsamer Papierkorb
+  (Dialog zeigt auch Pächter-Papierkorb).
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

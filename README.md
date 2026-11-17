@@ -211,6 +211,8 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Wiederherstellungs-Probe:** liest die jüngsten Sicherungen probeweise ein; das Cockpit erinnert alle 90 Tage
 - **Versammlungspaket:** Einladung, Anwesenheitsliste, Jahresbericht, Prüfbericht und Protokoll als ZIP
 - **Mängel-Fahrplan:** Aufforderung, Erinnerung und Zweitschreiben mit Fristen; danach berät der Vorstand
+- **Mahnwesen** in drei Stufen mit Zahlungsfrist, **lernender Bankabgleich**, **Zeitleiste** je Garten, **Terminserien**, **Gesamtsuche**
+  und ein **Wartungs-Check** für den Rechner.
 - **Pächterwechsel-Assistent**, **Kostenvergleich** über die Jahre mit Hinweis auf auffälligen Mehrverbrauch, **Mängel mit Foto**
   und ein **Papierkorb** (30 Tage) für Mängel, Termine, Beschlüsse und Verträge.
 - **Arbeitsstunden-Konto** mit Ersatzzahlung vorab, **Ablesung mit dem Handy** (Datei ohne Internet),
