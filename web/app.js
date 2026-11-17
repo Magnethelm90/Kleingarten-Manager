@@ -6222,6 +6222,35 @@ async function kostenvergleichDialog() {
   await breiterDialog('Kostenvergleich über die Jahre', inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
 }
 
+async function papierkorbDialog() {
+  let liste;
+  const laden = async () => { liste = await api('GET', '/api/admin/papierkorb'); };
+  try { await laden(); } catch (e) { handleErr(e); return; }
+  const inhalt = h('div');
+  const zeichnen = () => {
+    inhalt.replaceChildren(
+      h('p', { class: 'hint' }, 'Gelöschte Mängel, Termine, Beschlüsse und Verträge bleiben 30 Tage hier liegen und lassen sich zurückholen. Gelöschte Pächter findest du unter »Pächter«, die Warteliste hat aus Datenschutzgründen keinen Papierkorb.'),
+      !liste.length ? leer('Der Papierkorb ist leer.') : h('table', { class: 'tbl' },
+        h('thead', null, h('tr', null, ['Art', 'Eintrag', 'Gelöscht', 'Noch', ''].map((t) => h('th', null, t)))),
+        h('tbody', null, liste.map((z) => h('tr', null,
+          h('td', null, z.artText), h('td', null, z.titel), h('td', null, deDate(z.geloeschtAm)), h('td', null, `${z.nochTage} Tage`),
+          h('td', { class: 'r' }, h('button', { class: 'btn small', onclick: () => zurueckholen(z) }, 'Zurückholen')))))));
+  };
+  const zurueckholen = async (z) => {
+    try {
+      await api('POST', `/api/admin/papierkorb/${encodeURIComponent(z.id)}/wiederherstellen`);
+      await laden(); zeichnen(); await reload(); toast(`${z.artText} zurückgeholt`, 'ok');
+    } catch (e) { handleErr(e); }
+  };
+  const leeren = async () => {
+    if (!liste.length || !(await confirmBox('Alle Einträge im Papierkorb werden endgültig gelöscht.', 'Papierkorb leeren', true))) return;
+    try { await api('DELETE', '/api/admin/papierkorb'); await laden(); zeichnen(); } catch (e) { handleErr(e); }
+  };
+  zeichnen();
+  const ok = await breiterDialog('Papierkorb', inhalt, [{ label: 'Papierkorb leeren', value: 'leeren' }, { label: 'Schließen', cls: 'primary', value: true }]);
+  if (ok === 'leeren') { await leeren(); }
+}
+
 function adminBerichte() {
   const st = S.state;
   const jahr = S.berichtJahr || st.currentYear;
@@ -6254,6 +6283,8 @@ function adminBerichte() {
           h('button', { class: 'btn', onclick: handyErgebnisEinlesen }, 'Ergebnis einlesen'))),
       kachel('bericht', 'Kostenvergleich', 'Wasser, Strom und Ausgaben über die Jahre, je Garten mit Hinweis auf auffälligen Mehrverbrauch.',
         h('button', { class: 'btn', onclick: kostenvergleichDialog }, 'Ansehen')),
+      kachel('daten', 'Papierkorb', 'Gelöschte Mängel, Termine, Beschlüsse und Verträge 30 Tage lang zurückholen.',
+        h('button', { class: 'btn', onclick: papierkorbDialog }, 'Öffnen')),
       kachel('uhr', `Arbeitsstunden ${jahr}`, 'Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt. Einzelne Stunden lassen sich nachtragen.',
         h('button', { class: 'btn', onclick: () => stundenkontoDialog(jahr) }, 'Ansehen')),
       kachel('zaehler', `Fehlende Zählerstände ${st.currentYear}`, 'Wer hat noch keinen Stand gemeldet? Mit Aushang ohne Namen und E-Mail-Erinnerung.',

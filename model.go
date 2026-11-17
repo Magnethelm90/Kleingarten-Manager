@@ -257,6 +257,8 @@ type Data struct {
 	// Rechnungen) – für Rechner, die mehrere Personen nutzen. Siehe vollschutz in api.go.
 	AllesGeschuetzt bool `json:"allesGeschuetzt,omitempty"`
 
+	// Papierkorb: gelöschte Einträge, 30 Tage wiederherstellbar (papierkorb.go).
+	Papierkorb []PapierkorbEintrag `json:"papierkorb,omitempty"`
 	// Probe: Ergebnis der letzten Wiederherstellungs-Probe (wiederherstellung.go).
 	Probe *Wiederherstellungsprobe `json:"probe,omitempty"`
 

@@ -184,6 +184,7 @@ func (a *App) handleMangelLoeschen(w http.ResponseWriter, r *http.Request) {
 	defer a.st.mu.Unlock()
 	for i, m := range a.st.d.Maengel {
 		if m.ID == id {
+			a.st.papierkorbLegeLocked("mangel", "Garten "+m.Gartennr+": "+m.Art, m.PaechterID, m)
 			a.st.d.Maengel = append(a.st.d.Maengel[:i], a.st.d.Maengel[i+1:]...)
 			a.st.audit("Mangel gelöscht: Garten %s (%s)", m.Gartennr, m.Art)
 			if err := a.st.saveLocked(); err != nil {

@@ -106,6 +106,7 @@ func (a *App) handleBeschlussLoeschen(w http.ResponseWriter, r *http.Request) {
 	defer a.st.mu.Unlock()
 	for i, b := range a.st.d.Beschluesse {
 		if b.ID == r.PathValue("id") {
+			a.st.papierkorbLegeLocked("beschluss", b.Nummer+" "+b.Titel, "", b)
 			a.st.d.Beschluesse = append(a.st.d.Beschluesse[:i], a.st.d.Beschluesse[i+1:]...)
 			a.st.audit("Beschluss %s gelöscht", b.Nummer)
 			a.speichernUndAntworten(w, map[string]bool{"ok": true})
@@ -301,6 +302,7 @@ func (a *App) handleVertragLoeschen(w http.ResponseWriter, r *http.Request) {
 	defer a.st.mu.Unlock()
 	for i, v := range a.st.d.Vertraege {
 		if v.ID == r.PathValue("id") {
+			a.st.papierkorbLegeLocked("vertrag", v.Bezeichnung, "", v)
 			a.st.d.Vertraege = append(a.st.d.Vertraege[:i], a.st.d.Vertraege[i+1:]...)
 			a.st.audit("Vertrag gelöscht: %s", v.Bezeichnung)
 			a.speichernUndAntworten(w, map[string]bool{"ok": true})
