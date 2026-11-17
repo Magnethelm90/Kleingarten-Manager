@@ -133,6 +133,14 @@ davon gespeichert, außer den übernommenen Zählerständen.
 ist vertraulich zu behandeln; der Jahresbericht darin enthält keine Namen. Die Briefe an Bewerber werden nicht
 gespeichert, sie entstehen bei jedem Aufruf neu aus der Warteliste und verschwinden mit dem Eintrag.
 
+**Mängelfotos und Papierkorb:** Zu einem Mangel kann ein Foto hinterlegt werden (Ordner `Maengelfotos/`). Beim Hochladen wird
+das Bild neu kodiert: Standort- und Kameradaten (EXIF) fallen weg, die Größe wird begrenzt. Das Foto soll nur den Mangel zeigen,
+keine Personen. Es erscheint im Schreiben an den Pächter. Gelöschte Mängel, Termine, Beschlüsse und Verträge liegen 30 Tage im
+Papierkorb (Bereich »Berichte & Meldungen«) und werden danach entfernt; ein Mangel behält dort sein Foto. Fotodateien ohne
+zugehörigen Mangel oder Papierkorbeintrag werden automatisch gelöscht. Beim endgültigen Löschen einer Person verschwinden
+ihre Mängel samt Foto auch aus dem Papierkorb. Die Fotos sind nicht in den JSON-Sicherungen enthalten, wohl aber in der
+Vereinsakte (Momentaufnahme des Datenordners). Die Warteliste hat bewusst keinen Papierkorb.
+
 **Wiederherstellungs-Probe, Mängel-Fahrplan, Arbeitsstunden:** Die Probe speichert nur Datum und Ergebnis. Der
 Mängel-Fahrplan speichert nur, an welchem Tag welches Schreiben verschickt wurde. Nachgetragene Stunden stehen bei
 der Ablesung des Pächters und im Änderungsprotokoll (mit Gartennummer, ohne Namen).

@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"net/http"
 	"sort"
 	"strings"
@@ -28,6 +32,9 @@ type Mangel struct {
 	ErledigtAm   string `json:"erledigtAm,omitempty"`
 	// Stufen: Fahrplan bei verstrichener Frist – Schreiben (erst, erinnerung, zweit) → Datum, an dem es verschickt wurde
 	Stufen map[string]string `json:"stufen,omitempty"`
+	// Foto: Pfad im Datenordner (maengel_foto.go); FotoBytes nur zum Erzeugen des Schreibens
+	Foto      string `json:"foto,omitempty"`
+	FotoBytes []byte `json:"-"`
 }
 
 // maengelStufen: Reihenfolge der Schreiben. Auf die Aufforderung folgt nach Fristablauf eine Erinnerung, danach
@@ -155,7 +162,7 @@ func (a *App) handleMangelSpeichern(neu bool) http.HandlerFunc {
 				return
 			}
 			old := a.st.d.Maengel[idx]
-			in.ID, in.PaechterID, in.Stufen = id, old.PaechterID, old.Stufen
+			in.ID, in.PaechterID, in.Stufen, in.Foto = id, old.PaechterID, old.Stufen, old.Foto
 			if in.Gartennr != old.Gartennr { // anderer Garten: Pächter neu zuordnen
 				if !ok {
 					writeErr(w, bad(fmt.Sprintf("Für Garten %s ist kein Pächter eingetragen", in.Gartennr)))
@@ -445,6 +452,24 @@ func buildMaengelschreiben(s Settings, p Paechter, ms []Mangel, frist, stufe str
 		pdf.SetXY(leftX+8, y)
 		pdf.MultiCell(rightX-leftX-8, 5.2, m.Beschreibung, "", "L", false)
 		y = pdf.GetY() + 2.5
+		if len(m.FotoBytes) > 0 {
+			if cfg, _, err := image.DecodeConfig(bytes.NewReader(m.FotoBytes)); err == nil && cfg.Width > 0 {
+				bw := 70.0
+				bh := bw * float64(cfg.Height) / float64(cfg.Width)
+				if bh > 70 {
+					bh = 70
+					bw = bh * float64(cfg.Width) / float64(cfg.Height)
+				}
+				if y+bh > 270 {
+					pdf.AddPage()
+					y = 20
+				}
+				name := fmt.Sprintf("mangel%d", i)
+				pdf.RegisterImageOptionsReader(name, fpdf.ImageOptions{ImageType: "JPG"}, bytes.NewReader(m.FotoBytes))
+				pdf.ImageOptions(name, leftX+8, y, bw, bh, false, fpdf.ImageOptions{ImageType: "JPG"}, 0, "")
+				y += bh + 3
+			}
+		}
 	}
 	if y > 240 {
 		pdf.AddPage()
@@ -509,6 +534,7 @@ func (a *App) maengelschreibenPDF(r *http.Request) ([]byte, string, error) {
 	if ok {
 		for _, m := range a.st.d.Maengel {
 			if m.ErledigtAm == "" && m.Gartennr == nr {
+				m.FotoBytes = a.st.fotoLaden(m)
 				ms = append(ms, m)
 			}
 		}

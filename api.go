@@ -1062,9 +1062,10 @@ func (a *App) handlePaechterEndgueltig(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, err)
 			return
 		}
-		a.st.leereDruckOrdner()     // abgeleitete Druckdateien (z. B. Sammel-PDF) enthalten den Namen noch
-		a.st.entferneVereinsakten() // ebenso ältere Vereinsakten (Momentaufnahmen des ganzen Datenordners)
-		a.st.entferneTresore()      // und verschlüsselte Sicherungen: sie lassen sich nicht bereinigen
+		a.st.leereDruckOrdner()      // abgeleitete Druckdateien (z. B. Sammel-PDF) enthalten den Namen noch
+		a.st.entferneVereinsakten()  // ebenso ältere Vereinsakten (Momentaufnahmen des ganzen Datenordners)
+		a.st.fotosAufraeumenLocked() // Mängelfotos der Person (Mängel sind bereits entfernt)
+		a.st.entferneTresore()       // und verschlüsselte Sicherungen: sie lassen sich nicht bereinigen
 		sicherungen := a.st.bereinigeSicherungen(func(d *Data) bool { return d.entfernePerson(id) })
 		writeJSON(w, 200, map[string]int{"sicherungenBereinigt": sicherungen})
 		return
@@ -1964,6 +1965,9 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/admin/papierkorb", a.admin(a.handlePapierkorb))
 	mux.HandleFunc("POST /api/admin/papierkorb/{id}/wiederherstellen", a.admin(a.handlePapierkorbWiederherstellen))
 	mux.HandleFunc("DELETE /api/admin/papierkorb", a.admin(a.handlePapierkorbLeeren))
+	mux.HandleFunc("GET /api/admin/maengel/{id}/foto", a.admin(a.handleMangelFoto))
+	mux.HandleFunc("POST /api/admin/maengel/{id}/foto", a.admin(a.handleMangelFotoHochladen))
+	mux.HandleFunc("DELETE /api/admin/maengel/{id}/foto", a.admin(a.handleMangelFotoLoeschen))
 	mux.HandleFunc("GET /api/admin/kostenvergleich", a.adminOrPruef(a.handleKostenvergleich))
 	mux.HandleFunc("GET /api/admin/maengel", a.admin(a.handleMaengelListe))
 	mux.HandleFunc("POST /api/admin/maengel", a.admin(a.handleMangelSpeichern(true)))

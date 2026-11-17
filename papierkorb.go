@@ -155,6 +155,7 @@ func (a *App) handlePapierkorbLeeren(w http.ResponseWriter, r *http.Request) {
 	defer a.st.mu.Unlock()
 	n := len(a.st.d.Papierkorb)
 	a.st.d.Papierkorb = nil
+	a.st.fotosAufraeumenLocked()
 	a.st.audit("Papierkorb geleert (%d Einträge)", n)
 	a.speichernUndAntworten(w, map[string]int{"entfernt": n})
 }

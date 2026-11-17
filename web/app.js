@@ -5326,18 +5326,34 @@ function mangelDialog(m, gartennr) {
     beschreibung: h('textarea', { rows: 3, maxlength: 300, style: 'width:100%', placeholder: 'Was ist zu beseitigen? z. B. Hecke zur Wegseite höher als 1,25 m, bitte zurückschneiden' }, cur.beschreibung),
     frist: h('input', { type: 'date', value: cur.frist || (isNew ? isoInTagen(14) : '') }),
     erledigt: h('input', { type: 'date', value: cur.erledigtAm }),
+    foto: h('input', { type: 'file', accept: 'image/jpeg,image/png' }),
+    fotoWeg: h('input', { type: 'checkbox' }),
   };
   const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  const hatFoto = !isNew && !!cur.foto;
   const body = h('div', { class: 'form' },
     fld('Garten *', f.gartennr), fld('Begehung am *', f.datum), fld('Art', f.art),
     fld('Beschreibung *', f.beschreibung, null, true),
-    fld('Frist zur Beseitigung', f.frist), fld('Erledigt am', f.erledigt, 'leer = noch offen'));
+    fld('Frist zur Beseitigung', f.frist), fld('Erledigt am', f.erledigt, 'leer = noch offen'),
+    fld(hatFoto ? 'Foto ersetzen' : 'Foto (optional)', h('div', null,
+      hatFoto ? h('img', { src: `/api/admin/maengel/${encodeURIComponent(cur.id)}/foto?t=${Date.now()}`, alt: 'Foto des Mangels', style: 'max-width:12em;max-height:9em;display:block;margin-bottom:.4em;border:1px solid var(--line, #ccc)' }) : null,
+      f.foto,
+      hatFoto ? h('label', { class: 'inline' }, f.fotoWeg, ' Foto entfernen') : null),
+    'Erscheint im Schreiben an den Pächter. Bitte nur den Mangel fotografieren, keine Personen. Standortdaten werden entfernt.', true));
   return modal(isNew ? 'Mangel eintragen' : 'Mangel bearbeiten', body, [
     { label: 'Abbrechen', value: false },
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
       const data = { gartennr: f.gartennr.value, datum: f.datum.value, art: f.art.value, beschreibung: f.beschreibung.value, frist: f.frist.value, erledigtAm: f.erledigt.value };
       try {
-        if (isNew) await api('POST', '/api/admin/maengel', data); else await api('PUT', `/api/admin/maengel/${cur.id}`, data);
+        const gespeichert = isNew ? await api('POST', '/api/admin/maengel', data) : await api('PUT', `/api/admin/maengel/${cur.id}`, data);
+        const id = isNew ? gespeichert.id : cur.id;
+        if (f.foto.files && f.foto.files[0]) {
+          const fd = new FormData();
+          fd.append('file', f.foto.files[0]);
+          await api('POST', `/api/admin/maengel/${encodeURIComponent(id)}/foto`, fd, true);
+        } else if (hatFoto && f.fotoWeg.checked) {
+          await api('DELETE', `/api/admin/maengel/${encodeURIComponent(id)}/foto`);
+        }
         toast('Gespeichert', 'ok');
       } catch (e) { handleErr(e); return false; }
     } }]);
@@ -5558,7 +5574,7 @@ function adminMaengel() {
     try { await api('DELETE', `/api/admin/maengel/${m.id}`); S.maengel = null; render(); } catch (e) { handleErr(e); }
   };
   const zeile = (m) => h('li', { class: 'mangel' + (m.erledigtAm ? ' erledigt' : '') },
-    h('div', { class: 'mangel-text' }, h('b', null, m.art), h('div', null, m.beschreibung),
+    h('div', { class: 'mangel-text' }, h('b', null, m.art), m.foto ? h('span', { class: 'badge' }, 'Foto') : null, h('div', null, m.beschreibung),
       h('div', { class: 'hint' }, `Begehung ${deDate(m.datum)}`, m.frist && !m.erledigtAm ? ` · Frist ${deDate(m.frist)}` : '', m.erledigtAm ? ` · erledigt ${deDate(m.erledigtAm)}` : '')),
     !m.erledigtAm && m.frist && m.frist < heute ? h('span', { class: 'badge warn' }, 'Frist abgelaufen') : null,
     h('div', { class: 'termin-aktionen' },
