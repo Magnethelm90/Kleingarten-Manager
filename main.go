@@ -137,6 +137,7 @@ func main() {
 		}
 	}
 	actual := ln.Addr().(*net.TCPAddr).Port
+	st.sperrPort = actual
 	if err := st.sperreHolen(time.Now()); err != nil {
 		fail(err.Error())
 	}

@@ -45,6 +45,7 @@ type Store struct {
 	// Mehrplatz-Sperre (siehe sperre.go); leer = keine Sperre (Tests, Kommandozeile)
 	sperre         sperrInfo
 	sperrToken     string
+	sperrPort      int // Port dieses Programms, wird in die Sperre geschrieben
 	sperreVerloren string
 }
 

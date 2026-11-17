@@ -67,3 +67,34 @@ func TestMehrplatzSperre(t *testing.T) {
 		t.Error("fremde Sperre gelöscht")
 	}
 }
+
+func TestSperreNachAbsturzAufDiesemRechner(t *testing.T) {
+	dir := t.TempDir()
+	alt := programmLaeuft
+	defer func() { programmLaeuft = alt }()
+	a, _ := openStore(dir)
+	a.sperrPort = 40001
+	if err := a.sperreHolen(time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := openStore(dir)
+	// das erste Programm läuft noch → gesperrt
+	programmLaeuft = func(int) bool { return true }
+	if err := b.sperreHolen(time.Now()); err == nil {
+		t.Fatal("laufendes Programm auf diesem Rechner muss sperren")
+	}
+	// abgestürzt: unter dem Port antwortet nichts mehr → sofort frei
+	programmLaeuft = func(int) bool { return false }
+	if err := b.sperreHolen(time.Now()); err != nil {
+		t.Fatalf("nach Absturz: %v", err)
+	}
+	// fremder Rechner mit gleichem Port: bleibt gesperrt, bis die Sperre verwaist
+	si, _ := leseSperre(b.sperrPfad())
+	si.Rechner, si.Token, si.Port = "anderer-rechner", "fremd", 40001
+	raw, _ := json.Marshal(si)
+	_ = os.WriteFile(b.sperrPfad(), raw, 0o600)
+	c, _ := openStore(dir)
+	if err := c.sperreHolen(time.Now()); err == nil {
+		t.Fatal("Sperre eines anderen Rechners darf nicht übernommen werden")
+	}
+}

@@ -29,6 +29,16 @@ type sperrInfo struct {
 	Benutzer string    `json:"benutzer"`
 	Seit     time.Time `json:"seit"`
 	Zuletzt  time.Time `json:"zuletzt"`
+	Port     int       `json:"port,omitempty"` // Adresse des Programms auf diesem Rechner (für den Neustart nach Absturz)
+}
+
+// aufDiesemRechnerBeendet: Die Sperre stammt von diesem Rechner, aber unter ihrer Adresse antwortet kein Programm
+// mehr (Absturz, Fenster hart geschlossen) – dann muss niemand zwei Minuten warten.
+var programmLaeuft = alreadyRunning
+
+func (si sperrInfo) aufDiesemRechnerBeendet() bool {
+	rechner, benutzer := diesesGeraet()
+	return si.Port > 0 && si.Rechner == rechner && si.Benutzer == benutzer && !programmLaeuft(si.Port)
 }
 
 func (s *Store) sperrPfad() string { return filepath.Join(s.dir, sperrDateiName) }
@@ -66,14 +76,14 @@ func (si sperrInfo) text() string {
 // sperreHolen übernimmt den Datenordner für dieses Programm. Ist er auf einem anderen Rechner geöffnet (frische
 // Sperre), kommt ein verständlicher Fehler zurück.
 func (s *Store) sperreHolen(jetzt time.Time) error {
-	if si, ok := leseSperre(s.sperrPfad()); ok && jetzt.Sub(si.Zuletzt) < sperrVerwaist && si.Token != s.sperrToken {
+	if si, ok := leseSperre(s.sperrPfad()); ok && jetzt.Sub(si.Zuletzt) < sperrVerwaist && si.Token != s.sperrToken && !si.aufDiesemRechnerBeendet() {
 		return fmt.Errorf("Die Daten sind gerade %s in Benutzung.\n\nDamit sich zwei Rechner nicht gegenseitig Änderungen überschreiben, kann immer nur einer damit arbeiten. "+
 			"Bitte das Programm dort beenden und es hier dann noch einmal starten.\n\nWurde es dort nicht richtig beendet (z. B. Absturz), ist die Sperre nach zwei Minuten von selbst frei.", si.text())
 	}
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	rechner, benutzer := diesesGeraet()
-	s.sperre = sperrInfo{Token: hex.EncodeToString(b), Rechner: rechner, Benutzer: benutzer, Seit: jetzt, Zuletzt: jetzt}
+	s.sperre = sperrInfo{Token: hex.EncodeToString(b), Rechner: rechner, Benutzer: benutzer, Seit: jetzt, Zuletzt: jetzt, Port: s.sperrPort}
 	s.sperrToken = s.sperre.Token
 	return s.schreibeSperre()
 }

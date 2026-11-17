@@ -97,7 +97,8 @@
   bestaetigen je Spender), aushang.go (POST-PDF; `pdfDrucken({..., body})` schickt dann POST), maengel_liste.go (Auswahl drucken),
   Löschen liefert `papierkorbId` → `geloeschtToast` mit »Rückgängig«, Entwürfe in modal() (Map `entwuerfe`, nur Speicher, Schlüssel =
   Titel + Anfangswerte), pdf_zeichen_test.go (alle GET-Routen inkl. {id} mit schwierigen Zeichen), `pdfListe` skaliert zu breite
-  Spalten, `icsUID` für alle UID-Zeilen.
+  Spalten, `icsUID` für alle UID-Zeilen. Sperre speichert `Port`: gleicher Rechner+Benutzer und dort antwortet kein Programm →
+  sofort frei (`programmLaeuft` = alreadyRunning, im Test austauschbar).
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)
