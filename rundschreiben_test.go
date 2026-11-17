@@ -175,7 +175,7 @@ func TestSchluesselUndGeraete(t *testing.T) {
 	app.st.d.inventarPersonEntfernen(p.ID)
 	var aufgaben []aufgabe
 	app.st.inventarAufgabenLocked(time.Now(), func(stufe, titel, text, ziel, knopf string) {
-		aufgaben = append(aufgaben, aufgabe{stufe, titel, text, ziel, knopf})
+		aufgaben = append(aufgaben, aufgabe{Stufe: stufe, Titel: titel, Text: text, Ziel: ziel, Knopf: knopf})
 	})
 	for _, x := range app.st.d.Schluessel {
 		if x.ID == k.ID && (x.PaechterID != "" || x.Inhaber != geloeschtePerson || x.Verlauf[0].PaechterID != "") {
@@ -206,7 +206,7 @@ func TestSchluesselUndGeraete(t *testing.T) {
 	app.st.mu.Lock()
 	aufgaben = nil
 	app.st.inventarAufgabenLocked(time.Now(), func(stufe, titel, text, ziel, knopf string) {
-		aufgaben = append(aufgaben, aufgabe{stufe, titel, text, ziel, knopf})
+		aufgaben = append(aufgaben, aufgabe{Stufe: stufe, Titel: titel, Text: text, Ziel: ziel, Knopf: knopf})
 	})
 	app.st.mu.Unlock()
 	texte := fmt.Sprint(aufgaben)

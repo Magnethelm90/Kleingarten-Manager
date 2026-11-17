@@ -171,19 +171,32 @@ function hilfenSchliessen() {
 document.addEventListener('click', (e) => { if (!e.target.closest('.hilfe-box')) hilfenSchliessen(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.querySelector('.hilfe.offen')) { e.preventDefault(); e.stopPropagation(); hilfenSchliessen(); } }, true);
 
-function toast(msg, kind) {
+function toast(msg, kind, aktion) {
   const box = document.getElementById('toasts');
-  const t = h('div', { class: 'toast ' + (kind || '') }, msg);
+  const t = h('div', { class: 'toast ' + (kind || '') }, msg,
+    aktion ? h('button', { class: 'toast-aktion', onclick: () => { t.remove(); aktion.fn(); } }, aktion.label) : null);
   box.append(t);
-  setTimeout(() => t.remove(), kind === 'err' ? 7000 : 3500);
+  setTimeout(() => t.remove(), aktion ? 10000 : kind === 'err' ? 7000 : 3500);
 }
+
+// Fehlermeldungen, die auf eine fehlende Vorbereitung hinweisen, bekommen gleich den Weg dorthin.
+const FEHLER_HILFE = [
+  [/keine Pächter angelegt|noch keine Gärten|keine Gärten mit Gartennummer/i, 'Pächter anlegen', 'admin:paechter'],
+  [/Admin-Passwort festlegen/i, 'Passwort festlegen', 'admin:sicherheit'],
+  [/Gläubiger-Identifikationsnummer/i, 'Zur Vorauszahlung', 'admin:vorauszahlung'],
+  [/Angaben zur Gemeinnützigkeit/i, 'Zu den Spenden', 'admin:spenden'],
+  [/Termine/i, 'Zu den Terminen', 'tab:termine'],
+  [/viele Mängel/i, 'Zu den Mängeln', 'admin:maengel'],
+  [/Schlüssel ist noch ausgegeben|Gerät ist noch verliehen/i, 'Zu Schlüssel & Geräte', 'admin:inventar'],
+];
 
 function handleErr(e) {
   if (e.status === 401) {
     S.state.loggedIn = false;
     render();
   }
-  toast(e.message, 'err');
+  const hilfe = !e.network && FEHLER_HILFE.find(([re]) => re.test(e.message || ''));
+  toast(e.message, 'err', hilfe ? { label: hilfe[1], fn: () => zielOeffnen(hilfe[2]) } : null);
 }
 
 let dialogZaehler = 0;
@@ -209,9 +222,25 @@ function modal(title, body, buttons) {
     }
     dlg.append(h('div', { class: 'dhead', id: titelId }, title), h('div', { class: 'dbody' }, body), foot);
     // »cancel« kommt auch von Datei-Feldern im Dialog (Auswahl abgebrochen) – nur das eigene Esc schließt.
-    dlg.addEventListener('cancel', (e) => { if (e.target !== dlg) return; e.preventDefault(); close(undefined); });
+    // Formular-Dialoge (mit »primary«-Knopf): Wer Eingaben gemacht hat und mit Esc schließt, wird vorher gefragt.
+    const istFormular = buttons.some((b) => b && /primary/.test(b.cls || ''));
+    const feldWerte = () => [...dlg.querySelectorAll('.dbody input, .dbody select, .dbody textarea')]
+      .filter((f) => f.type !== 'file' && f.type !== 'search').map((f) => (f.type === 'checkbox' || f.type === 'radio' ? f.checked : f.value)).join('\u0001');
+    let anfang = '';
+    dlg.addEventListener('cancel', async (e) => {
+      if (e.target !== dlg) return;
+      e.preventDefault();
+      if (istFormular && anfang !== feldWerte() && !dlg.dataset.frage) {
+        dlg.dataset.frage = '1';
+        const ok = await confirmBox('Die Eingaben in diesem Fenster sind noch nicht gespeichert. Wirklich schließen?', 'Verwerfen', true);
+        delete dlg.dataset.frage;
+        if (!ok) return;
+      }
+      close(undefined);
+    });
     document.body.append(dlg);
     dlg.showModal();
+    anfang = feldWerte();
   });
 }
 
@@ -6465,7 +6494,11 @@ function adminBerichte() {
 async function loadAufgaben() {
   if (S.aufgabenLoading) return;
   S.aufgabenLoading = true;
-  try { S.aufgaben = await api('GET', '/api/admin/aufgaben'); } catch (e) { S.aufgaben = []; }
+  try {
+    const alle = await api('GET', '/api/admin/aufgaben?alle=1');
+    S.aufgaben = alle.filter((x) => !x.zurueckBis);
+    S.aufgabenZurueck = alle.filter((x) => x.zurueckBis);
+  } catch (e) { S.aufgaben = []; S.aufgabenZurueck = []; }
   S.aufgabenLoading = false;
   render();
 }
@@ -6554,16 +6587,42 @@ function cockpitKarte(st, istAdmin) {
   const geh = zielOeffnen;
   if (!S.aufgaben.length) {
     return h('div', { class: 'cockpit-leer' }, h('span', { class: 'cockpit-ico ok' }, icon('fertig', 20)),
-      h('div', null, h('b', null, 'Gerade steht nichts an'), h('div', { class: 'hint' }, 'Termine, Fristen, Zahlungen und Spenden sind im grünen Bereich.')));
+      h('div', null, h('b', null, 'Gerade steht nichts an'), h('div', { class: 'hint' }, 'Termine, Fristen, Zahlungen und Spenden sind im grünen Bereich.'),
+        (S.aufgabenZurueck || []).length ? h('div', { class: 'hint' }, `${S.aufgabenZurueck.length} Hinweis(e) sind zurückgestellt.`) : null));
   }
   const alle = S.aufgabenAlle || S.aufgaben.length <= 5;
   const l = alle ? S.aufgaben : S.aufgaben.slice(0, 5);
-  return h('div', null,
-    h('ul', { class: 'cockpit-liste' }, l.map((a) => h('li', { class: 'cockpit-' + a.stufe },
+  const zurueck = async (a, tage) => {
+    try { await api('POST', '/api/admin/aufgaben/zurueckstellen', { schluessel: a.schluessel, tage }); S.aufgaben = null; render(); } catch (e) { handleErr(e); }
+  };
+  const GRUPPE = { err: 'Dringend', warn: 'Bald erledigen', info: 'Zur Kenntnis' };
+  const stufenMenge = new Set(l.map((a) => a.stufe));
+  const zeile = (a) => {
+    const wahl = h('select', { class: 'zurueck-wahl', 'aria-label': `Hinweis zurückstellen: ${a.titel}`, title: 'Diesen Hinweis für einige Tage ausblenden',
+      onchange: (e) => { const t = Number(e.target.value); if (t) zurueck(a, t); } },
+    h('option', { value: '' }, 'Später …'), h('option', { value: '7' }, '7 Tage'), h('option', { value: '30' }, '30 Tage'));
+    return h('li', { class: 'cockpit-' + a.stufe },
       h('span', { class: 'cockpit-ico ' + a.stufe }, icon(AUFGABE_ICON[a.stufe] || 'fertig', 18)),
       h('div', { class: 'cockpit-text' }, h('b', null, a.titel), a.text ? h('div', { class: 'hint' }, a.text) : null),
-      h('button', { class: 'btn small', onclick: () => geh(a.ziel) }, a.knopf + ' →')))),
-    alle ? null : h('button', { class: 'btn small', style: 'margin-top:6px', onclick: () => { S.aufgabenAlle = true; render(); } }, `Alle ${S.aufgaben.length} anzeigen`));
+      wahl,
+      h('button', { class: 'btn small', onclick: () => geh(a.ziel) }, a.knopf + ' →'));
+  };
+  const teile = [];
+  for (const stufe of ['err', 'warn', 'info']) {
+    const gruppe = l.filter((a) => a.stufe === stufe);
+    if (!gruppe.length) continue;
+    if (stufenMenge.size > 1) teile.push(h('div', { class: 'cockpit-gruppe' }, GRUPPE[stufe]));
+    teile.push(h('ul', { class: 'cockpit-liste' }, gruppe.map(zeile)));
+  }
+  const zb = S.aufgabenZurueck || [];
+  const zbBox = zb.length ? h('details', { class: 'cockpit-zurueck' },
+    h('summary', null, `${zb.length} zurückgestellt`),
+    h('ul', { class: 'cockpit-liste' }, zb.map((a) => h('li', { class: 'cockpit-' + a.stufe },
+      h('div', { class: 'cockpit-text' }, h('b', null, a.titel), h('div', { class: 'hint' }, `Ausgeblendet bis ${isoDatum(a.zurueckBis).toLocaleDateString('de-DE')}`)),
+      h('button', { class: 'btn small', onclick: () => zurueck(a, 0) }, 'Wieder anzeigen'))))) : null;
+  return h('div', null, ...teile,
+    alle ? null : h('button', { class: 'btn small', style: 'margin-top:6px', onclick: () => { S.aufgabenAlle = true; render(); } }, `Alle ${S.aufgaben.length} anzeigen`),
+    zbBox);
 }
 
 // ------------------------------------------------------------------ Übersicht: Besichtigungen

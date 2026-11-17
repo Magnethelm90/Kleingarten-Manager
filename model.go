@@ -261,6 +261,8 @@ type Data struct {
 
 	// Papierkorb: gelöschte Einträge, 30 Tage wiederherstellbar (papierkorb.go).
 	Papierkorb []PapierkorbEintrag `json:"papierkorb,omitempty"`
+	// Zurueckgestellt: Cockpit-Hinweise, die bis zu einem Datum ausgeblendet sind (Schlüssel = Hash, aufgaben.go).
+	Zurueckgestellt map[string]string `json:"zurueckgestellt,omitempty"`
 	// Probe: Ergebnis der letzten Wiederherstellungs-Probe (wiederherstellung.go).
 	Probe *Wiederherstellungsprobe `json:"probe,omitempty"`
 

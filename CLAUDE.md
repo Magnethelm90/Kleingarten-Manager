@@ -81,11 +81,17 @@
   Namens-Tokens), Gartenakte-Zeitleiste (gartenzeitleiste.go), Terminserien (terminserie.go, legt Einzeltermine an, keine Regel),
   Gesamtsuche (suche.go, GET /api/admin/suche, im Kopf-Suchfeld nur für Admin), Wartungs-Check (wartung.go), gemeinsamer Papierkorb
   (Dialog zeigt auch Pächter-Papierkorb).
+- Verbesserungs-Paket (Nov 2026): Barrierefreiheit (Sprunglink, aria-labelledby/Fokus zurück in modal(), aria-live bei Toasts),
+  web/tabellen.js (nachträglich auf allen Tabellen: Spalten sortieren, Merkliste in localStorage `km-sortierung`, `td[data-label]` +
+  Klasse `karten` für die Handy-Kartenansicht; überspringt Tabellen mit Eingabefeldern/colspan), Ungespeichert-Warnung in modal()
+  (nur Dialoge mit »primary«-Knopf, nur Esc), Cockpit zurückstellen (aufgabe.Schluessel = Hash ohne Ziffern, Data.Zurueckgestellt,
+  GET /api/admin/aufgaben?alle=1, POST …/zurueckstellen), `FEHLER_HILFE` in app.js (Toast mit Knopf zum Ziel), statisch.go
+  (ETag + gzip im Speicher für .js/.css/.html/.svg), @media print in style.css (Menü/Knöpfe aus, offene Dialoge drucken sich selbst).
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)
 - `staticcheck -checks "all,-ST1005,-ST1000,-ST1003,-ST1021" ./...` (deutsche Fehlermeldungen sind gewollt)
 - `deadcode .` (externalURLAllowed ist nur unter Build-Tag genutzt, kein Fehler)
-- ESLint 9 mit `@eslint/js` recommended + `globals.browser` auf web/app.js und web/lageplan3d.js
+- ESLint 9 mit `@eslint/js` recommended + `globals.browser` auf web/app.js, web/tabellen.js und web/lageplan3d.js
 - PDF-Schrift kann nur Zeichen bis U+FFFF: `trim()` und `texteBereinigen` (Laden/Speichern) entfernen Emoji, `pdfBytes` fängt Abstürze ab. Neue PDFs immer mit `pdfBytes(pdf)` beenden.
 - Testdaten-Ordner immer mit `mktemp -d` anlegen – alte Ordner im Scratchpad enthalten veraltete Daten.

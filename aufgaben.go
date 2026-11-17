@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"sort"
@@ -18,6 +20,22 @@ type aufgabe struct {
 	Text  string `json:"text,omitempty"`
 	Ziel  string `json:"ziel"`  // admin:<bereich> oder tab:<reiter>
 	Knopf string `json:"knopf"` // Beschriftung des Knopfs
+	// Schluessel kennzeichnet die Art des Hinweises (ohne Zahlen), damit er zurückgestellt werden kann.
+	Schluessel string `json:"schluessel"`
+	// ZurueckBis ist gesetzt, wenn der Hinweis bis zu diesem Datum zurückgestellt ist.
+	ZurueckBis string `json:"zurueckBis,omitempty"`
+}
+
+// aufgabeSchluessel: Hash aus Ziel, Knopf und Titel ohne Ziffern – "in 3 Tagen" und "in 2 Tagen" sind derselbe Hinweis.
+func aufgabeSchluessel(a aufgabe) string {
+	t := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return -1
+		}
+		return r
+	}, a.Titel)
+	sum := sha256.Sum256([]byte(a.Ziel + "|" + a.Knopf + "|" + strings.Join(strings.Fields(t), " ")))
+	return hex.EncodeToString(sum[:8])
 }
 
 func tageBis(von time.Time, datum string) int {
@@ -51,7 +69,9 @@ func mehrzahl(n int, eins, viele string) string {
 func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	var l []aufgabe
 	add := func(stufe, titel, text, ziel, knopf string) {
-		l = append(l, aufgabe{stufe, titel, text, ziel, knopf})
+		x := aufgabe{Stufe: stufe, Titel: titel, Text: text, Ziel: ziel, Knopf: knopf}
+		x.Schluessel = aufgabeSchluessel(x)
+		l = append(l, x)
 	}
 
 	// Termine: Ablesung und Versammlung vorbereiten, Stunden nach dem Arbeitseinsatz eintragen
@@ -246,14 +266,60 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	return l
 }
 
+// Ohne ?alle=1 fehlen zurückgestellte Hinweise; mit ?alle=1 kommen sie mit ZurueckBis dazu.
 func (a *App) handleAufgaben(w http.ResponseWriter, r *http.Request) {
 	a.st.mu.Lock()
-	l := a.st.aufgabenLocked(time.Now())
-	a.st.mu.Unlock()
-	if l == nil {
-		l = []aufgabe{}
+	heute := time.Now()
+	l := a.st.aufgabenLocked(heute)
+	iso := heute.Format("2006-01-02")
+	var out []aufgabe
+	for _, x := range l {
+		if bis := a.st.d.Zurueckgestellt[x.Schluessel]; bis > iso {
+			if r.URL.Query().Get("alle") != "1" {
+				continue
+			}
+			x.ZurueckBis = bis
+		}
+		out = append(out, x)
 	}
-	writeJSON(w, 200, l)
+	a.st.mu.Unlock()
+	if out == nil {
+		out = []aufgabe{}
+	}
+	writeJSON(w, 200, out)
+}
+
+// handleAufgabeZurueck stellt einen Hinweis für 1–90 Tage zurück; tage = 0 holt ihn wieder zurück.
+func (a *App) handleAufgabeZurueck(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Schluessel string `json:"schluessel"`
+		Tage       int    `json:"tage"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if len(in.Schluessel) != 16 || in.Tage < 0 || in.Tage > 90 {
+		writeErr(w, bad("Ungültige Angabe"))
+		return
+	}
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	iso := time.Now().Format("2006-01-02")
+	for k, bis := range a.st.d.Zurueckgestellt { // Abgelaufenes aufräumen
+		if bis <= iso {
+			delete(a.st.d.Zurueckgestellt, k)
+		}
+	}
+	if in.Tage == 0 {
+		delete(a.st.d.Zurueckgestellt, in.Schluessel)
+	} else {
+		if a.st.d.Zurueckgestellt == nil {
+			a.st.d.Zurueckgestellt = map[string]string{}
+		}
+		a.st.d.Zurueckgestellt[in.Schluessel] = time.Now().AddDate(0, 0, in.Tage).Format("2006-01-02")
+	}
+	a.speichernUndAntworten(w, map[string]bool{"ok": true})
 }
 
 // mahnFristText: Zusatz für den Cockpit-Hinweis, wenn eine Mahnfrist verstrichen ist.

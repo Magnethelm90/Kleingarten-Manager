@@ -146,7 +146,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	static := http.FileServerFS(sub)
+	static := neuerStatischerServer(sub, http.FileServerFS(sub))
 	noCache := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 		static.ServeHTTP(w, r)

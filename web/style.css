@@ -977,3 +977,58 @@ main.nur-anmeldung { margin: 0 auto; padding-top: 48px; max-width: 520px; }
 .sprunglink:focus { top: 8px; outline: 2px solid #fff; outline-offset: 2px; }
 main:focus { outline: none; }
 @media (forced-colors: active) { .nav-item.aktiv, .btn.primary { border: 2px solid ButtonText; } }
+
+/* Cockpit: Gruppen und Zurückstellen */
+.cockpit-gruppe { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted, #667); margin: 10px 0 2px; font-weight: 600; }
+.zurueck-wahl { width: auto; font-size: .85rem; padding: 3px 6px; margin-right: 6px; }
+.cockpit-zurueck { margin-top: 8px; }
+.cockpit-zurueck summary { cursor: pointer; color: var(--muted, #667); font-size: .9rem; }
+
+.toast-aktion { margin-left: 12px; background: transparent; border: 1px solid currentColor; color: inherit; border-radius: 6px; padding: 3px 10px; font: inherit; cursor: pointer; }
+
+/* Tabellen: sortierbare Spalten */
+th[data-sortierbar] { cursor: pointer; user-select: none; }
+th[data-sortierbar]:hover { color: var(--green-dark); }
+th[data-sortierbar]:focus-visible { outline: none; box-shadow: var(--ring); }
+th[aria-sort="ascending"]::after { content: " \25B2"; font-size: .7em; }
+th[aria-sort="descending"]::after { content: " \25BC"; font-size: .7em; }
+
+/* Handy: Tabellen als Karten, größere Tippflächen, Dialoge im Vollbild */
+@media (max-width: 640px) {
+  table.karten, table.karten tbody, table.karten tr, table.karten td { display: block; width: 100%; }
+  table.karten thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  table.karten tr { border: 1px solid var(--green-line, #dfe5da); border-radius: 12px; padding: 6px 12px; margin-bottom: 10px; background: var(--card, #fff); }
+  table.karten td { display: flex; justify-content: space-between; gap: 14px; align-items: center; border-bottom: 1px solid #eef0ea; padding: 7px 0; white-space: normal; text-align: right; }
+  table.karten td:last-child { border-bottom: 0; }
+  table.karten td[data-label]::before { content: attr(data-label); color: var(--muted, #667); font-size: .82rem; text-align: left; flex: 0 0 38%; }
+  table.karten td.aktionen { flex-wrap: wrap; justify-content: flex-end; }
+  .btn, button.btn.small, select, input:not([type=checkbox]):not([type=radio]) { min-height: 42px; }
+  input, select, textarea { font-size: 16px; } /* verhindert das Hineinzoomen auf dem iPhone */
+  input[type=checkbox], input[type=radio] { width: 22px; height: 22px; }
+  dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
+  dialog .dbody { max-height: none; }
+  dialog.breit { width: 100vw; }
+  .dfoot { position: sticky; bottom: 0; background: var(--card, #fff); flex-wrap: wrap; }
+  .nav-item { min-height: 44px; }
+}
+
+/* Druck: nur der Inhalt, ohne Menü, Knöpfe und Hilfen; offene Dialoge (Gartenakte, Berichte) drucken sich selbst */
+@media print {
+  @page { margin: 14mm; }
+  html, body { background: #fff !important; }
+  aside.sidebar, header.top, .sprunglink, .menue-knopf, #toasts, .toolbar, .subtabs, .hilfe, .hilfe-i, .tour, .erfolg,
+  .btn, button, .mehr-knopf, .zurueck-wahl, .demo-banner, .banner, .toast, dialog .dfoot { display: none !important; }
+  .shell { display: block !important; }
+  main { padding: 0 !important; max-width: none !important; }
+  .card, .hero { box-shadow: none !important; border: 1px solid #ccc !important; break-inside: avoid; }
+  table { font-size: 10.5pt; }
+  th, td { white-space: normal !important; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
+  th[aria-sort]::after { content: none !important; }
+  a { color: inherit; text-decoration: none; }
+  body:has(dialog[open]) #app { display: none !important; }
+  dialog[open] { position: static !important; display: block !important; width: 100% !important; max-width: none !important; height: auto !important; max-height: none !important; box-shadow: none !important; border: 0 !important; margin: 0 !important; overflow: visible !important; }
+  dialog[open] .dbody { max-height: none !important; overflow: visible !important; }
+  dialog::backdrop { display: none; }
+}
