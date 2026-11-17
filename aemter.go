@@ -120,29 +120,33 @@ func (a *App) handleAmtWechsel(w http.ResponseWriter, r *http.Request) {
 	}
 	a.st.mu.Lock()
 	defer a.st.mu.Unlock()
-	i := a.amtIndex(r.PathValue("id"))
-	if i < 0 || a.st.d.Aemter[i].Ehemalig {
-		writeErr(w, notFound("Amt nicht gefunden"))
+	if err := a.amtWechselLocked(r.PathValue("id"), in); err != nil {
+		writeErr(w, err)
 		return
+	}
+	a.speichernUndAntworten(w, a.aemterAntwortLocked())
+}
+
+// amtWechselLocked führt den Wechsel aus (auch für den Wahlen-Assistenten). Der Aufrufer hält s.mu.
+func (a *App) amtWechselLocked(id string, in Amt) error {
+	i := a.amtIndex(id)
+	if i < 0 || a.st.d.Aemter[i].Ehemalig {
+		return notFound("Amt nicht gefunden")
 	}
 	in.Amt = a.st.d.Aemter[i].Amt
 	in, err := cleanAmt(in)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 	if in.Seit == "" {
-		writeErr(w, bad("Bitte den Tag der Wahl eintragen"))
-		return
+		return bad("Bitte den Tag der Wahl eintragen")
 	}
 	if len(a.st.d.Aemter) >= maxVerwaltung {
-		writeErr(w, bad("Zu viele Ämter"))
-		return
+		return bad("Zu viele Ämter")
 	}
 	alt := &a.st.d.Aemter[i]
 	if alt.Seit != "" && in.Seit < alt.Seit {
-		writeErr(w, bad("Der Tag der Wahl liegt vor dem Amtsantritt von "+alt.Name))
-		return
+		return bad("Der Tag der Wahl liegt vor dem Amtsantritt von " + alt.Name)
 	}
 	alt.Ehemalig = true
 	if alt.Bis == "" || alt.Bis > in.Seit {
@@ -151,7 +155,7 @@ func (a *App) handleAmtWechsel(w http.ResponseWriter, r *http.Request) {
 	in.ID, in.Ehemalig, in.Checkliste = newID(), false, map[string]string{}
 	a.st.audit("Amtswechsel %s: %s → %s", in.Amt, alt.Name, in.Name)
 	a.st.d.Aemter = append(a.st.d.Aemter, in)
-	a.speichernUndAntworten(w, a.aemterAntwortLocked())
+	return nil
 }
 
 func (a *App) handleAmtCheckliste(w http.ResponseWriter, r *http.Request) {

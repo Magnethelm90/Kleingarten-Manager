@@ -3037,6 +3037,91 @@ function adminVerwaltung() {
   seite === 'vertraege' ? verwaltungVertraege() : seite === 'aemter' ? verwaltungAemter() : verwaltungBeschluesse());
 }
 
+// ---- Wahlen-Assistent
+
+async function wahlDialog() {
+  const d = S.verw.aemter;
+  const aktiv = d.aemter.filter((x) => !x.ehemalig);
+  const amtWahl = h('select', null, h('option', { value: '' }, 'Amt neu besetzen / anderes Amt …'),
+    aktiv.map((x) => h('option', { value: x.id }, `${x.amt} (bisher ${x.name})`)));
+  const amt = h('input', { type: 'text', maxlength: 60, list: 'amt-vorschlaege-w', placeholder: 'z. B. Kassenwart/in' });
+  const liste = h('datalist', { id: 'amt-vorschlaege-w' }, d.vorschlaege.map((v) => h('option', { value: v })));
+  amtWahl.addEventListener('change', () => { const x = aktiv.find((y) => y.id === amtWahl.value); if (x) amt.value = x.amt; });
+  const datum = h('input', { type: 'date', value: todayIso() });
+  const anzahl = h('input', { type: 'number', min: 1, max: 400, value: 60, style: 'width:80px' });
+  const kandBox = h('div', { class: 'wahl-kandidaten' });
+  const zeilen = [];
+  const neueZeile = (name = '') => {
+    const n = h('input', { type: 'text', maxlength: 100, placeholder: 'Name der Kandidatin / des Kandidaten', value: name });
+    const st = h('input', { type: 'number', min: 0, value: 0, style: 'width:90px', 'aria-label': 'Stimmen' });
+    const z = { n, st, el: h('div', { class: 'wahl-zeile' }, n, st, h('button', { type: 'button', class: 'btn small', title: 'Entfernen', 'aria-label': 'Kandidat entfernen', onclick: () => { if (zeilen.length > 1) { zeilen.splice(zeilen.indexOf(z), 1); z.el.remove(); rechne(); } } }, '✕')) };
+    st.addEventListener('input', rechne); n.addEventListener('input', rechne);
+    zeilen.push(z); kandBox.append(z.el);
+  };
+  const nein = h('input', { type: 'number', min: 0, value: 0, style: 'width:90px' });
+  const enth = h('input', { type: 'number', min: 0, value: 0, style: 'width:90px' });
+  const ung = h('input', { type: 'number', min: 0, value: 0, style: 'width:90px' });
+  const absolut = h('input', { type: 'checkbox' });
+  const zeit = h('input', { type: 'number', min: 0, max: 10, value: 3, style: 'width:70px' });
+  const uebernehmen = h('input', { type: 'checkbox', checked: true });
+  const live = h('div', { class: 'wahl-live', role: 'status' });
+  const neinFeld = h('div', { class: 'field' }, h('label', null, 'Nein-Stimmen'), nein, h('span', { class: 'fhint' }, 'bei nur einem Kandidaten'));
+  const zahl = (e) => Math.max(0, Math.floor(Number(e.value) || 0));
+  const kand = () => zeilen.map((z) => ({ name: z.n.value.trim() || '…', stimmen: zahl(z.st) }));
+  function rechne() {
+    neinFeld.style.display = zeilen.length === 1 ? '' : 'none';
+    const k = kand(); const n = zeilen.length === 1 ? zahl(nein) : 0;
+    const summe = k.reduce((a, x) => a + x.stimmen, 0) + n + zahl(enth);
+    const besten = [...k].sort((a, b) => b.stimmen - a.stimmen);
+    let text;
+    if (!summe) text = 'Trage die Stimmen ein – das Ergebnis erscheint hier.';
+    else if (k.length === 1) text = k[0].stimmen > n && (!absolut.checked || k[0].stimmen * 2 > summe) ? `${k[0].name} wäre gewählt (${k[0].stimmen} Ja, ${n} Nein).` : 'Keine Wahl: nicht genug Ja-Stimmen.';
+    else if (besten[0].stimmen === besten[1].stimmen) text = 'Stimmengleichheit – Stichwahl nötig.';
+    else text = absolut.checked && besten[0].stimmen * 2 <= summe ? 'Absolute Mehrheit verfehlt – Stichwahl der beiden Bestplatzierten.' : `${besten[0].name} wäre gewählt (${besten[0].stimmen} von ${summe} gültigen Stimmen).`;
+    live.replaceChildren(text);
+  }
+  neueZeile(); neueZeile();
+  [nein, enth, ung].forEach((e) => e.addEventListener('input', rechne)); absolut.addEventListener('change', rechne);
+  rechne();
+  const kandidatenListe = () => zeilen.map((z) => z.n.value.trim()).filter(Boolean);
+  const stimmzettel = () => {
+    const k = kandidatenListe();
+    if (!amt.value.trim() || !k.length) { toast('Bitte Amt und mindestens einen Kandidaten eintragen.', 'err'); return false; }
+    const q = new URLSearchParams(); q.set('amt', amt.value.trim()); k.forEach((x) => q.append('kandidat', x)); q.set('anzahl', String(zahl(anzahl) || 1));
+    return pdfDrucken({ url: `/api/admin/wahl/stimmzettel?${q}`, oeffnenUrl: `/api/admin/wahl/stimmzettel/oeffnen?${q}`, titel: 'Stimmzettel', meldung: () => 'Die Stimmzettel wurden im PDF-Programm geöffnet.' });
+  };
+  const fld = (label, el, hint) => h('div', { class: 'field' }, h('label', null, label), el, hint ? h('span', { class: 'fhint' }, hint) : null);
+  let ergebnis = null;
+  const ok = await modal('Wahl durchführen', h('div', { class: 'form' }, liste,
+    h('p', { class: 'hint' }, 'Erst Stimmzettel drucken, nach der Wahl die Stimmen eintragen. Das Ergebnis kommt ins Beschlussbuch, auf Wunsch auch in die Ämter, und der Protokollabsatz steht danach zum Kopieren bereit.'),
+    fld('Amt *', amtWahl), fld('Bezeichnung *', amt), fld('Tag der Wahl *', datum),
+    h('div', { class: 'field' }, h('label', null, 'Kandidaten und Stimmen *'), kandBox,
+      h('button', { type: 'button', class: 'btn small', onclick: () => { neueZeile(); } }, '+ Kandidat')),
+    neinFeld, fld('Enthaltungen', enth), fld('Ungültige Stimmzettel', ung),
+    h('label', { class: 'inline' }, absolut, ' Absolute Mehrheit nötig (laut Satzung)'),
+    live,
+    h('div', { class: 'field' }, h('label', null, 'Stimmzettel'), h('div', null, anzahl, ' Stück ', h('button', { type: 'button', class: 'btn small', onclick: stimmzettel }, 'Stimmzettel drucken'))),
+    h('label', { class: 'inline' }, uebernehmen, ' Bei erfolgreicher Wahl das Amt eintragen (bei Wechsel mit Übergabe-Checkliste, bei Wiederwahl nur die neue Amtszeit)'),
+    fld('Amtszeit in Jahren', zeit, '0 = unbefristet')),
+  [{ label: 'Abbrechen', value: false }, { label: 'Auszählen und eintragen', cls: 'primary', value: true, action: async () => {
+    try {
+      ergebnis = await api('POST', '/api/admin/wahl', { amt: amt.value, amtId: amtWahl.value, datum: datum.value, kandidaten: zeilen.map((z) => ({ name: z.n.value, stimmen: zahl(z.st) })),
+        nein: zeilen.length === 1 ? zahl(nein) : 0, enthaltung: zahl(enth), ungueltig: zahl(ung), absolut: absolut.checked, uebernehmen: uebernehmen.checked, amtszeit: zahl(zeit) });
+    } catch (e) { handleErr(e); return false; }
+  } }]);
+  if (!ok || !ergebnis) return false;
+  S.verw = null; S.aufgaben = null;
+  const kopie = h('textarea', { readonly: true, rows: 6, style: 'width:100%' }, ergebnis.protokoll);
+  await modal(ergebnis.ok ? `Gewählt: ${ergebnis.gewaehlt}` : 'Keine Wahl zustande gekommen', h('div', null,
+    ergebnis.hinweis ? h('p', { class: 'hint' }, ergebnis.hinweis) : null,
+    h('p', null, ergebnis.beschluss ? `Eingetragen im Beschlussbuch als ${ergebnis.beschluss}.` : 'Es wurde nichts gespeichert.',
+      ergebnis.amtEingetragen ? ' Das Amt ist in den Ämtern eingetragen – die Übergabe-Checkliste steht dort bereit.' : ''),
+    h('p', { class: 'hint' }, 'Protokollabsatz zum Kopieren:'), kopie),
+  [{ label: 'Kopieren', value: false, action: async () => { try { await navigator.clipboard.writeText(ergebnis.protokoll); toast('Kopiert', 'ok'); } catch (e) { kopie.select(); toast('Bitte mit Strg+C kopieren', 'ok'); } return false; } },
+    { label: 'Schließen', cls: 'primary', value: true }]);
+  return true;
+}
+
 // ---- Ämter und Amtswechsel
 
 async function amtDialog(x, wechsel) {
@@ -3086,7 +3171,8 @@ function verwaltungAemter() {
   } });
   return h('div', null,
     h('p', { class: 'hint' }, 'Wer hat welches Amt bis wann? Rund vier Monate vor Ende einer Amtszeit erinnert das Cockpit an die Wahl. Beim Amtswechsel hilft eine Checkliste, nichts zu vergessen – von der Bankvollmacht bis zum Vereinsregister.'),
-    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(amtDialog(null)) }, '+ Amt')),
+    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(amtDialog(null)) }, '+ Amt'),
+      h('button', { class: 'btn', title: 'Stimmzettel drucken, Stimmen auszählen, Ergebnis ins Beschlussbuch und Amt eintragen', onclick: () => nachher(wahlDialog()) }, 'Wahl durchführen …')),
     aktiv.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
       h('thead', null, h('tr', null, ['Amt', 'Name', 'Seit', 'Amtszeit bis', ''].map((t) => h('th', null, t)))),
       h('tbody', null, aktiv.map((x) => h('tr', null,
