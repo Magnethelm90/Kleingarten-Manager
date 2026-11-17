@@ -2095,14 +2095,16 @@ async function emailVorbereiten(id) {
 
 // Öffnet ein serverseitig erzeugtes PDF zum Drucken: im Programmfenster im PDF-Programm des Rechners
 // (voller Druckdialog), sonst als Vorschau bzw. neuer Tab im Browser.
-async function pdfDrucken({ url, oeffnenUrl, titel, meldung }) {
+// body: Eingaben, die per POST mitgehen (z. B. freier Text eines Aushangs, der nicht in die Adresse gehört).
+async function pdfDrucken({ url, oeffnenUrl, titel, meldung, body }) {
   try {
     if (inNativeWindow()) {
-      const r = await api('POST', oeffnenUrl);
+      const r = await api('POST', oeffnenUrl, body);
       toast(meldung(r), 'ok');
       return;
     }
-    const r = await fetch(url, { headers: { 'X-GA-Request': '1' } });
+    const r = await fetch(url, body === undefined ? { headers: { 'X-GA-Request': '1' } }
+      : { method: 'POST', headers: { 'X-GA-Request': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!r.ok) {
       const d = await r.json().catch(() => null);
       const err = new Error((d && d.error) || `Fehler ${r.status}`);
@@ -5585,6 +5587,39 @@ const begehungslisteDrucken = () => pdfDrucken({
   url: '/api/admin/begehungsliste', oeffnenUrl: '/api/admin/begehungsliste/oeffnen',
   titel: 'Begehungsliste', meldung: () => 'Die Begehungsliste wurde im PDF-Programm geöffnet – dort drucken und zur Begehung mitnehmen.',
 });
+// Schnell-Aushang für den Schaukasten (wird nicht gespeichert)
+const AUSHANG_VORLAGEN = [
+  { name: 'Leer', titel: '', text: '' },
+  { name: 'Wasser gesperrt', titel: 'Wasser abgestellt', text: 'Wegen Arbeiten an der Leitung ist das Wasser in der Anlage abgestellt.\nWir bitten um Verständnis.' },
+  { name: 'Arbeitseinsatz', titel: 'Gemeinschaftsarbeit', text: 'Treffpunkt: Vereinsheim\nBitte Arbeitshandschuhe und, wenn vorhanden, eigenes Werkzeug mitbringen.\nDie Stunden werden auf die Pflichtstunden angerechnet.' },
+  { name: 'Fundsache', titel: 'Fundsache', text: 'In der Anlage wurde gefunden:\n\nAbzuholen beim Vorstand.' },
+  { name: 'Weg gesperrt', titel: 'Weg gesperrt', text: 'Der Weg ist wegen Bauarbeiten vorübergehend gesperrt. Bitte die Umleitung nutzen.' },
+  { name: 'Container', titel: 'Grünschnitt-Container', text: 'Ein Container für Grünschnitt steht am Eingang bereit.\nBitte nur Grünschnitt, keine Erde, Steine oder Abfälle.' },
+];
+async function aushangDialog() {
+  const f = {
+    vorlage: h('select', null, AUSHANG_VORLAGEN.map((v, i) => h('option', { value: i }, v.name))),
+    titel: h('input', { type: 'text', maxlength: 80, placeholder: 'z. B. Wasser abgestellt' }),
+    datum: h('input', { type: 'date' }),
+    text: h('textarea', { rows: 7, maxlength: 1500, style: 'width:100%' }),
+    zusatz: h('input', { type: 'text', maxlength: 120, placeholder: 'z. B. Rückfragen: Wasserwart, Garten 12' }),
+  };
+  f.vorlage.addEventListener('change', () => { const v = AUSHANG_VORLAGEN[Number(f.vorlage.value)]; f.titel.value = v.titel; f.text.value = v.text; });
+  const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  const drucken = async () => {
+    if (!f.titel.value.trim() || !f.text.value.trim()) { toast('Bitte Überschrift und Text eintragen.', 'err'); return false; }
+    await pdfDrucken({ url: '/api/admin/aushang', oeffnenUrl: '/api/admin/aushang/oeffnen', titel: 'Aushang',
+      body: { titel: f.titel.value, text: f.text.value, datum: f.datum.value, zusatz: f.zusatz.value },
+      meldung: () => 'Der Aushang wurde im PDF-Programm geöffnet – dort drucken.' });
+    return false;
+  };
+  await modal('Aushang für den Schaukasten', h('div', { class: 'form' },
+    fld('Vorlage', f.vorlage), fld('Datum (optional)', f.datum, 'erscheint groß unter der Überschrift'),
+    fld('Überschrift *', f.titel, null, true), fld('Text *', f.text, 'Für alle sichtbar – keine Namen oder persönlichen Angaben.', true),
+    fld('Zusatzzeile (optional)', f.zusatz, null, true),
+    h('p', { class: 'hint wide' }, 'Der Aushang wird nicht gespeichert. Für Mitteilungen, die auch per Post oder E-Mail an alle gehen, gibt es die Rundschreiben.')),
+  [{ label: 'Schließen', value: false }, { label: 'Drucken', cls: 'primary', action: drucken }]);
+}
 const saisonlisteDrucken = (art) => pdfDrucken({
   url: '/api/admin/saisonliste?art=' + art, oeffnenUrl: '/api/admin/saisonliste/oeffnen?art=' + art,
   titel: art === 'herbst' ? 'Saison-Liste Herbst' : 'Saison-Liste Frühjahr',
@@ -6649,6 +6684,8 @@ function adminBerichte() {
         h('button', { class: 'btn', onclick: vereinsinfoDialog }, 'Texte bearbeiten')),
       kachel('daten', 'Amtsübergabe', 'Vereinsakte für den neuen Vorstand: alle Daten und Dateien plus »Lies mich zuerst« mit Zahlen, Regeln und offenen Punkten.',
         h('button', { class: 'btn', onclick: vereinsakteErstellen }, 'Erstellen')),
+      kachel('bericht', 'Aushang', 'Kurze Mitteilung für den Schaukasten mit großer Überschrift – Sperrung, Arbeitseinsatz, Fundsache. Mit Vorlagen.',
+        h('button', { class: 'btn', onclick: aushangDialog }, 'Erstellen')),
       kachel('zaehler', 'Saison-Liste Wasser', 'Vordruck für den Rundgang im Frühjahr (Wasser an) oder Herbst (Wasser ab, winterfest) mit Ablauf und Zeile je Garten.',
         h('div', { class: 'row' },
           h('button', { class: 'btn', onclick: () => saisonlisteDrucken('fruehjahr') }, 'Frühjahr'),

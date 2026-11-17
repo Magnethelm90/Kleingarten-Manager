@@ -1822,6 +1822,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/admin/kassenpruefung/bericht", a.adminOrPruef(a.pdfAnzeigen(a.pruefberichtPDF)))
 	mux.HandleFunc("POST /api/admin/kassenpruefung/bericht/oeffnen", a.adminOrPruef(a.pdfOeffnen(a.pruefberichtPDF)))
 	mux.HandleFunc("GET /api/admin/aemter", a.admin(a.handleAemter))
+	mux.HandleFunc("POST /api/admin/aushang", a.admin(a.pdfAnzeigen(a.aushangPDF)))
+	mux.HandleFunc("POST /api/admin/aushang/oeffnen", a.admin(a.pdfOeffnen(a.aushangPDF)))
 	mux.HandleFunc("GET /api/admin/saisonliste", a.admin(a.pdfAnzeigen(a.saisonlistePDF)))
 	mux.HandleFunc("POST /api/admin/saisonliste/oeffnen", a.admin(a.pdfOeffnen(a.saisonlistePDF)))
 	mux.HandleFunc("GET /api/admin/freie-gaerten/{nr}/vorschlag", a.admin(a.handleFreierVorschlag))
