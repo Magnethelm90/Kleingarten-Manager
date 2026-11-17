@@ -109,6 +109,7 @@
   in Berichte). Design-Prüfung: `.cards` ist jetzt ein Grid (gleich breite Kennzahlen), Berichte-Kacheln mit Knöpfen unten, Handy-Kopfzeile
   kompakter (2 Zeilen), Kennzahlen auf dem Handy zweispaltig. Kein Kautions-Feld im Programm (bewusst nicht ergänzt).
 - Ideen-Paket 7 (Nov 2026): aufnahmeantrag.go (Vordruck mit Einwilligungen, über `GET …/warteliste/{id}/brief?art=aufnahmeantrag`, Knopf im Dialog »Garten vergeben« und im Briefe-Menü der Warteliste), befragung.go (Data.Befragungen, Fragearten janein/skala/wahl/text, nur anonyme Strichlisten-Summen; PDFs fragebogen/erfassung/auswertung über `GET /api/admin/befragungen/{id}/pdf?art=`; Auswertung kommt ins Versammlungspaket; Dialog `befragungenDialog` als Kachel in Berichte). fpdf-Schrift »lib« hat KEINEN Kursivschnitt (nur "" und "B").
+- Verständlichkeit (Nov 2026): Berichte in 4 Gruppen mit Überschrift (neue Kachel in die passende Gruppe), Einstellungen mit Sprungleiste (Preise zuerst, Farbe/Logo zuletzt), Hinweisbalken »Rechnungen offen« nur bei Rechnungen/Zählerständen, Passwort-Hinweis nur in Einstellungen/Daten/Datenschutz + Cockpit-Aufgabe.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

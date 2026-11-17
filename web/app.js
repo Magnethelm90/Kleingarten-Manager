@@ -808,7 +808,7 @@ function anderenJahrenOffen(st) {
 }
 
 function openRechnungenBanner(st) {
-  if (S.remindDismissed || S.tab === 'zahlungen' || S.tab === 'uebersicht' || st.year !== st.currentYear) return null;
+  if (S.remindDismissed || !['rechnungen', 'eingabe'].includes(S.tab) || st.year !== st.currentYear) return null;
   const { jetzt, vor, alle } = offenePosten(st);
   if (!alle.length) return null;
   const today = todayIso();
@@ -3859,7 +3859,7 @@ function viewAdmin() {
   const eintrag = navEintrag('admin', t);
   return h('div', null,
     h('h2', null, eintrag ? navLabel(eintrag) : 'Verwaltung'),
-    !st.hasPassword ? h('div', { class: 'banner warn' }, 'Für die Verwaltung ist noch kein Passwort gesetzt – jeder an diesem Rechner kann Pächter und Preise ändern. ',
+    !st.hasPassword && ['einstellungen', 'daten', 'datenschutz'].includes(t) ? h('div', { class: 'banner warn' }, 'Für die Verwaltung ist noch kein Passwort gesetzt – jeder an diesem Rechner kann Pächter und Preise ändern. ',
       h('button', { class: 'btn small', onclick: () => { adminTabWaehlen('sicherheit'); render(); } }, 'Passwort festlegen')) : null,
     body);
 }
@@ -4233,12 +4233,16 @@ function adminSettings() {
     data.einspruchTage = Math.round(data.einspruchTage);
     try { await api('PUT', '/api/admin/settings', data); toast('Einstellungen gespeichert', 'ok'); await reload(); } catch (e) { handleErr(e); }
   };
+  const sprung = (id) => () => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   return h('div', null,
-    aussehenKarte(st),
-    h('p', { class: 'hint' }, `Diese Werte gelten für das laufende Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
+    h('div', { class: 'chips', role: 'navigation', 'aria-label': 'Springe zu' },
+      h('span', { class: 'hint' }, 'Springe zu:'),
+      [['es-preise', 'Preise und Rechnung'], ['es-pacht', 'Pachtobergrenze'], ['es-bereiche', 'Bereiche ein- und ausblenden'], ['es-aussehen', 'Farbe und Logo']].map(([id, l]) => h('button', { class: 'btn small', onclick: sprung(id) }, l))),
+    h('p', { class: 'hint', id: 'es-preise' }, `Diese Werte gelten für das laufende Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
     h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'))),
-    pachtgrenzeKarte(),
-    bereicheKarte(st));
+    h('div', { id: 'es-pacht' }, pachtgrenzeKarte()),
+    h('div', { id: 'es-bereiche' }, bereicheKarte(st)),
+    h('div', { id: 'es-aussehen' }, aussehenKarte(st)));
 }
 
 // ------------------------------------------------------------------ Einrichtungs-Assistent
@@ -6872,46 +6876,61 @@ function adminBerichte() {
   return h('div', null,
     h('p', { class: 'hint' }, 'Alles, was der Vorstand im Jahr vorlegen oder melden muss, an einer Stelle.'),
     h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), jahrSel),
+    h('h3', { class: 'bericht-gruppe' }, 'Für Versammlung und Verband'),
+    h('p', { class: 'hint' }, 'Zahlen und Unterlagen, die der Vorstand vorlegt oder meldet.'),
     h('div', { class: 'bericht-raster' },
       kachel('bericht', `Jahresbericht ${jahr}`, 'Für die Mitgliederversammlung: Kennzahlen mit Vorjahresvergleich, Kasse, Ausgaben, Verlauf, Termine – ohne Namen.',
         h('button', { class: 'btn primary', onclick: () => jahresberichtDrucken(jahr) }, 'Als PDF')),
       kachel('waage', `Jahresmeldung ${jahr}`, 'Zahlen für den Landes- oder Regionalverband: Parzellen, Flächen, Wechsel, Warteliste, Stunden, Abgaben.',
         h('div', { class: 'row' }, h('a', { class: 'btn primary', href: `/api/admin/jahresmeldung?year=${jahr}&format=xlsx` }, 'Als Excel'), pdfKnopf('jahresmeldung', `Jahresmeldung ${jahr}`, `?year=${jahr}`))),
-      kachel('personen', 'Pächterliste', 'Alle Pächter mit Anschrift, Kontakt und Zählern zum Ausdrucken (vertraulich).',
-        h('button', { class: 'btn', onclick: paechterlisteDrucken }, 'Drucken')),
-      kachel('karte', 'Lageplan', 'Als Aushang ohne Namen oder für den Vorstand mit Namen.',
-        h('button', { class: 'btn', onclick: () => lageplanDrucken(true) }, 'Drucken')),
+      kachel('uhr', `Arbeitsstunden ${jahr}`, 'Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt. Einzelne Stunden lassen sich nachtragen.',
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => stundenkontoDialog(jahr) }, 'Ansehen'), pdfKnopf('stundenkonto', `Arbeitsstunden ${jahr}`, `?year=${jahr}`))),
+      kachel('bericht', 'Kostenvergleich', 'Wasser, Strom und Ausgaben über die Jahre, je Garten mit Hinweis auf auffälligen Mehrverbrauch.',
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: kostenvergleichDialog }, 'Ansehen'), pdfKnopf('kostenvergleich', 'Kostenvergleich'))),
+      kachel('personen', 'Mitgliederbefragung', 'Fragebogen zum Ausdrucken, Erfassungsbogen zum Auszählen und anonyme Auswertung für die Versammlung.',
+        h('button', { class: 'btn', onclick: befragungenDialog }, 'Öffnen'))
+    ),
+    h('h3', { class: 'bericht-gruppe' }, 'Rundgang und Zähler'),
+    h('p', { class: 'hint' }, 'Vordrucke und Hilfen für den Gang durch die Anlage.'),
+    h('div', { class: 'bericht-raster' },
+      kachel('zaehler', `Ablesebogen ${st.currentYear}`, 'Alle Gärten mit Zählern und Vorjahresständen für den Rundgang.',
+        h('button', { class: 'btn', onclick: () => ablesebogenDrucken(st.currentYear) }, 'Drucken')),
       kachel('zaehler', `Ablesung mit dem Handy ${st.currentYear}`, 'Eine Datei fürs Handy, die ohne Internet funktioniert: Zählerstände beim Rundgang eintippen, das Ergebnis hier wieder einlesen. Die Datei enthält Namen – vertraulich behandeln.',
         h('div', { class: 'toolbar-gruppe' }, h('a', { class: 'btn', href: '/api/admin/ablesung-handy', download: '' }, 'Datei fürs Handy'), ' ',
           h('button', { class: 'btn', onclick: handyErgebnisEinlesen }, 'Ergebnis einlesen'))),
-      kachel('bericht', 'Kostenvergleich', 'Wasser, Strom und Ausgaben über die Jahre, je Garten mit Hinweis auf auffälligen Mehrverbrauch.',
-        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: kostenvergleichDialog }, 'Ansehen'), pdfKnopf('kostenvergleich', 'Kostenvergleich'))),
-      kachel('daten', 'Wartungs-Check', 'Ist alles in Ordnung? Datenordner, Sicherungen, zweiter Ordner, Passwort und Programmversion auf einen Blick.',
-        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: wartungsCheck }, 'Prüfen'), pdfKnopf('wartung', 'Wartungs-Check'))),
-      kachel('personen', 'Mitgliederbefragung', 'Fragebogen zum Ausdrucken, Erfassungsbogen zum Auszählen und anonyme Auswertung für die Versammlung.',
-        h('button', { class: 'btn', onclick: befragungenDialog }, 'Öffnen')),
-      kachel('daten', 'Papierkorb', 'Gelöschte Mängel, Termine, Beschlüsse und Verträge 30 Tage lang zurückholen.',
-        h('button', { class: 'btn', onclick: papierkorbDialog }, 'Öffnen')),
-      kachel('uhr', `Arbeitsstunden ${jahr}`, 'Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt. Einzelne Stunden lassen sich nachtragen.',
-        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => stundenkontoDialog(jahr) }, 'Ansehen'), pdfKnopf('stundenkonto', `Arbeitsstunden ${jahr}`, `?year=${jahr}`))),
       kachel('zaehler', `Fehlende Zählerstände ${st.currentYear}`, 'Wer hat noch keinen Stand gemeldet? Mit Aushang ohne Namen und E-Mail-Erinnerung.',
         h('button', { class: 'btn', onclick: () => zaehlerErinnerungDialog(st.currentYear) }, 'Prüfen')),
-      kachel('personen', 'Willkommensmappe & Exposé', 'Texte für die Mappe neuer Pächter und den Steckbrief freier Gärten: Ansprechpartner und das Wichtigste aus der Gartenordnung.',
-        h('button', { class: 'btn', onclick: vereinsinfoDialog }, 'Texte bearbeiten')),
-      kachel('daten', 'Amtsübergabe', 'Vereinsakte für den neuen Vorstand: alle Daten und Dateien plus »Lies mich zuerst« mit Zahlen, Regeln und offenen Punkten.',
-        h('button', { class: 'btn', onclick: vereinsakteErstellen }, 'Erstellen')),
-      kachel('bericht', 'Aushang', 'Kurze Mitteilung für den Schaukasten mit großer Überschrift – Sperrung, Arbeitseinsatz, Fundsache. Mit Vorlagen.',
-        h('button', { class: 'btn', onclick: aushangDialog }, 'Erstellen')),
       kachel('zaehler', 'Saison-Liste Wasser', 'Vordruck für den Rundgang im Frühjahr (Wasser an) oder Herbst (Wasser ab, winterfest) mit Ablauf und Zeile je Garten.',
         h('div', { class: 'row' },
           h('button', { class: 'btn', onclick: () => saisonlisteDrucken('fruehjahr') }, 'Frühjahr'),
           h('button', { class: 'btn', onclick: () => saisonlisteDrucken('herbst') }, 'Herbst'))),
       kachel('warnung', 'Begehungsliste', 'Vordruck für den Rundgang durch die Anlage, mit den noch offenen Mängeln je Garten.',
-        h('button', { class: 'btn', onclick: begehungslisteDrucken }, 'Drucken')),
+        h('button', { class: 'btn', onclick: begehungslisteDrucken }, 'Drucken'))
+    ),
+    h('h3', { class: 'bericht-gruppe' }, 'Aushänge, Listen und Texte'),
+    h('p', { class: 'hint' }, 'Zum Ausdrucken für Schaukasten, Mitglieder und Neue.'),
+    h('div', { class: 'bericht-raster' },
+      kachel('bericht', 'Aushang', 'Kurze Mitteilung für den Schaukasten mit großer Überschrift – Sperrung, Arbeitseinsatz, Fundsache. Mit Vorlagen.',
+        h('button', { class: 'btn', onclick: aushangDialog }, 'Erstellen')),
       kachel('kalender', `Vereinstermine ${new Date().getFullYear()}`, 'Jahresplaner als Aushang für den Schaukasten.',
         h('button', { class: 'btn', onclick: () => jahresplanDrucken(new Date().getFullYear()) }, 'Drucken')),
-      kachel('zaehler', `Ablesebogen ${st.currentYear}`, 'Alle Gärten mit Zählern und Vorjahresständen für den Rundgang.',
-        h('button', { class: 'btn', onclick: () => ablesebogenDrucken(st.currentYear) }, 'Drucken'))),
+      kachel('karte', 'Lageplan', 'Als Aushang ohne Namen oder für den Vorstand mit Namen.',
+        h('button', { class: 'btn', onclick: () => lageplanDrucken(true) }, 'Drucken')),
+      kachel('personen', 'Pächterliste', 'Alle Pächter mit Anschrift, Kontakt und Zählern zum Ausdrucken (vertraulich).',
+        h('button', { class: 'btn', onclick: paechterlisteDrucken }, 'Drucken')),
+      kachel('personen', 'Willkommensmappe & Exposé', 'Texte für die Mappe neuer Pächter und den Steckbrief freier Gärten: Ansprechpartner und das Wichtigste aus der Gartenordnung.',
+        h('button', { class: 'btn', onclick: vereinsinfoDialog }, 'Texte bearbeiten'))
+    ),
+    h('h3', { class: 'bericht-gruppe' }, 'Sicherheit und Übergabe'),
+    h('p', { class: 'hint' }, 'Prüfen, zurückholen, an den nächsten Vorstand weitergeben.'),
+    h('div', { class: 'bericht-raster' },
+      kachel('daten', 'Wartungs-Check', 'Ist alles in Ordnung? Datenordner, Sicherungen, zweiter Ordner, Passwort und Programmversion auf einen Blick.',
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: wartungsCheck }, 'Prüfen'), pdfKnopf('wartung', 'Wartungs-Check'))),
+      kachel('daten', 'Papierkorb', 'Gelöschte Mängel, Termine, Beschlüsse und Verträge 30 Tage lang zurückholen.',
+        h('button', { class: 'btn', onclick: papierkorbDialog }, 'Öffnen')),
+      kachel('daten', 'Amtsübergabe', 'Vereinsakte für den neuen Vorstand: alle Daten und Dateien plus »Lies mich zuerst« mit Zahlen, Regeln und offenen Punkten.',
+        h('button', { class: 'btn', onclick: vereinsakteErstellen }, 'Erstellen'))
+    ),
     h('h3', null, `Jahresmeldung ${jahr} – Übersicht`),
     !m ? h('p', { class: 'hint' }, S.meldung === false ? 'Konnte nicht geladen werden.' : 'Wird geladen …')
       : h('div', { class: 'meldung-raster' }, gruppen.map((g) => h('div', { class: 'card' },

@@ -1069,3 +1069,8 @@ th[aria-sort="descending"]::after { content: " \25BC"; font-size: .7em; }
   .card.stat .statico { display: none; }
   .card.stat .big { font-size: 21px; }
 }
+.bericht-gruppe { margin: 22px 0 2px; font-size: 1.05rem; }
+.bericht-gruppe + .hint { margin-top: 0; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 12px; }
+.chips .hint { margin: 0 4px 0 0; }
+[id^="es-"] { scroll-margin-top: 80px; }

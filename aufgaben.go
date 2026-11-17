@@ -74,6 +74,11 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 		l = append(l, x)
 	}
 
+	// Ohne Passwort kann jeder am Rechner Pächter und Preise ändern (der Hinweis steht nur noch hier und in den Einstellungen).
+	if s.d.Admin.Hash == "" && len(s.d.Paechter) > 0 {
+		add("info", "Kein Passwort für die Verwaltung gesetzt", "Jeder, der an diesem Rechner sitzt, kann Pächter, Preise und Rechnungen ändern.", "admin:sicherheit", "Passwort festlegen")
+	}
+
 	// Termine: Ablesung und Versammlung vorbereiten, Stunden nach dem Arbeitseinsatz eintragen
 	gebucht := map[string]bool{}
 	for _, e := range s.d.Einsatzstunden {
