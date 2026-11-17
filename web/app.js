@@ -853,6 +853,16 @@ async function wiederherstellungsProbe() {
   await reload();
 }
 
+async function wartungsCheck() {
+  let r;
+  try { r = await api('GET', '/api/admin/wartung'); } catch (e) { handleErr(e); return; }
+  const zeilen = r.zeilen.map((z) => h('div', { class: 'banner ' + (z.stufe === 'ok' ? 'info' : z.stufe), style: 'margin:6px 0' },
+    h('b', null, (z.stufe === 'ok' ? '✓ ' : z.stufe === 'warn' ? '! ' : '✗ ') + z.titel), h('div', null, z.text)));
+  await modal(r.stufe === 'ok' ? 'Alles in Ordnung' : 'Wartungs-Check: Hinweise', h('div', null,
+    h('p', { class: 'hint' }, 'Prüft den Rechner, auf dem das Programm läuft: Datenordner, Sicherungen, Zugriffsschutz. Es wird nichts verändert.'), ...zeilen),
+  [{ label: 'Schließen', cls: 'primary', value: true }]);
+}
+
 function zweiteSicherungBanner(st, istAdmin) {
   const z = st.zweiteSicherung || {};
   if (S.zweiteDismissed || !istAdmin || !st.paechter.length) return null;
@@ -6403,6 +6413,8 @@ function adminBerichte() {
           h('button', { class: 'btn', onclick: handyErgebnisEinlesen }, 'Ergebnis einlesen'))),
       kachel('bericht', 'Kostenvergleich', 'Wasser, Strom und Ausgaben über die Jahre, je Garten mit Hinweis auf auffälligen Mehrverbrauch.',
         h('button', { class: 'btn', onclick: kostenvergleichDialog }, 'Ansehen')),
+      kachel('daten', 'Wartungs-Check', 'Ist alles in Ordnung? Datenordner, Sicherungen, zweiter Ordner, Passwort und Programmversion auf einen Blick.',
+        h('button', { class: 'btn', onclick: wartungsCheck }, 'Prüfen')),
       kachel('daten', 'Papierkorb', 'Gelöschte Mängel, Termine, Beschlüsse und Verträge 30 Tage lang zurückholen.',
         h('button', { class: 'btn', onclick: papierkorbDialog }, 'Öffnen')),
       kachel('uhr', `Arbeitsstunden ${jahr}`, 'Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt. Einzelne Stunden lassen sich nachtragen.',
