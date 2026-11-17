@@ -172,7 +172,8 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Kontoauszug einlesen:** die CSV-Datei aus dem Online-Banking laden, das Programm ordnet die Eingänge über die
   Rechnungsnummer im Verwendungszweck den Rechnungen zu (sonst Vorschlag über Name und Betrag); übernommen wird nur, was
   du bestätigst, und nichts doppelt
-- **Spenden und Zuwendungsbestätigungen** nach dem amtlichen Muster, einzeln oder als Sammelbestätigung fürs Jahr;
+- **Spenden und Zuwendungsbestätigungen** nach dem amtlichen Muster, einzeln, als Sammelbestätigung fürs Jahr oder für
+  alle Spender eines Jahres auf einmal (ZIP);
   das Programm prüft, ob der Bescheid des Finanzamts noch gilt, und zählt Spenden im Kassenbericht als Einnahme
 - **Barkasse:** Kassenbuch für Bargeld mit fortlaufenden Belegnummern, Anfangsbestand aus dem Vorjahr und
   Kassenbuch als PDF; die Kassenprüfung vergleicht das gezählte Bargeld mit dem Bestand
@@ -217,7 +218,12 @@ Benutzerkonto und keine Übertragung ins Internet.
   zurückstellen, Warnung vor ungespeicherten Eingaben, Fehlermeldungen mit Knopf zur Lösung, Kartenansicht auf dem Handy, saubere
   Druckansicht und Bedienung per Tastatur (Sprunglink, Fokus).
 - **Pächterwechsel-Assistent**, **Kostenvergleich** über die Jahre mit Hinweis auf auffälligen Mehrverbrauch, **Mängel mit Foto**
-  und ein **Papierkorb** (30 Tage) für Mängel, Termine, Beschlüsse und Verträge.
+  und ein **Papierkorb** (30 Tage) für Mängel, Termine, Beschlüsse und Verträge – mit »Rückgängig« direkt nach dem Löschen.
+- **Beitragsübersicht** je Pächter, **Zählerwechsel-Protokoll**, **Fristen als Kalenderdatei**, **Wahlen-Assistent** (Stimmzettel,
+  Auszählung, Beschlussbuch), **Saison-Liste** fürs Wasser an/ab, **Vorschlag aus der Warteliste** für freie Gärten,
+  **Aushang** für den Schaukasten mit Vorlagen, **Übergabeprotokoll** mit den am Übergabetag offenen Mängeln.
+- Mängel mehrfach auswählen (erledigt markieren, als Liste drucken); Dialoge merken die zuletzt gewählte Art; versehentlich
+  geschlossene Eingaben lassen sich beim nächsten Öffnen zurückholen (nur im Arbeitsspeicher, bis zum Programmende).
 - **Arbeitsstunden-Konto** mit Ersatzzahlung vorab, **Ablesung mit dem Handy** (Datei ohne Internet),
   **Wartelisten-Briefe** und Nachrücker-Vorschlag, Amtsübergabe mit Ämtern, Verträgen und Checkliste
 - **DSGVO-Hilfen:** Auskunft je Person als Datei, endgültiges Löschen auch aus allen Sicherungen, Bereinigung nach

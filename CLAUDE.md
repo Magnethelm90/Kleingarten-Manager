@@ -92,6 +92,12 @@
   Knopf auf der Ämter-Seite), freiervorschlag.go (Vorschlag aus der Warteliste + Angebotsschreiben im Dialog »Garten vergeben«),
   saisonliste.go (Frühjahr/Herbst-Vordruck, Kachel in Berichte), Tabellen: Knopf »Sortierung zurücksetzen« (tabellen.js), Dialoge merken Art
   (`merkeLesen/merkeSchreiben`, localStorage `km-zuletzt-*`), Mängelliste mit Mehrfachauswahl »als erledigt markieren«.
+- Ideen-Paket 5 (Nov 2026): Übergabeprotokoll mit offenen Mängeln am Stichtag (`maengelAmTag`), Handy-Import meldet Plausi-Hinweise,
+  spendenpaket.go (GET /api/admin/spenden/jahr + /jahrespaket als ZIP, vermerkt NICHTS – erst »Als ausgestellt vermerken« ruft
+  bestaetigen je Spender), aushang.go (POST-PDF; `pdfDrucken({..., body})` schickt dann POST), maengel_liste.go (Auswahl drucken),
+  Löschen liefert `papierkorbId` → `geloeschtToast` mit »Rückgängig«, Entwürfe in modal() (Map `entwuerfe`, nur Speicher, Schlüssel =
+  Titel + Anfangswerte), pdf_zeichen_test.go (alle GET-Routen inkl. {id} mit schwierigen Zeichen), `pdfListe` skaliert zu breite
+  Spalten, `icsUID` für alle UID-Zeilen.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)
