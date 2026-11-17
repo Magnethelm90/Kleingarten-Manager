@@ -112,6 +112,11 @@
 - Verständlichkeit (Nov 2026): Berichte in 4 Gruppen mit Überschrift (neue Kachel in die passende Gruppe), Einstellungen mit Sprungleiste (Preise zuerst, Farbe/Logo zuletzt), Hinweisbalken »Rechnungen offen« nur bei Rechnungen/Zählerständen, Passwort-Hinweis nur in Einstellungen/Daten/Datenschutz + Cockpit-Aufgabe.
 - Gesamtdurchsicht (Nov 2026): Mehrzahl über `anz(n, eins, viele)` (app.js) bzw. `mehrzahl()` (Go) – nie »Rechnung(en)«; Termine: `terminAktionen` (eine Hauptaktion vor/nach dem Termin + Bearbeiten + Mehr-Menü); Handy-Karten: Zellen mit mehreren Teilen als Grid untereinander, `td.wrap`-Breitengrenze dort aufgehoben; Cockpit am Handy: Knöpfe unter dem Text; Menü auf Laptops dichter; Checkboxen in Dialogen nie volle Breite.
 - Versandart-Vorgabe: neue Pächter (Formular + Import) ohne E-Mail-Adresse → Postversand, mit E-Mail → Emailsendung (`versandNachEmail`); im Formular folgt die Auswahl der E-Mail, bis sie von Hand geändert wird.
+- Menü gestrafft (Nov 2026, 26 → 18 Einträge): NAV-Einträge bündeln Seiten über `reiter: [...]` (erster Reiter = Seite selbst):
+  Zahlungen | Vorauszahlungen | Lastschrift; Pächter | Kündigungen | Jubiläen; Kasse = Kassenbericht | Haushaltsplan | Spenden;
+  Sicherheit & Datenschutz = Passwort | Datenschutz | Änderungsprotokoll. adminTab-IDs/Cockpit-Ziele unverändert. `reiterKopf()` unter der
+  Überschrift, `reiterLeiste()` (Klasse `.reiter`, Unterstrich) für ALLE Seitenteile (auch Rechnungen/Archiv, Mängel/Lauben, Schlüssel/Geräte,
+  Vereinsverwaltung); runde `.subtabs` nur noch für Filter/Ansichten. Seitenleiste 244 px.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

@@ -225,6 +225,20 @@ tr.ersetzt td { color: var(--muted); }
   transition: background-color .15s, color .15s, box-shadow .15s;
 }
 .subtabs button:hover { background: rgba(255,255,255,.6); }
+/* Reiter: Teile einer Seite (z. B. Pächter | Kündigungen | Jubiläen). Filter und Ansichten bleiben »subtabs«. */
+.reiter {
+  display: flex; gap: 4px; margin: 10px 0 20px; border-bottom: 1px solid var(--line-strong);
+  overflow-x: auto; scrollbar-width: none;
+}
+.reiter::-webkit-scrollbar { display: none; }
+.reiter button {
+  flex: none; padding: 9px 16px 10px; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; background: transparent;
+  font: inherit; font-size: 15px; color: var(--muted); cursor: pointer; white-space: nowrap; border-radius: 6px 6px 0 0;
+  transition: color .15s, border-color .15s, background-color .15s;
+}
+.reiter button:hover { color: var(--text); background: var(--green-faint); }
+.reiter button.active { color: var(--green-dark); font-weight: 650; border-bottom-color: var(--green); cursor: default; background: transparent; }
+.reiter button:focus-visible { outline: none; box-shadow: var(--ring); }
 .subtabs button.active { background: #fff; color: var(--green-dark); font-weight: 650; box-shadow: 0 1px 3px rgba(20, 35, 22, .15); }
 .form { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px 20px; }
 .form .field { display: flex; flex-direction: column; gap: 4px; }
@@ -279,7 +293,7 @@ ul.plain { margin: 6px 0 0; padding-left: 20px; }
 ul.plain li { margin: 3px 0; }
 
 /* Grundgerüst: Seitenleiste links, Inhalt rechts */
-.shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: start; }
+.shell { display: grid; grid-template-columns: 244px minmax(0, 1fr); align-items: start; }
 aside.sidebar {
   position: sticky; top: var(--kopf, 56px); height: calc(100vh - var(--kopf, 56px)); overflow-y: auto;
   background: var(--card); border-right: 1px solid var(--line); padding: 10px 10px 24px;
@@ -1033,7 +1047,7 @@ th[aria-sort="descending"]::after { content: " \25BC"; font-size: .7em; }
 @media print {
   @page { margin: 14mm; }
   html, body { background: #fff !important; }
-  aside.sidebar, header.top, .sprunglink, .menue-knopf, #toasts, .toolbar, .subtabs, .hilfe, .hilfe-i, .tour, .erfolg,
+  aside.sidebar, header.top, .sprunglink, .menue-knopf, #toasts, .toolbar, .subtabs, .reiter, .hilfe, .hilfe-i, .tour, .erfolg,
   .btn, button, .mehr-knopf, .zurueck-wahl, .demo-banner, .banner, .toast, dialog .dfoot { display: none !important; }
   .shell { display: block !important; }
   main { padding: 0 !important; max-width: none !important; }

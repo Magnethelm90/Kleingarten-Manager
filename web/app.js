@@ -376,38 +376,44 @@ const NAV = [
     { tab: 'uebersicht', label: 'Übersicht', ic: 'haus' },
     { tab: 'eingabe', label: 'Zählerstände', ic: 'zaehler' },
     { tab: 'rechnungen', label: 'Rechnungen', ic: 'rechnung' },
-    { tab: 'zahlungen', label: 'Zahlungen', ic: 'euro' }] },
+    { tab: 'zahlungen', label: 'Zahlungen', ic: 'euro', reiter: [
+      { tab: 'zahlungen', label: 'Zahlungen' },
+      { admin: 'vorauszahlung', modul: 'vorauszahlung', label: 'Vorauszahlungen' },
+      { admin: 'sepa', label: 'Lastschrift', nur: (st) => st.sepaAktiv }] }] },
   { gruppe: 'Verein', items: [
     { tab: 'lageplan', label: 'Lageplan', ic: 'karte' },
     { tab: 'termine', label: 'Termine', ic: 'kalender' },
-    { admin: 'paechter', label: 'Pächter', ic: 'personen', tour: 'admin' },
-    { admin: 'kuendigungen', label: 'Kündigungen', ic: 'kuendigung' },
+    { admin: 'paechter', label: 'Pächter', ic: 'personen', tour: 'admin', reiter: [
+      { admin: 'paechter', label: 'Alle Pächter' },
+      { admin: 'kuendigungen', label: 'Kündigungen' },
+      { admin: 'jubilaeen', modul: 'jubilaeen', label: 'Jubiläen' }] },
     { admin: 'warteliste', modul: 'warteliste', label: 'Warteliste', ic: 'warteliste' },
     { admin: 'maengel', label: 'Mängel & Lauben', ic: 'warnung' },
     { admin: 'rundschreiben', modul: 'rundschreiben', label: 'Rundschreiben', ic: 'brief' },
     { admin: 'inventar', modul: 'inventar', label: 'Schlüssel & Geräte', ic: 'schluessel' },
     { admin: 'verwaltung', label: 'Vereinsverwaltung', ic: 'akte' }] },
   { gruppe: 'Kasse & Berichte', items: [
-    { admin: 'kassenbericht', label: 'Kassenbericht', ic: 'kasse' },
-    { admin: 'haushalt', modul: 'haushalt', label: 'Haushaltsplan', ic: 'waage' },
-    { admin: 'spenden', modul: 'spenden', label: 'Spenden', ic: 'stern' },
-    { admin: 'vorauszahlung', modul: 'vorauszahlung', label: 'Vorauszahlungen', ic: 'kalender' },
-    { admin: 'sepa', label: 'Lastschrift', ic: 'euro', nur: (st) => st.sepaAktiv },
+    { admin: 'kassenbericht', label: 'Kasse', ic: 'kasse', reiter: [
+      { admin: 'kassenbericht', label: 'Kassenbericht' },
+      { admin: 'haushalt', modul: 'haushalt', label: 'Haushaltsplan' },
+      { admin: 'spenden', modul: 'spenden', label: 'Spenden' }] },
     { admin: 'berichte', label: 'Berichte & Meldungen', ic: 'bericht' },
     { admin: 'jahreswechsel', label: 'Jahreswechsel', ic: 'fertig' }] },
   { gruppe: 'Einstellungen', items: [
     { admin: 'einstellungen', label: 'Preise & Einstellungen', ic: 'regler' },
     { admin: 'daten', label: 'Import, Export, Sicherung', ic: 'daten' },
-    { admin: 'jubilaeen', modul: 'jubilaeen', label: 'Jubiläen', ic: 'stern' },
-    { admin: 'protokoll', label: 'Änderungsprotokoll', ic: 'uhr' },
-    { admin: 'datenschutz', label: 'Datenschutz', ic: 'sicherung' },
-    { admin: 'sicherheit', label: 'Passwort', ic: 'schluessel' }] },
+    { admin: 'sicherheit', label: 'Sicherheit & Datenschutz', ic: 'sicherung', reiter: [
+      { admin: 'sicherheit', label: 'Passwort' },
+      { admin: 'datenschutz', label: 'Datenschutz' },
+      { admin: 'protokoll', label: 'Änderungsprotokoll' }] }] },
 ];
 // Bereiche: ausgeschaltete Zusatzbereiche (Einstellungen → Bereiche) erscheinen nicht im Menü.
 const modulAn = (name) => !S.state || !S.state.module || S.state.module[name] !== false;
 const navSichtbar = (x, st) => (!x.nur || x.nur(st)) && (!x.modul || modulAn(x.modul));
 const navLabel = (x) => (x.admin === 'maengel' && !modulAn('bauten') ? 'Mängel' : x.label);
-const navEintrag = (tab, adminTab) => NAV.flatMap((g) => g.items).find((x) => (x.admin ? tab === 'admin' && x.admin === adminTab : x.tab === tab));
+// Ein Menüpunkt kann mehrere Seiten als Reiter bündeln (x.reiter); der erste Reiter ist die Seite selbst.
+const navPasst = (y, tab = S.tab, adminTab = S.adminTab) => (y.admin ? tab === 'admin' && y.admin === adminTab : y.tab === tab);
+const navEintrag = (tab, adminTab) => NAV.flatMap((g) => g.items).find((x) => (x.reiter || [x]).some((y) => navPasst(y, tab, adminTab)));
 
 // Wechsel in einen Admin-Bereich: zwischengespeicherte Listen dieses Bereichs neu laden.
 function adminTabWaehlen(id) {
@@ -432,23 +438,40 @@ function adminTabWaehlen(id) {
   if (id === 'berichte') S.meldung = null;
 }
 
+async function navGeh(x) {
+  const st = S.state;
+  if (x.admin) adminTabWaehlen(x.admin); else S.tab = x.tab;
+  if (x.tab === 'uebersicht') { S.dashWarteliste = null; S.aufgaben = null; S.vj = null; }
+  if ((S.tab === 'admin' || S.tab === 'uebersicht' || S.tab === 'termine') && S.year !== st.currentYear) S.year = st.currentYear;
+  S.menueOffen = false;
+  await reload();
+  window.scrollTo(0, 0);
+}
+
+// Reiterleiste unter der Überschrift einer gebündelten Seite (nur, wenn mehr als ein Reiter sichtbar ist).
+function reiterKopf() {
+  const e = navEintrag(S.tab, S.adminTab);
+  const sicht = e && e.reiter ? e.reiter.filter((y) => navSichtbar(y, S.state)) : [];
+  if (sicht.length < 2) return null;
+  return reiterLeiste(sicht.map((y) => ({ label: y.label, aktiv: navPasst(y), geh: () => navGeh(y) })), navLabel(e));
+}
+
+// Einheitliche Reiter für Teile einer Seite (Filter und Ansichten bleiben die runden »subtabs«).
+function reiterLeiste(eintraege, name) {
+  return h('div', { class: 'reiter', role: 'tablist', 'aria-label': name || null },
+    eintraege.map((r) => h('button', { role: 'tab', 'aria-selected': r.aktiv ? 'true' : 'false', class: r.aktiv ? 'active' : '',
+      onclick: () => { if (!r.aktiv) r.geh(); } }, r.label)));
+}
+
 function seitenleiste(st) {
   const gesperrt = st.hasPassword && !st.loggedIn;
-  const geh = async (x) => {
-    if (x.admin) adminTabWaehlen(x.admin); else S.tab = x.tab;
-    if (x.tab === 'uebersicht') { S.dashWarteliste = null; S.aufgaben = null; S.vj = null; }
-    if ((S.tab === 'admin' || S.tab === 'uebersicht' || S.tab === 'termine') && S.year !== st.currentYear) S.year = st.currentYear;
-    S.menueOffen = false;
-    await reload();
-    window.scrollTo(0, 0);
-  };
   return h('aside', { class: 'sidebar' + (S.menueOffen ? ' offen' : ''), 'aria-label': 'Bereiche' },
     NAV.map((g) => h('div', { class: 'nav-gruppe' },
       h('div', { class: 'nav-titel' }, g.gruppe),
       g.items.filter((x) => navSichtbar(x, st)).map((x) => {
-        const aktiv = x.admin ? S.tab === 'admin' && S.adminTab === x.admin : S.tab === x.tab;
+        const aktiv = (x.reiter || [x]).some((y) => navPasst(y));
         return h('button', { class: 'nav-item' + (aktiv ? ' active' : ''), 'data-tour': x.tour || x.tab || null, title: navLabel(x),
-          'aria-current': aktiv ? 'page' : null, onclick: () => geh(x) },
+          'aria-current': aktiv ? 'page' : null, onclick: () => navGeh(x) },
         icon(x.ic, 19), h('span', null, navLabel(x)), x.admin && gesperrt ? h('i', { class: 'nav-schloss', title: 'Nur mit Admin-Anmeldung' }, icon('schloss', 13)) : null);
       }))));
 }
@@ -580,7 +603,7 @@ const TOUR = [
     text: 'Setze den Haken, sobald eine Rechnung bezahlt ist (Teilzahlungen gehen über »Details«). Für überfällige Rechnungen erzeugst du hier die Mahnung, es wird nie automatisch gemahnt.',
     ziel: 'zahlungen', gehe: () => { S.tab = 'zahlungen'; } },
   { titel: '5. Jahresabschluss & Sicherheit',
-    text: 'Am Jahresende schließt »Jahreswechsel« das Jahr ab, mit Checkliste. Deine Daten werden automatisch gesichert; unter »Passwort« schützt du die Verwaltung. Das Suchfeld oben findet jeden Pächter, und diese Einführung erreichst du jederzeit über den runden »?«-Knopf oben rechts.',
+    text: 'Am Jahresende schließt »Jahreswechsel« das Jahr ab, mit Checkliste. Deine Daten werden automatisch gesichert; unter »Sicherheit & Datenschutz« schützt du die Verwaltung mit einem Passwort. Das Suchfeld oben findet jeden Pächter, und diese Einführung erreichst du jederzeit über den runden »?«-Knopf oben rechts.',
     ziel: 'hilfe', gehe: () => { adminTabWaehlen('jahreswechsel'); } },
 ];
 
@@ -2115,9 +2138,9 @@ function ziehbarMachen(el, nr, flaeche, ausListe) {
 
 function viewRechnungen() {
   const st = S.state;
-  const sub = h('div', { class: 'subtabs' },
-    h('button', { class: S.invTab !== 'archiv' ? 'active' : '', onclick: () => { S.invTab = 'pruefen'; render(); } }, 'Rechnungen prüfen & ausstellen'),
-    h('button', { class: S.invTab === 'archiv' ? 'active' : '', onclick: () => { S.invTab = 'archiv'; render(); } }, `Archiv (${(st.archive || []).length})`));
+  const sub = reiterLeiste([
+    { label: 'Rechnungen prüfen & ausstellen', aktiv: S.invTab !== 'archiv', geh: () => { S.invTab = 'pruefen'; render(); } },
+    { label: `Archiv (${(st.archive || []).length})`, aktiv: S.invTab === 'archiv', geh: () => { S.invTab = 'archiv'; render(); } }]);
   return h('div', null, h('h2', null, `Rechnungen ${st.year}`), sub, S.invTab === 'archiv' ? viewArchiv() : viewAusstellen());
 }
 
@@ -2551,6 +2574,7 @@ function viewZahlungen() {
   const notIssued = st.paechter.length - Object.keys(st.issued || {}).length;
   return h('div', null,
     h('h2', null, `Zahlungen ${st.year}`),
+    reiterKopf(),
     h('p', { class: 'hint' }, 'Hier siehst du, welche Rechnungen bezahlt sind und welche noch offen. Haken setzen = bezahlt heute (das Datum kannst du ändern). Über »Details« trägst du Teilzahlungen oder eine Notiz ein. Rechnungen mit Guthaben erscheinen hier auch, damit du siehst, was noch an Pächter auszuzahlen ist.'),
     notIssued > 0 ? h('div', { class: 'banner info' }, `${notIssued} Pächter ${notIssued === 1 ? 'hat' : 'haben'} in ${st.year} noch keine ausgestellte Rechnung und ${notIssued === 1 ? 'taucht' : 'tauchen'} deshalb hier noch nicht auf.`) : null,
     anderenJahrenOffen(st),
@@ -2877,9 +2901,9 @@ const invNeuLaden = () => { S.inventar = null; render(); };
 function adminInventar() {
   if (S.inventar == null) { loadInventar(); return h('p', { class: 'hint' }, 'Wird geladen …'); }
   const geraete = S.invSeite === 'geraete';
-  const sub = h('div', { class: 'subtabs' },
-    h('button', { class: geraete ? '' : 'active', onclick: () => { S.invSeite = 'schluessel'; render(); } }, `Schlüssel (${S.inventar.schluessel.length})`),
-    h('button', { class: geraete ? 'active' : '', onclick: () => { S.invSeite = 'geraete'; render(); } }, `Geräte (${S.inventar.geraete.length})`));
+  const sub = reiterLeiste([
+    { label: `Schlüssel (${S.inventar.schluessel.length})`, aktiv: !geraete, geh: () => { S.invSeite = 'schluessel'; render(); } },
+    { label: `Geräte (${S.inventar.geraete.length})`, aktiv: geraete, geh: () => { S.invSeite = 'geraete'; render(); } }]);
   return h('div', null, sub, geraete ? inventarGeraete() : inventarSchluessel());
 }
 
@@ -3080,7 +3104,7 @@ async function kuendigungDialog(p, k) {
   [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
     try {
       await api('POST', '/api/admin/kuendigungen', { id: k ? k.id : '', paechterId: k ? k.paechterId : p.id, eingang: f.eingang.value, zum: f.zum.value, von: f.von.value, grund: f.grund.value, notiz: f.notiz.value });
-      toast('Kündigung gespeichert – den Fahrplan findest du unter »Kündigungen«', 'ok'); S.kuend = null;
+      toast('Kündigung gespeichert – den Fahrplan findest du unter »Pächter« im Reiter »Kündigungen«', 'ok'); S.kuend = null;
     } catch (e) { handleErr(e); return false; }
   } }]);
 }
@@ -3175,11 +3199,11 @@ async function loadVerwaltung() {
 function adminVerwaltung() {
   if (S.verw == null) { loadVerwaltung(); return h('p', { class: 'hint' }, 'Wird geladen …'); }
   const seite = ['vertraege', 'aemter'].includes(S.verwSeite) ? S.verwSeite : 'beschluesse';
-  const knopf = (id, text) => h('button', { class: seite === id ? 'active' : '', onclick: () => { S.verwSeite = id; render(); } }, text);
-  return h('div', null, h('div', { class: 'subtabs' },
+  const knopf = (id, label) => ({ label, aktiv: seite === id, geh: () => { S.verwSeite = id; render(); } });
+  return h('div', null, reiterLeiste([
     knopf('beschluesse', `Beschlussbuch (${S.verw.beschluesse.length})`),
     knopf('vertraege', `Verträge & Versicherungen (${S.verw.vertraege.length})`),
-    knopf('aemter', `Ämter (${S.verw.aemter.aemter.filter((x) => !x.ehemalig).length})`)),
+    knopf('aemter', `Ämter (${S.verw.aemter.aemter.filter((x) => !x.ehemalig).length})`)]),
   seite === 'vertraege' ? verwaltungVertraege() : seite === 'aemter' ? verwaltungAemter() : verwaltungBeschluesse());
 }
 
@@ -3606,8 +3630,8 @@ function adminVorauszahlung() {
     h('div', { class: 'vz-legende hint' }, h('span', { class: 'vz-punkt vz-ok' }), ' bezahlt ', h('span', { class: 'vz-punkt vz-teil' }), ' teilweise ',
       h('span', { class: 'vz-punkt vz-offen' }), ' offen ', h('span', { class: 'vz-punkt vz-kommt' }), ' noch nicht fällig (ab dem 10. eines Monats fällig)'),
     h('details', { class: 'card', style: 'margin-top:16px' }, h('summary', null, 'Zahlt euer Verein (auch) per Lastschrift?'),
-      h('p', { class: 'hint' }, 'Dann lässt sich der Bereich »Lastschrift« einschalten: Mandate, Datei für das Online-Banking (SEPA), Vorabankündigung.'),
-      h('label', { class: 'check' }, sepaSchalter, ' Bereich »Lastschrift« anzeigen')));
+      h('p', { class: 'hint' }, 'Dann lässt sich unter »Zahlungen« der Reiter »Lastschrift« einschalten: Mandate, Datei für das Online-Banking (SEPA), Vorabankündigung.'),
+      h('label', { class: 'check' }, sepaSchalter, ' Reiter »Lastschrift« unter »Zahlungen« anzeigen')));
 }
 
 // ------------------------------------------------------------------ SEPA-Lastschrift
@@ -3863,6 +3887,7 @@ function viewAdmin() {
   const eintrag = navEintrag('admin', t);
   return h('div', null,
     h('h2', null, eintrag ? navLabel(eintrag) : 'Verwaltung'),
+    reiterKopf(),
     !st.hasPassword && ['einstellungen', 'daten', 'datenschutz'].includes(t) ? h('div', { class: 'banner warn' }, 'Für die Verwaltung ist noch kein Passwort gesetzt – jeder an diesem Rechner kann Pächter und Preise ändern. ',
       h('button', { class: 'btn small', onclick: () => { adminTabWaehlen('sicherheit'); render(); } }, 'Passwort festlegen')) : null,
     body);
@@ -5470,7 +5495,7 @@ async function wechselAssistent(p) {
           x.erledigt ? null : h('div', { class: 'hint kd-hilfe' }, x.hilfe),
           !x.erledigt && akt ? h('button', { class: 'btn small' + (naechster && naechster.key === x.key ? ' primary' : ''), onclick: akt[1] }, akt[0]) : null);
       })),
-      fertig === gesamt ? h('p', null, h('b', null, 'Alle Schritte sind erledigt.'), ' Schließe die Kündigung unter »Kündigungen« ab. Für den Nachfolger: Pachtvertrag und Willkommensmappe findest du beim neuen Pächter unter »Mehr«.') : h('span'));
+      fertig === gesamt ? h('p', null, h('b', null, 'Alle Schritte sind erledigt.'), ' Schließe die Kündigung unter »Pächter« im Reiter »Kündigungen« ab. Für den Nachfolger: Pachtvertrag und Willkommensmappe findest du beim neuen Pächter unter »Mehr«.') : h('span'));
   };
   zeichnen();
   const w = breiterDialog(`Pächterwechsel – Garten ${p.gartennr}`, inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
@@ -5949,9 +5974,9 @@ async function begehungDurchfuehren() {
 function adminBegehung() {
   if (!modulAn('bauten')) return adminMaengel();
   const bauten = S.maengelSeite === 'bauten';
-  return h('div', null, h('div', { class: 'subtabs' },
-    h('button', { class: bauten ? '' : 'active', onclick: () => { S.maengelSeite = 'maengel'; render(); } }, 'Mängel und Nutzung'),
-    h('button', { class: bauten ? 'active' : '', onclick: () => { S.maengelSeite = 'bauten'; render(); } }, 'Laubenkataster')),
+  return h('div', null, reiterLeiste([
+    { label: 'Mängel und Nutzung', aktiv: !bauten, geh: () => { S.maengelSeite = 'maengel'; render(); } },
+    { label: 'Laubenkataster', aktiv: bauten, geh: () => { S.maengelSeite = 'bauten'; render(); } }]),
   bauten ? adminBauten() : adminMaengel());
 }
 

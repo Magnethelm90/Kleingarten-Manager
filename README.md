@@ -285,7 +285,7 @@ Start meldet macOS „nicht verifizierter Entwickler“: mit Rechtsklick auf die
 - Die **Verwaltung** (Pächter, Warteliste, Kasse, Berichte, Einstellungen) lässt sich mit einem Passwort schützen.
   Übersicht, Zählerstände, Rechnungen, Zahlungen, Lageplan und Termine bleiben für alle am Rechner offen, damit
   zum Beispiel beim Ablesen jemand helfen kann.
-- Nutzen mehrere Personen den Rechner, lässt sich unter *Passwort* **»Alles nur mit Anmeldung«** einschalten: Dann
+- Nutzen mehrere Personen den Rechner, lässt sich unter *Sicherheit & Datenschutz → Passwort* **»Alles nur mit Anmeldung«** einschalten: Dann
   zeigt das Programm ohne Anmeldung nur die Anmeldeseite – keine Namen, Anschriften oder Zahlen.
 - Wer sich am Rechner anmelden kann, kommt auch an die Datendatei. Sie ist nicht verschlüsselt. Deshalb gehört
   das Programm auf einen Rechner mit eigenem Benutzerkennwort und eingeschalteter Festplattenverschlüsselung
