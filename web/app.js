@@ -2431,7 +2431,7 @@ async function paymentDialog(e) {
     h('div', { class: 'field wide' }, h('label', null, 'Notiz (z. B. bar, Überweisung, Ratenzahlung)'), note));
   return modal('Zahlung vermerken', body, [
     { label: 'Abbrechen', value: false },
-    e.gesamt > 0 && e.status === 'gueltig' ? { label: 'Gutschrift …', value: 'gutschrift' } : null,
+    e.gesamt > 0 && e.status === 'gueltig' ? { label: 'Gutschrift ausstellen', value: 'gutschrift' } : null,
     e.bezahltAm ? { label: 'Zahlung zurücknehmen', cls: 'danger', value: 'undo', action: async () => { try { await savePayment(e, { bezahltAm: '', bezahltBetrag: null }); } catch (er) { handleErr(er); return false; } } } : null,
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
       const v = parseNum(amt.value);
