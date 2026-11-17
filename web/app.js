@@ -247,7 +247,7 @@ function modal(title, body, buttons) {
     let anfang = '';
     const entwurfSchluessel = () => (typeof title === 'string' ? title : dlg.querySelector('.dhead').textContent) + '\u0002' + anfang;
     function entwurfMerken() {
-      if (!istFormular || !anfang || dlg.querySelector('.dbody input[type=file]')) return;
+      if (!istFormular || !anfang) return; // ausgewählte Dateien werden nicht gemerkt, nur Text und Auswahlen
       const k = entwurfSchluessel();
       if (gespeichert || feldWerte() === anfang) { if (gespeichert) entwuerfe.delete(k); return; }
       entwuerfe.set(k, felder().map((f) => (f.type === 'checkbox' || f.type === 'radio' ? f.checked : f.value)));
