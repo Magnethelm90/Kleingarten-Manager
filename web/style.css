@@ -1037,3 +1037,6 @@ th[aria-sort="descending"]::after { content: " \25BC"; font-size: .7em; }
 .wahl-zeile { display: flex; gap: 8px; margin-bottom: 6px; align-items: center; }
 .wahl-zeile input[type=text] { flex: 1; min-width: 0; }
 .wahl-live { background: var(--green-tint, #eef5ee); border: 1px solid var(--green-line, #dfe5da); border-radius: 10px; padding: 8px 12px; font-weight: 600; margin: 4px 0; }
+.mangel-wahl { width: 18px; height: 18px; flex: none; }
+.sort-reset { display: block; margin: 0 0 6px auto; }
+@media print { .sort-reset { display: none; } }

@@ -200,6 +200,9 @@ function handleErr(e) {
 }
 
 let dialogZaehler = 0;
+// Zuletzt gewählte Werte in Dialogen merken (nur dieser Rechner, nur Auswahlen ohne personenbezogene Angaben).
+const merkeLesen = (k, vorgabe) => { try { return localStorage.getItem('km-zuletzt-' + k) || vorgabe; } catch (e) { return vorgabe; } };
+const merkeSchreiben = (k, v) => { try { localStorage.setItem('km-zuletzt-' + k, v); } catch (e) { /* ohne Speicher geht es auch */ } };
 function modal(title, body, buttons) {
   return new Promise((resolve) => {
     const titelId = 'dlg-titel-' + (++dialogZaehler);
@@ -1729,8 +1732,17 @@ async function freienGartenVergeben(nr) {
     return;
   }
   const zahl = (ph) => { const el = h('input', { type: 'text', placeholder: ph || '', autocomplete: 'off' }); el.setAttribute('inputmode', 'decimal'); return el; };
+  // Vorschlag: Reihenfolge der Anmeldung, dazu welche Wünsche zum Garten passen (Größe, Laube); wer abgesagt hat, fehlt
+  let vorschlag = null;
+  try { vorschlag = await api('GET', `/api/admin/freie-gaerten/${encodeURIComponent(nr)}/vorschlag`); } catch (e) { vorschlag = null; }
+  const vz = new Map(((vorschlag && vorschlag.zeilen) || []).map((z) => [z.id, z]));
+  const hinweisText = (b) => {
+    const z = vz.get(b.id);
+    if (!z) return b.besichtigungErgebnis === 'kein Interesse' || b.besichtigungErgebnis === 'nicht erschienen' ? ' [hat abgesagt]' : '';
+    return (z.passt.length ? ` ✓ ${z.passt.join(', ')}` : '') + (z.passtNicht.length ? ` ✗ ${z.passtNicht.join(', ')} passt nicht` : '') + (z.empfohlen ? ' (Vorschlag)' : '');
+  };
   const f = {
-    wer: h('select', null, liste.map((b) => h('option', { value: b.id }, `${b.platz}. ${b.name}${b.wunsch ? ' – ' + b.wunsch : ''}`))),
+    wer: h('select', null, liste.map((b) => h('option', { value: b.id, selected: !!(vz.get(b.id) && vz.get(b.id).empfohlen) }, `${b.platz}. ${b.name}${b.wunsch ? ' – ' + b.wunsch : ''}${hinweisText(b)}`))),
     seit: h('input', { type: 'date', value: todayIso() }),
     mitgliedsnr: h('input', { type: 'text', value: naechsteMitgliedsnr(), maxlength: 20 }),
     groesse: zahl('m²'),
@@ -1739,7 +1751,12 @@ async function freienGartenVergeben(nr) {
   const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
   let neuerPaechter = null;
   const ok = await modal(`Garten ${nr} vergeben`, h('div', { class: 'form' },
+    vorschlag && vorschlag.groesse ? h('p', { class: 'hint' }, `Garten ${nr}: ${nfFlex.format(vorschlag.groesse)} m²${vorschlag.laube ? ', mit Laube' : ', keine Laube erfasst'}. Der Vorschlag folgt der Reihenfolge der Anmeldung und prüft die Wünsche gegen diese Angaben.`) : null,
     fld('An', f.wer, 'Name, Anschrift und Kontakt kommen von der Warteliste; der Eintrag wird danach entfernt.', true),
+    h('div', { class: 'field wide' }, h('button', { type: 'button', class: 'btn small', onclick: () => pdfDrucken({
+      url: `/api/admin/warteliste/${encodeURIComponent(f.wer.value)}/brief?art=angebot&garten=${encodeURIComponent(nr)}`,
+      oeffnenUrl: `/api/admin/warteliste/${encodeURIComponent(f.wer.value)}/brief/oeffnen?art=angebot&garten=${encodeURIComponent(nr)}`,
+      titel: 'Gartenangebot', meldung: () => 'Das Angebot wurde im PDF-Programm geöffnet.' }) }, 'Angebotsschreiben drucken')),
     fld('Übergeben am', f.seit), fld('Mitgliedsnummer *', f.mitgliedsnr), fld('Gartengröße in m² *', f.groesse),
     fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz)),
   [{ label: 'Abbrechen', value: false }, { label: 'Garten vergeben', cls: 'primary', value: true, action: async () => {
@@ -5546,6 +5563,11 @@ const begehungslisteDrucken = () => pdfDrucken({
   url: '/api/admin/begehungsliste', oeffnenUrl: '/api/admin/begehungsliste/oeffnen',
   titel: 'Begehungsliste', meldung: () => 'Die Begehungsliste wurde im PDF-Programm geöffnet – dort drucken und zur Begehung mitnehmen.',
 });
+const saisonlisteDrucken = (art) => pdfDrucken({
+  url: '/api/admin/saisonliste?art=' + art, oeffnenUrl: '/api/admin/saisonliste/oeffnen?art=' + art,
+  titel: art === 'herbst' ? 'Saison-Liste Herbst' : 'Saison-Liste Frühjahr',
+  meldung: () => 'Die Saison-Liste wurde im PDF-Programm geöffnet – dort drucken und zum Rundgang mitnehmen.',
+});
 const MAENGEL_STUFEN = [
   { key: 'erst', knopf: 'Aufforderung schreiben', titel: 'Aufforderung' },
   { key: 'erinnerung', knopf: 'Erinnerung schreiben', titel: 'Erinnerung' },
@@ -5570,7 +5592,7 @@ async function maengelSchreiben(nr, stufe) {
 
 function mangelDialog(m, gartennr) {
   const isNew = !m || !m.id;
-  const cur = { gartennr: gartennr || '', datum: todayIso(), art: 'Pflege und Unkraut', beschreibung: '', frist: '', erledigtAm: '', ...(m || {}) };
+  const cur = { gartennr: gartennr || '', datum: todayIso(), art: merkeLesen('mangel-art', 'Pflege und Unkraut'), beschreibung: '', frist: '', erledigtAm: '', ...(m || {}) };
   const f = {
     gartennr: h('input', { type: 'text', value: cur.gartennr, maxlength: 20, style: 'width:6em', placeholder: 'z. B. 12' }),
     datum: h('input', { type: 'date', value: cur.datum }),
@@ -5596,6 +5618,7 @@ function mangelDialog(m, gartennr) {
     { label: 'Abbrechen', value: false },
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
       const data = { gartennr: f.gartennr.value, datum: f.datum.value, art: f.art.value, beschreibung: f.beschreibung.value, frist: f.frist.value, erledigtAm: f.erledigt.value };
+      merkeSchreiben('mangel-art', f.art.value);
       try {
         const gespeichert = isNew ? await api('POST', '/api/admin/maengel', data) : await api('PUT', `/api/admin/maengel/${cur.id}`, data);
         const id = isNew ? gespeichert.id : cur.id;
@@ -5825,7 +5848,19 @@ function adminMaengel() {
     if (!(await confirmBox('Diesen Mangel löschen?', 'Löschen', true))) return;
     try { await api('DELETE', `/api/admin/maengel/${m.id}`); S.maengel = null; render(); } catch (e) { handleErr(e); }
   };
+  const auswahl = S.maengelAuswahl || (S.maengelAuswahl = new Set());
+  for (const id of [...auswahl]) if (!offen.some((m) => m.id === id)) auswahl.delete(id);
+  const sammelErledigt = async () => {
+    const l = offen.filter((m) => auswahl.has(m.id));
+    if (!l.length || !(await confirmBox(`${l.length} Mängel als erledigt markieren?`, 'Erledigt'))) return;
+    try {
+      for (const m of l) await api('PUT', `/api/admin/maengel/${m.id}`, { gartennr: m.gartennr, datum: m.datum, art: m.art, beschreibung: m.beschreibung, frist: m.frist || '', erledigtAm: heute });
+      auswahl.clear(); S.maengel = null; toast(`${l.length} Mängel erledigt`, 'ok'); render();
+    } catch (e) { handleErr(e); S.maengel = null; render(); }
+  };
   const zeile = (m) => h('li', { class: 'mangel' + (m.erledigtAm ? ' erledigt' : '') },
+    m.erledigtAm ? null : h('input', { type: 'checkbox', class: 'mangel-wahl', checked: auswahl.has(m.id), 'aria-label': `Mangel ${m.art} in Garten ${m.gartennr} auswählen`,
+      onchange: (e) => { if (e.target.checked) auswahl.add(m.id); else auswahl.delete(m.id); render(); } }),
     h('div', { class: 'mangel-text' }, h('b', null, m.art), m.foto ? h('span', { class: 'badge' }, 'Foto') : null, h('div', null, m.beschreibung),
       h('div', { class: 'hint' }, `Begehung ${deDate(m.datum)}`, m.frist && !m.erledigtAm ? ` · Frist ${deDate(m.frist)}` : '', m.erledigtAm ? ` · erledigt ${deDate(m.erledigtAm)}` : '')),
     !m.erledigtAm && m.frist && m.frist < heute ? h('span', { class: 'badge warn' }, 'Frist abgelaufen') : null,
@@ -5843,6 +5878,8 @@ function adminMaengel() {
       h('button', { class: 'btn primary', onclick: () => neu('') }, '+ Mangel eintragen'),
       h('button', { class: 'btn', onclick: begehungslisteDrucken }, 'Begehungsliste drucken'),
       h('button', { class: 'btn', onclick: begehungDurchfuehren, title: 'Garten für Garten durchgehen und Mängel und Nutzung gleich eintragen, z. B. mit dem Laptop beim Rundgang' }, 'Begehung durchführen'),
+      auswahl.size ? h('button', { class: 'btn primary', onclick: sammelErledigt }, `${auswahl.size} als erledigt markieren`) : null,
+      offen.length > 1 ? h('button', { class: 'btn', onclick: () => { if (auswahl.size === offen.length) auswahl.clear(); else offen.forEach((m) => auswahl.add(m.id)); render(); } }, auswahl.size === offen.length ? 'Auswahl aufheben' : 'Alle auswählen') : null,
       h('div', { class: 'spacer' }),
       h('span', { class: 'stat' }, `${offen.length} offen · ${erledigt.length} erledigt`)),
     garten.length ? garten.map(([nr, l]) => h('div', { class: 'card mangel-garten' },
@@ -5879,7 +5916,7 @@ const terminZeit = (t) => (t.von ? `${t.von}${t.bis ? '–' + t.bis : ''} Uhr` :
 
 function terminDialog(t) {
   const isNew = !t || !t.id;
-  const cur = { datum: todayIso(), von: '', bis: '', titel: '', art: 'Arbeitseinsatz', ort: '', notiz: '', tops: '', ...(t || {}) };
+  const cur = { datum: todayIso(), von: '', bis: '', titel: '', art: merkeLesen('termin-art', 'Arbeitseinsatz'), ort: '', notiz: '', tops: '', ...(t || {}) };
   const f = {
     datum: h('input', { type: 'date', value: cur.datum }),
     von: h('input', { type: 'time', value: cur.von }), bis: h('input', { type: 'time', value: cur.bis }),
@@ -5903,6 +5940,7 @@ function terminDialog(t) {
     { label: 'Abbrechen', value: false },
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
       const data = { datum: f.datum.value, von: f.von.value, bis: f.bis.value, titel: f.titel.value, art: f.art.value, ort: f.ort.value, notiz: f.notiz.value.trim(), tops: f.tops.value };
+      merkeSchreiben('termin-art', f.art.value);
       try {
         if (isNew && f.serie.value) {
           const r = await api('POST', '/api/admin/termine-serie', { ...data, rhythmus: f.serie.value, bis: f.serieBis.value });
@@ -6589,6 +6627,10 @@ function adminBerichte() {
         h('button', { class: 'btn', onclick: vereinsinfoDialog }, 'Texte bearbeiten')),
       kachel('daten', 'Amtsübergabe', 'Vereinsakte für den neuen Vorstand: alle Daten und Dateien plus »Lies mich zuerst« mit Zahlen, Regeln und offenen Punkten.',
         h('button', { class: 'btn', onclick: vereinsakteErstellen }, 'Erstellen')),
+      kachel('zaehler', 'Saison-Liste Wasser', 'Vordruck für den Rundgang im Frühjahr (Wasser an) oder Herbst (Wasser ab, winterfest) mit Ablauf und Zeile je Garten.',
+        h('div', { class: 'row' },
+          h('button', { class: 'btn', onclick: () => saisonlisteDrucken('fruehjahr') }, 'Frühjahr'),
+          h('button', { class: 'btn', onclick: () => saisonlisteDrucken('herbst') }, 'Herbst'))),
       kachel('warnung', 'Begehungsliste', 'Vordruck für den Rundgang durch die Anlage, mit den noch offenen Mängeln je Garten.',
         h('button', { class: 'btn', onclick: begehungslisteDrucken }, 'Drucken')),
       kachel('kalender', `Vereinstermine ${new Date().getFullYear()}`, 'Jahresplaner als Aushang für den Schaukasten.',

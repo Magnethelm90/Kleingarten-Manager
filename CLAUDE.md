@@ -87,6 +87,11 @@
   (nur Dialoge mit »primary«-Knopf, nur Esc), Cockpit zurückstellen (aufgabe.Schluessel = Hash ohne Ziffern, Data.Zurueckgestellt,
   GET /api/admin/aufgaben?alle=1, POST …/zurueckstellen), `FEHLER_HILFE` in app.js (Toast mit Knopf zum Ziel), statisch.go
   (ETag + gzip im Speicher für .js/.css/.html/.svg), @media print in style.css (Menü/Knöpfe aus, offene Dialoge drucken sich selbst).
+- Ideen-Paket 4 (Nov 2026): beitragskonto.go (Beitragsübersicht je Pächter, Mehr-Menü), zaehlerwechsel.go (Wechsel-Protokoll-PDF im Eichfristen-Dialog),
+  fristenkalender.go (GET /api/admin/fristen.ics; Link im Cockpit), wahl.go (Wahlen-Assistent: Stimmzettel, Auszählung, Beschlussbuch + Amtswechsel,
+  Knopf auf der Ämter-Seite), freiervorschlag.go (Vorschlag aus der Warteliste + Angebotsschreiben im Dialog »Garten vergeben«),
+  saisonliste.go (Frühjahr/Herbst-Vordruck, Kachel in Berichte), Tabellen: Knopf »Sortierung zurücksetzen« (tabellen.js), Dialoge merken Art
+  (`merkeLesen/merkeSchreiben`, localStorage `km-zuletzt-*`), Mängelliste mit Mehrfachauswahl »als erledigt markieren«.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

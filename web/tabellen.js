@@ -66,6 +66,15 @@
         zeilen.sort((a, b) => rich * vergleiche(w.get(a), w.get(b)) || Number(a.dataset.ur) - Number(b.dataset.ur));
       }
       rumpf.append(...zeilen, ...feste);
+      // Knopf zum Zurücksetzen nur, solange sortiert ist
+      if (sp == null) { if (tab._reset) { tab._reset.remove(); tab._reset = null; } }
+      else if (!tab._reset || !tab._reset.isConnected) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'btn small sort-reset'; b.textContent = 'Sortierung zurücksetzen';
+        b.addEventListener('click', () => { delete merke[schluessel]; sichern(); anwenden(null, 1); });
+        tab.before(b);
+        tab._reset = b;
+      }
       kopf.forEach((th, i) => {
         if (th.dataset.sortierbar) th.setAttribute('aria-sort', i === sp ? (rich > 0 ? 'ascending' : 'descending') : 'none');
       });
