@@ -156,7 +156,7 @@ func (a *App) handleTerminDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, t := range a.st.d.Termine {
 		if t.ID == id {
-			a.st.papierkorbLegeLocked("termin", t.Titel+" am "+germanDate(t.Datum), "", t)
+			pk := a.st.papierkorbLegeLocked("termin", t.Titel+" am "+germanDate(t.Datum), "", t)
 			a.st.d.Termine = append(a.st.d.Termine[:i], a.st.d.Termine[i+1:]...)
 			a.st.d.einsatzTerminGeloescht(t.ID)
 			a.st.audit("Termin gelöscht: %s am %s", t.Titel, germanDate(t.Datum))
@@ -164,7 +164,7 @@ func (a *App) handleTerminDelete(w http.ResponseWriter, r *http.Request) {
 				writeErr(w, err)
 				return
 			}
-			writeJSON(w, 200, map[string]bool{"ok": true})
+			writeJSON(w, 200, map[string]any{"ok": true, "papierkorbId": pk})
 			return
 		}
 	}

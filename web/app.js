@@ -179,6 +179,14 @@ function toast(msg, kind, aktion) {
   setTimeout(() => t.remove(), aktion ? 10000 : kind === 'err' ? 7000 : 3500);
 }
 
+// Nach dem Löschen: kurze Meldung mit »Rückgängig« (holt den Eintrag aus dem Papierkorb zurück).
+function geloeschtToast(r, was, neuLaden) {
+  const id = r && r.papierkorbId;
+  toast(`${was} gelöscht`, 'ok', id ? { label: 'Rückgängig', fn: async () => {
+    try { await api('POST', `/api/admin/papierkorb/${encodeURIComponent(id)}/wiederherstellen`); toast('Wiederhergestellt', 'ok'); await neuLaden(); } catch (e) { handleErr(e); }
+  } } : null);
+}
+
 // Fehlermeldungen, die auf eine fehlende Vorbereitung hinweisen, bekommen gleich den Weg dorthin.
 const FEHLER_HILFE = [
   [/keine Pächter angelegt|noch keine Gärten|keine Gärten mit Gartennummer/i, 'Pächter anlegen', 'admin:paechter'],
@@ -3276,7 +3284,7 @@ function verwaltungBeschluesse() {
         h('td', { class: 'aktionen' }, h('button', { class: 'btn small', onclick: () => nachher(beschlussDialog(b)) }, 'Bearbeiten'), ' ',
           mehrMenue([{ label: 'Löschen', gefahr: true, aktion: async () => {
             if (!(await confirmBox(`Beschluss ${b.nummer} löschen?`, 'Löschen', true))) return;
-            try { await api('DELETE', `/api/admin/beschluesse/${b.id}`); S.verw = null; render(); } catch (e) { handleErr(e); }
+            try { const r = await api('DELETE', `/api/admin/beschluesse/${b.id}`); S.verw = null; render(); geloeschtToast(r, 'Beschluss', () => { S.verw = null; render(); }); } catch (e) { handleErr(e); }
           } }])))))))
       : h('div', { class: 'card' }, alle.length ? h('p', { class: 'hint' }, 'Keine Treffer.') : leer('akte', 'Noch keine Beschlüsse', 'Trage Beschlüsse nach jeder Versammlung ein – dann ist die Frage »Wann haben wir das beschlossen?« schnell beantwortet.', '+ Beschluss', () => nachher(beschlussDialog(null)))));
 }
@@ -3332,7 +3340,7 @@ function verwaltungVertraege() {
         h('td', { class: 'aktionen' }, h('button', { class: 'btn small', onclick: () => nachher(vertragDialog(v)) }, 'Bearbeiten'), ' ',
           mehrMenue([{ label: 'Löschen', gefahr: true, aktion: async () => {
             if (!(await confirmBox(`Vertrag »${v.bezeichnung}« löschen?`, 'Löschen', true))) return;
-            try { await api('DELETE', `/api/admin/vertraege/${v.id}`); S.verw = null; render(); } catch (e) { handleErr(e); }
+            try { const r = await api('DELETE', `/api/admin/vertraege/${v.id}`); S.verw = null; render(); geloeschtToast(r, 'Vertrag', () => { S.verw = null; render(); }); } catch (e) { handleErr(e); }
           } }])))))))
       : h('div', { class: 'card' }, leer('akte', 'Noch keine Verträge', 'Haftpflicht, Strom, Wasser, Zwischenpacht … – mit Laufzeit und Kündigungsfrist, damit kein Kündigungstermin mehr verpasst wird.', '+ Vertrag', () => nachher(vertragDialog(null)))));
 }
@@ -5903,7 +5911,7 @@ function adminMaengel() {
   };
   const loeschen = async (m) => {
     if (!(await confirmBox('Diesen Mangel löschen?', 'Löschen', true))) return;
-    try { await api('DELETE', `/api/admin/maengel/${m.id}`); S.maengel = null; render(); } catch (e) { handleErr(e); }
+    try { const r = await api('DELETE', `/api/admin/maengel/${m.id}`); S.maengel = null; render(); geloeschtToast(r, 'Mangel', () => { S.maengel = null; render(); }); } catch (e) { handleErr(e); }
   };
   const auswahl = S.maengelAuswahl || (S.maengelAuswahl = new Set());
   for (const id of [...auswahl]) if (!offen.some((m) => m.id === id)) auswahl.delete(id);
@@ -6180,7 +6188,7 @@ function viewTermine() {
   };
   const loeschen = async (t) => {
     if (!(await confirmBox(`Termin „${t.titel}“ am ${deDate(t.datum)} löschen?`, 'Löschen', true))) return;
-    try { await api('DELETE', `/api/admin/termine/${t.id}`); await reload(); } catch (e) { handleErr(e); }
+    try { const r = await api('DELETE', `/api/admin/termine/${t.id}`); await reload(); geloeschtToast(r, 'Termin', reload); } catch (e) { handleErr(e); }
   };
   const gruppen = [];
   for (const t of imJahr) {

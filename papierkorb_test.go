@@ -65,3 +65,20 @@ func TestEintragPapierkorbAufraeumen(t *testing.T) {
 	}
 	a.st.mu.Unlock()
 }
+
+func TestLoeschenRueckgaengig(t *testing.T) {
+	_, h := newTestApp(t)
+	do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Eins", "gartennr": "1", "gartengroesse": 100})
+	m := decode[Mangel](t, do(h, "POST", "/api/admin/maengel", map[string]any{"gartennr": "1", "datum": "2026-05-01", "art": "Hecke und Bäume", "beschreibung": "zu hoch"}))
+	r := decode[map[string]any](t, do(h, "DELETE", "/api/admin/maengel/"+m.ID, nil))
+	pk, _ := r["papierkorbId"].(string)
+	if pk == "" {
+		t.Fatalf("keine Papierkorb-ID: %v", r)
+	}
+	if rec := do(h, "POST", "/api/admin/papierkorb/"+pk+"/wiederherstellen", nil); rec.Code != 200 {
+		t.Fatalf("Rückgängig: %d", rec.Code)
+	}
+	if l := decode[[]mangelAnsicht](t, do(h, "GET", "/api/admin/maengel", nil)); len(l) != 1 || l[0].ID != m.ID {
+		t.Errorf("Mangel nicht zurück: %+v", l)
+	}
+}

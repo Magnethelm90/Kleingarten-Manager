@@ -29,16 +29,19 @@ type PapierkorbEintrag struct {
 var papierkorbArten = map[string]string{"mangel": "Mangel", "termin": "Termin", "beschluss": "Beschluss", "vertrag": "Vertrag"}
 
 // papierkorbLegeLocked legt ein Abbild ab. Der Aufrufer hält s.mu und speichert danach.
-func (s *Store) papierkorbLegeLocked(art, titel, paechterID string, v any) {
+// Liefert die ID des Eintrags (für »Rückgängig« direkt nach dem Löschen), leer, wenn nichts abgelegt wurde.
+func (s *Store) papierkorbLegeLocked(art, titel, paechterID string, v any) string {
 	raw, err := json.Marshal(v)
 	if err != nil {
-		return
+		return ""
 	}
-	s.d.Papierkorb = append(s.d.Papierkorb, PapierkorbEintrag{ID: newID(), Art: art, Titel: titel,
+	id := newID()
+	s.d.Papierkorb = append(s.d.Papierkorb, PapierkorbEintrag{ID: id, Art: art, Titel: titel,
 		GeloeschtAm: time.Now().Format("2006-01-02"), PaechterID: paechterID, Daten: raw})
 	if n := len(s.d.Papierkorb); n > papierkorbMax {
 		s.d.Papierkorb = append([]PapierkorbEintrag(nil), s.d.Papierkorb[n-papierkorbMax:]...)
 	}
+	return id
 }
 
 // papierkorbAufraeumenLocked entfernt, was länger als 30 Tage liegt. Liefert true, wenn etwas entfernt wurde.
