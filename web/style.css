@@ -1119,3 +1119,12 @@ th[aria-sort="descending"]::after { content: " \25BC"; font-size: .7em; }
 }
 /* Häkchen und Auswahlpunkte nie auf volle Feldbreite ziehen */
 .form input[type=checkbox], .form input[type=radio], dialog input[type=checkbox], dialog input[type=radio] { width: auto; flex: 0 0 auto; }
+
+/* Teilbetrag direkt in der Zahlungszeile */
+input.teilbetrag { width: 104px; margin-left: 8px; padding: 4px 8px; font-size: 13px; }
+select.err, textarea.err { border-color: var(--err); background: var(--err-bg); }
+details.weitere { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px; background: var(--green-tint); }
+details.weitere > summary { cursor: pointer; font-weight: 600; color: var(--green-dark); }
+details.weitere[open] > summary { margin-bottom: 12px; }
+ol.probier{padding-left:20px;margin:0}
+ol.probier li{margin:0 0 10px}

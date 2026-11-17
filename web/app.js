@@ -165,6 +165,36 @@ function hilfe(text) {
   });
   return w;
 }
+// Kurzerklärung je Seite (»?« neben der Überschrift): wozu die Seite dient und womit man anfängt.
+const SEITEN_HILFE = {
+  eingabe: 'Hier trägst du jedes Jahr die Zählerstände und Arbeitsstunden ein. Fang mit der Schnelleingabe an: Nummer tippen, Enter drücken, Werte eintragen.',
+  rechnungen: 'Hier prüfst und stellst du die Rechnungen aus. Erster Schritt: Zählerstände eintragen, dann »Alle offenen ausstellen«.',
+  zahlungen: 'Hier siehst du, wer schon bezahlt hat. Haken setzen = bezahlt. Wer überfällig ist, bekommt auf Wunsch eine Mahnung (nie automatisch).',
+  termine: 'Der Jahresplan des Vereins: Arbeitseinsätze, Versammlungen, Ablesetermine. Mit »+ Termin« legst du den ersten an.',
+  lageplan: 'Eine Karte der Anlage: jede Kachel ist ein Garten, die Farbe zeigt den Stand der Abrechnung. Ein Klick öffnet die Zählerstände.',
+  paechter: 'Die Stammdaten aller Pächter. Erster Schritt: »+ Pächter« oder die Liste aus Excel übernehmen (Einstellungen → Import).',
+  warteliste: 'Interessenten in der Reihenfolge ihrer Anmeldung. Wird ein Garten frei, schlägt das Programm den Nächsten vor.',
+  kuendigungen: 'Eine Kündigung erfassen, die Frist prüfen und die Schritte bis zur Übergabe abhaken. Das Cockpit erinnert an Offenes.',
+  jubilaeen: 'Wer wie lange Mitglied ist, z. B. für Ehrungen in der Versammlung. Das Datum kommt aus der Gartenhistorie.',
+  maengel: 'Beim Rundgang gefundene Mängel mit Frist. Erster Schritt: »Begehung durchführen« und Garten für Garten durchgehen.',
+  inventar: 'Wer hat welchen Schlüssel, wo steht welches Gerät. Ausgabe und Rückgabe werden im Verlauf festgehalten.',
+  rundschreiben: 'Ein Brief des Vorstands an alle Pächter oder eine Auswahl, als Brief-PDF, Aushang oder E-Mail-Paket.',
+  verwaltung: 'Beschlussbuch, Verträge und Ämter des Vereins an einem Ort. Beschlüsse trägst du nach jeder Versammlung ein.',
+  kassenbericht: 'Einnahmen, Ausgaben und Kassenbestand des Jahres. Erster Schritt: Anfangsbestand prüfen, Ausgaben mit Beleg erfassen.',
+  haushalt: 'Plan und Ist je Posten für das Jahr. Das Ist kommt laufend aus dem Kassenbericht.',
+  spenden: 'Geldspenden erfassen und die Zuwendungsbestätigung für das Finanzamt ausstellen. Zuerst die Gemeinnützigkeit eintragen.',
+  vorauszahlung: 'Monatsbeträge, die Pächter vorab überweisen. Betrag je Pächter eintragen, Eingänge erkennt der Kontoauszug.',
+  sepa: 'Lastschriften einziehen: Mandate erfassen, dann die Datei für das Online-Banking erstellen.',
+  berichte: 'Alles, was der Vorstand im Jahr abgeben muss: Jahresmeldung, Jahresbericht, Versammlungspaket und mehr.',
+  jahreswechsel: 'Am Jahresende schließt du das Jahr ab. Die Prüfung oben zeigt, was vorher noch fehlt; sie blockiert nichts.',
+  einstellungen: 'Vereinsname, Bankverbindung, Preise und Rechnungsdaten. Das bleibt in allen Folgejahren erhalten.',
+  daten: 'Pächter importieren, alles als Excel exportieren und Sicherungen anlegen oder zurückspielen.',
+  sicherheit: 'Mit einem Passwort schützt du die Verwaltung. Ohne Passwort kann jeder am Rechner Preise und Pächter ändern.',
+  datenschutz: 'Auskunft, Löschfristen und Aufbewahrung nach DSGVO an einem Ort.',
+  protokoll: 'Wer hat wann was geändert – zum Nachvollziehen, nicht zum Bearbeiten.',
+};
+const seitenHilfe = (key) => (SEITEN_HILFE[key] ? hilfe(SEITEN_HILFE[key]) : null);
+
 function hilfenSchliessen() {
   document.querySelectorAll('.hilfe.offen').forEach((x) => { x.classList.remove('offen'); x.querySelector('.hilfe-i').setAttribute('aria-expanded', 'false'); });
 }
@@ -177,6 +207,18 @@ function toast(msg, kind, aktion) {
     aktion ? h('button', { class: 'toast-aktion', onclick: () => { t.remove(); aktion.fn(); } }, aktion.label) : null);
   box.append(t);
   setTimeout(() => t.remove(), aktion ? 10000 : kind === 'err' ? 7000 : 3500);
+}
+
+// Fehler an einem Eingabefeld: Feld rot markieren, hineinspringen und die Meldung zeigen. Die Markierung verschwindet beim Tippen.
+function feldFehler(el, msg) {
+  toast(msg, 'err');
+  if (!el) return false;
+  el.classList.add('err');
+  const weg = () => { el.classList.remove('err'); el.removeEventListener('input', weg); el.removeEventListener('change', weg); };
+  el.addEventListener('input', weg); el.addEventListener('change', weg);
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  el.focus();
+  return false;
 }
 
 // Nach dem Löschen: kurze Meldung mit »Rückgängig« (holt den Eintrag aus dem Papierkorb zurück).
@@ -939,7 +981,23 @@ function demoBanner(st) {
   const istAdmin = !st.hasPassword || st.loggedIn;
   return h('div', { class: 'banner info' },
     'Du siehst Beispieldaten: ein erfundener Verein mit erfundenen Namen und Zahlen zum Ausprobieren.',
+    ' ', h('button', { class: 'btn small', onclick: probierDialog }, 'Probier es aus'),
     istAdmin ? [' ', h('button', { class: 'btn small', onclick: beispieldatenEntfernen }, 'Beispieldaten entfernen und eigene Daten anlegen')] : null);
+}
+
+// Drei kleine Aufgaben mit den Beispieldaten: jede führt direkt an die richtige Stelle.
+async function probierDialog() {
+  const AUFGABEN = [
+    ['Einen Zählerstand eintragen', 'Wähle einen Pächter, gib Wasser und Strom ein. Gespeichert wird automatisch.', 'Zur Schnelleingabe', () => { S.tab = 'eingabe'; S.eingabeMode = 'schnell'; }],
+    ['Eine Rechnung ansehen und ausstellen', 'Prüfe eine Rechnung samt Vorschau und stelle sie aus – mit Beispieldaten ganz ohne Folgen.', 'Zu den Rechnungen', () => { S.tab = 'rechnungen'; S.invTab = 'pruefen'; }],
+    ['Eine Zahlung abhaken', 'Setze den Haken bei einer ausgestellten Rechnung; ein Teilbetrag geht direkt in der Zeile.', 'Zu den Zahlungen', () => { S.tab = 'zahlungen'; }],
+  ];
+  const wahl = await modal('Probier es aus', h('div', null,
+    h('p', { class: 'hint' }, 'Drei kurze Aufgaben, um das Programm kennenzulernen. Die Beispieldaten kannst du jederzeit entfernen.'),
+    h('ol', { class: 'probier' }, AUFGABEN.map((a) => h('li', null, h('strong', null, a[0]), h('div', { class: 'hint' }, a[1]))))),
+    [{ label: 'Schließen' }, ...AUFGABEN.map((a, i) => ({ label: a[2], value: String(i), primary: i === 0 }))]);
+  const n = Number(wahl);
+  if (wahl !== undefined && wahl !== null && wahl !== '' && AUFGABEN[n]) { AUFGABEN[n][3](); await reload(); }
 }
 
 function beispieldatenKarte(st, istAdmin) {
@@ -1334,7 +1392,7 @@ function eingabeRow(p, ro) {
 function viewEingabe() {
   const st = S.state;
   return h('div', null,
-    h('h2', null, `Zählerstände ${st.year}`),
+    h('h2', null, `Zählerstände ${st.year}`, ' ', seitenHilfe('eingabe')),
     h('div', { class: 'toolbar' },
       h('div', { class: 'subtabs', style: 'margin:0' },
         h('button', { class: S.eingabeMode === 'schnell' ? 'active' : '', onclick: () => { S.eingabeMode = 'schnell'; render(); } }, 'Schnelleingabe (Nummer eintippen)'),
@@ -1791,7 +1849,7 @@ function viewLageplan() {
     h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, icon('drucker', 18), 'Drucken')) : null;
   const wartende = st.wartelisteAnzahl || 0;
   return h('div', null,
-    h('div', { class: 'toolbar' }, h('h2', { style: 'margin:0' }, `Lageplan ${st.year}`), h('div', { class: 'spacer' }), umschalter, druck, edit || S.lage3d ? null : leiste),
+    h('div', { class: 'toolbar' }, h('h2', { style: 'margin:0' }, `Lageplan ${st.year}`, ' ', seitenHilfe('lageplan')), h('div', { class: 'spacer' }), umschalter, druck, edit || S.lage3d ? null : leiste),
     freie.length && !edit ? h('div', { class: 'banner info' },
       h('span', null, `${freie.length === 1 ? `Garten ${freie[0]} ist` : `${freie.length} Gärten sind`} frei. `,
         wartende ? `${wartende} Interessent${wartende === 1 ? '' : 'en'} auf der Warteliste.` : 'Die Warteliste ist leer.'),
@@ -2172,7 +2230,7 @@ function viewRechnungen() {
   const sub = reiterLeiste([
     { label: 'Rechnungen prüfen & ausstellen', aktiv: S.invTab !== 'archiv', geh: () => { S.invTab = 'pruefen'; render(); } },
     { label: `Archiv (${(st.archive || []).length})`, aktiv: S.invTab === 'archiv', geh: () => { S.invTab = 'archiv'; render(); } }]);
-  return h('div', null, h('h2', null, `Rechnungen ${st.year}`), sub, S.invTab === 'archiv' ? viewArchiv() : viewAusstellen());
+  return h('div', null, h('h2', null, `Rechnungen ${st.year}`, ' ', seitenHilfe('rechnungen')), sub, S.invTab === 'archiv' ? viewArchiv() : viewAusstellen());
 }
 
 async function loadArchivAlle() {
@@ -2585,6 +2643,21 @@ function viewZahlungen() {
           if (!ev.target.value) { ev.target.value = e.bezahltAm; return; }
           try { await savePayment(e, { bezahltAm: ev.target.value }); draw(); } catch (er) { handleErr(er); }
         } });
+      // Teilzahlung direkt in der Zeile: Betrag eintragen, Enter – ohne den Details-Dialog
+      const teil = open && e.gesamt >= 0 ? h('input', { type: 'text', inputmode: 'decimal', class: 'teilbetrag', autocomplete: 'off',
+        placeholder: partial ? `bisher ${numIn(payPaid(e))}` : 'Teilbetrag €', title: 'Nur ein Teil wurde gezahlt? Betrag eintragen und Enter drücken. Der Rest bleibt offen.',
+        'aria-label': `Teilbetrag für ${e.name}`,
+        onkeydown: (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); ev.target.blur(); } },
+        onchange: async (ev) => {
+          if (!ev.target.value.trim()) return;
+          const v = parseNum(ev.target.value);
+          if (v == null || Number.isNaN(v) || v <= 0) { toast('Bitte einen Betrag größer 0 eintragen, z. B. 50,00.', 'err'); ev.target.classList.add('err'); ev.target.focus(); return; }
+          try {
+            await savePayment(e, { bezahltAm: e.bezahltAm || todayIso(), bezahltBetrag: v });
+            toast(payIsOpen(e) ? `Teilzahlung ${eur(v)} gebucht – offen bleiben ${eur(payOpen(e))}` : 'Rechnung vollständig bezahlt', 'ok');
+            draw();
+          } catch (er) { handleErr(er); }
+        } }) : null;
       const mahnbar = open && e.gesamt >= 0;
       const mchk = h('input', { type: 'checkbox', checked: S.mahnSel.has(e.id), disabled: !mahnbar, title: mahnbar ? 'für Mahnung auswählen' : 'nicht offen oder ein Guthaben',
         onchange: (ev) => { if (ev.target.checked) S.mahnSel.add(e.id); else S.mahnSel.delete(e.id); draw(); } });
@@ -2597,7 +2670,7 @@ function viewZahlungen() {
         h('td', null, h('span', { class: 'badge ' + (partial || (e.gutschriften && e.gutschriften.length && payOpen(e) < -0.004) ? 'warn' : !open ? 'ok' : late ? 'err' : 'neu') },
           partial ? `Teilzahlung, offen ${eur(payOpen(e))}` : !open && e.gesamt >= 0 && payOpen(e) < -0.004 && e.gutschriften && e.gutschriften.length ? `zu erstatten ${eur(-payOpen(e))}` : !open ? (e.gesamt < 0 ? 'ausgezahlt' : 'bezahlt') : late ? 'überfällig' : e.gesamt < 0 ? 'Guthaben offen' : 'offen'),
           open && e.mahnungen && e.mahnungen.length ? h('div', { class: 'hint', title: 'Letzte Mahnung' }, `${MAHN_TITEL[e.mahnungen[e.mahnungen.length - 1].stufe]} ${deDate(e.mahnungen[e.mahnungen.length - 1].datum)}, Frist ${deDate(e.mahnungen[e.mahnungen.length - 1].frist)}`) : null),
-        h('td', { class: 'paycell' }, chk, date),
+        h('td', { class: 'paycell' }, chk, date, teil),
         h('td', { class: 'note', title: e.notiz || '' }, e.notiz || ''),
         h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await paymentDialog(e); if (r === 'gutschrift') await gutschriftDialog(e); else if (r !== false && r !== undefined) draw(); } }, 'Details'))));
     }
@@ -2609,7 +2682,7 @@ function viewZahlungen() {
 
   const notIssued = st.paechter.length - Object.keys(st.issued || {}).length;
   return h('div', null,
-    h('h2', null, `Zahlungen ${st.year}`),
+    h('h2', null, `Zahlungen ${st.year}`, ' ', seitenHilfe(S.tab === 'zahlungen' ? 'zahlungen' : S.adminTab)),
     reiterKopf(),
     h('p', { class: 'hint' }, 'Hier siehst du, welche Rechnungen bezahlt sind und welche noch offen. Haken setzen = bezahlt heute (das Datum kannst du ändern). Über »Details« trägst du Teilzahlungen oder eine Notiz ein. Rechnungen mit Guthaben erscheinen hier auch, damit du siehst, was noch an Pächter auszuzahlen ist.'),
     notIssued > 0 ? h('div', { class: 'banner info' }, `${notIssued} Pächter ${notIssued === 1 ? 'hat' : 'haben'} in ${st.year} noch keine ausgestellte Rechnung und ${notIssued === 1 ? 'taucht' : 'tauchen'} deshalb hier noch nicht auf.`) : null,
@@ -2682,7 +2755,8 @@ function spendeDialogEinmal(x, vorlage) {
       fld('Notiz', f.notiz, null, true)));
   const speichern = async () => {
       const betrag = parseNum(f.betrag.value);
-      if (betrag == null || Number.isNaN(betrag) || betrag <= 0) { toast('Bitte einen Betrag größer als 0 eintragen.', 'err'); return false; }
+      if (betrag == null || Number.isNaN(betrag) || betrag <= 0) return feldFehler(f.betrag, 'Bitte einen Betrag größer als 0 eintragen, z. B. 50,00.');
+      if (!f.name.value.trim()) return feldFehler(f.name, 'Bitte den Namen des Spenders eintragen.');
       const daten = { ...cur, paechterId: f.paechter.value, datum: f.datum.value, betrag, name: f.name.value, strasse: f.strasse.value, plzOrt: f.plzOrt.value, verzicht: f.verzicht.checked, notiz: f.notiz.value };
       try {
         if (isNew) await api('POST', '/api/admin/spenden', daten); else await api('PUT', `/api/admin/spenden/${cur.id}`, daten);
@@ -3454,7 +3528,6 @@ function verwaltungBeschluesse() {
           b.ja + b.nein + b.enthaltung ? h('div', { class: 'hint' }, `${b.ja} : ${b.nein} : ${b.enthaltung}`) : null),
         h('td', { class: 'aktionen' }, h('button', { class: 'btn small', onclick: () => nachher(beschlussDialog(b)) }, 'Bearbeiten'), ' ',
           mehrMenue([{ label: 'Löschen', gefahr: true, aktion: async () => {
-            if (!(await confirmBox(`Beschluss ${b.nummer} löschen?`, 'Löschen', true))) return;
             try { const r = await api('DELETE', `/api/admin/beschluesse/${b.id}`); S.verw = null; render(); geloeschtToast(r, 'Beschluss', () => { S.verw = null; render(); }); } catch (e) { handleErr(e); }
           } }])))))))
       : h('div', { class: 'card' }, alle.length ? h('p', { class: 'hint' }, 'Keine Treffer.') : leer('akte', 'Noch keine Beschlüsse', 'Trage Beschlüsse nach jeder Versammlung ein – dann ist die Frage »Wann haben wir das beschlossen?« schnell beantwortet.', '+ Beschluss', () => nachher(beschlussDialog(null)))));
@@ -3510,7 +3583,6 @@ function verwaltungVertraege() {
         h('td', { class: 'num' }, v.jaehrlich ? eur(v.jaehrlich) : ''),
         h('td', { class: 'aktionen' }, h('button', { class: 'btn small', onclick: () => nachher(vertragDialog(v)) }, 'Bearbeiten'), ' ',
           mehrMenue([{ label: 'Löschen', gefahr: true, aktion: async () => {
-            if (!(await confirmBox(`Vertrag »${v.bezeichnung}« löschen?`, 'Löschen', true))) return;
             try { const r = await api('DELETE', `/api/admin/vertraege/${v.id}`); S.verw = null; render(); geloeschtToast(r, 'Vertrag', () => { S.verw = null; render(); }); } catch (e) { handleErr(e); }
           } }])))))))
       : h('div', { class: 'card' }, leer('akte', 'Noch keine Verträge', 'Haftpflicht, Strom, Wasser, Zwischenpacht … – mit Laufzeit und Kündigungsfrist, damit kein Kündigungstermin mehr verpasst wird.', '+ Vertrag', () => nachher(vertragDialog(null)))));
@@ -3939,7 +4011,7 @@ function viewAdmin() {
       : t === 'jubilaeen' ? adminJubilaeen() : t === 'daten' ? adminData() : t === 'protokoll' ? adminProtokoll() : t === 'datenschutz' ? adminDatenschutz() : adminSecurity();
   const eintrag = navEintrag('admin', t);
   return h('div', null,
-    h('h2', null, eintrag ? navLabel(eintrag) : 'Verwaltung'),
+    h('h2', null, eintrag ? navLabel(eintrag) : 'Verwaltung', ' ', seitenHilfe(t)),
     reiterKopf(),
     !st.hasPassword && ['einstellungen', 'daten', 'datenschutz'].includes(t) ? h('div', { class: 'banner warn' }, 'Für die Verwaltung ist noch kein Passwort gesetzt – jeder an diesem Rechner kann Pächter und Preise ändern. ',
       h('button', { class: 'btn small', onclick: () => { adminTabWaehlen('sicherheit'); render(); } }, 'Passwort festlegen')) : null,
@@ -4022,19 +4094,28 @@ function paechterDialog(p, vorlage) {
   f.gartengroesse.setAttribute('inputmode', 'decimal');
   f.umlage.setAttribute('inputmode', 'decimal');
   const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
+  let weitere;
   const body = h('div', { class: 'form' },
     fld('Mitgliedsnummer *', f.mitgliedsnr), fld('Gartennummer', f.gartennr), fld('Anrede', f.anrede),
     fld('Name *', f.name), fld('Straße und Hausnummer', f.strasse), fld('PLZ und Ort', f.plzOrt),
     fld('Versandart', f.versand, 'Steht oben rechts auf der Rechnung'),
     fld('E-Mail-Adresse', f.email, 'Empfänger beim Vorbereiten der Rechnungs-E-Mail'), fld('Telefon', f.telefon),
-    fld('Gartengröße in m² *', f.gartengroesse), fld('Umlage abweichend in €', f.umlage, 'Nur ausfüllen, wenn dieser Pächter nicht die Standard-Umlage zahlt'),
-    fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz),
-    fld('Notiz (nur intern, steht nicht auf der Rechnung – bitte keine Gesundheitsdaten oder sonstige sensible Angaben)', f.notiz, null, true));
+    fld('Gartengröße in m² *', f.gartengroesse),
+    // selten gebrauchte Angaben eingeklappt; aufgeklappt, sobald dort schon etwas steht oder ein Fehler gemeldet wird
+    weitere = h('details', { class: 'weitere field wide', open: !!(cur.umlageAbweichend != null || cur.wasserzaehlerNr || cur.stromzaehlerNr || cur.notiz) },
+      h('summary', null, 'Weitere Angaben (Umlage, Zählernummern, Notiz)'),
+      h('div', { class: 'form' },
+        fld('Umlage abweichend in €', f.umlage, 'Nur ausfüllen, wenn dieser Pächter nicht die Standard-Umlage zahlt'),
+        fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz),
+        fld('Notiz (nur intern, steht nicht auf der Rechnung – bitte keine Gesundheitsdaten oder sonstige sensible Angaben)', f.notiz, null, true))));
   return modal(isNew ? 'Pächter anlegen' : `Pächter bearbeiten – ${cur.name}`, body, [
     { label: 'Abbrechen', value: false },
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
       const gg = parseNum(f.gartengroesse.value), um = parseNum(f.umlage.value);
-      if (Number.isNaN(gg) || Number.isNaN(um) || (gg !== null && gg < 0) || (um !== null && um < 0)) { toast('Gartengröße und Umlage müssen Zahlen ab 0 sein.', 'err'); return false; }
+      if (!f.mitgliedsnr.value.trim()) return feldFehler(f.mitgliedsnr, 'Bitte die Mitgliedsnummer eintragen.');
+      if (!f.name.value.trim()) return feldFehler(f.name, 'Bitte den Namen eintragen.');
+      if (Number.isNaN(gg) || (gg !== null && gg < 0)) return feldFehler(f.gartengroesse, 'Die Gartengröße muss eine Zahl ab 0 sein, z. B. 300.');
+      if (Number.isNaN(um) || (um !== null && um < 0)) { weitere.open = true; return feldFehler(f.umlage, 'Die Umlage muss eine Zahl ab 0 sein, z. B. 25,00.'); }
       const data = { mitgliedsnr: f.mitgliedsnr.value, gartennr: f.gartennr.value, anrede: f.anrede.value, name: f.name.value,
         strasse: f.strasse.value, plzOrt: f.plzOrt.value, versand: f.versand.value, email: f.email.value.trim(), telefon: f.telefon.value, gartengroesse: gg ?? 0, umlageAbweichend: um,
         wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value, notiz: f.notiz.value.trim() };
@@ -4684,9 +4765,9 @@ function ausgabeDialogEinmal(a, vorlage) {
       isNew ? h('span', { class: 'fhint' }, 'Werden nach dem Anlegen hochgeladen.') : null));
   const speichern = async () => {
       const b = parseNum(betrag.value);
-      if (!datum.value) { toast('Bitte ein Datum angeben.', 'err'); return false; }
-      if (!besch.value.trim()) { toast('Bitte eine Beschreibung eintragen.', 'err'); return false; }
-      if (b === null || Number.isNaN(b) || b <= 0) { toast('Bitte einen Betrag größer 0 eintragen.', 'err'); return false; }
+      if (!datum.value) return feldFehler(datum, 'Bitte ein Datum angeben.');
+      if (!besch.value.trim()) return feldFehler(besch, 'Bitte eine Beschreibung eintragen, z. B. Rasenmäher.');
+      if (b === null || Number.isNaN(b) || b <= 0) return feldFehler(betrag, 'Bitte einen Betrag größer 0 eintragen, z. B. 49,90.');
       const data = { datum: datum.value, beschreibung: besch.value.trim(), kategorie: kategorie.value.trim(), betrag: b, wiederkehrend: wiederkehrend.checked };
       try {
         const saved = isNew ? await api('POST', `/api/admin/ausgaben?year=${S.kasseYear}`, data) : await api('PUT', `/api/admin/ausgaben/${a.id}?year=${S.kasseYear}`, data);
@@ -4748,7 +4829,8 @@ function barbuchungDialogEinmal(b, vorlage) {
   const fld = (label, el, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), el);
   const speichern = async () => {
     const v = parseNum(f.betrag.value);
-    if (v == null || Number.isNaN(v) || v <= 0) { toast('Bitte einen Betrag größer 0 eintragen.', 'err'); return false; }
+    if (v == null || Number.isNaN(v) || v <= 0) return feldFehler(f.betrag, 'Bitte einen Betrag größer 0 eintragen, z. B. 12,50.');
+    if (!f.text.value.trim()) return feldFehler(f.text, 'Bitte einen Buchungstext eintragen.');
     try {
       S.barkasse = await api('POST', `/api/admin/barkasse?year=${jahr}`, { id: b ? b.id : '', datum: f.datum.value, text: f.text.value, kategorie: f.kat.value, betrag: f.art.value === 'aus' ? -v : v });
       barbuchungDialogEinmal.letzt = { datum: f.datum.value, art: f.art.value, kat: f.kat.value };
@@ -6139,17 +6221,20 @@ function adminMaengel() {
     try { await api('PUT', `/api/admin/maengel/${m.id}`, { gartennr: m.gartennr, datum: m.datum, art: m.art, beschreibung: m.beschreibung, frist: m.frist || '', erledigtAm: m.erledigtAm || '', ...aenderung }); S.maengel = null; render(); } catch (e) { handleErr(e); }
   };
   const loeschen = async (m) => {
-    if (!(await confirmBox('Diesen Mangel löschen?', 'Löschen', true))) return;
     try { const r = await api('DELETE', `/api/admin/maengel/${m.id}`); S.maengel = null; render(); geloeschtToast(r, 'Mangel', () => { S.maengel = null; render(); }); } catch (e) { handleErr(e); }
   };
   const auswahl = S.maengelAuswahl || (S.maengelAuswahl = new Set());
   for (const id of [...auswahl]) if (!offen.some((m) => m.id === id)) auswahl.delete(id);
   const sammelErledigt = async () => {
     const l = offen.filter((m) => auswahl.has(m.id));
-    if (!l.length || !(await confirmBox(`${l.length} Mängel als erledigt markieren?`, 'Erledigt'))) return;
+    if (!l.length) return;
+    const setze = (m, erledigtAm) => api('PUT', `/api/admin/maengel/${m.id}`, { gartennr: m.gartennr, datum: m.datum, art: m.art, beschreibung: m.beschreibung, frist: m.frist || '', erledigtAm });
     try {
-      for (const m of l) await api('PUT', `/api/admin/maengel/${m.id}`, { gartennr: m.gartennr, datum: m.datum, art: m.art, beschreibung: m.beschreibung, frist: m.frist || '', erledigtAm: heute });
-      auswahl.clear(); S.maengel = null; toast(`${l.length} Mängel erledigt`, 'ok'); render();
+      for (const m of l) await setze(m, heute);
+      auswahl.clear(); S.maengel = null; render();
+      toast(`${anz(l.length, 'Mangel', 'Mängel')} als erledigt markiert`, 'ok', { label: 'Rückgängig', fn: async () => {
+        try { for (const m of l) await setze(m, ''); S.maengel = null; render(); } catch (e) { handleErr(e); S.maengel = null; render(); }
+      } });
     } catch (e) { handleErr(e); S.maengel = null; render(); }
   };
   const zeile = (m) => h('li', { class: 'mangel' + (m.erledigtAm ? ' erledigt' : '') },
@@ -6211,7 +6296,7 @@ const terminZeit = (t) => (t.von ? `${t.von}${t.bis ? '–' + t.bis : ''} Uhr` :
 
 function terminDialog(t) {
   const isNew = !t || !t.id;
-  const cur = { datum: todayIso(), von: '', bis: '', titel: '', art: merkeLesen('termin-art', 'Arbeitseinsatz'), ort: '', notiz: '', tops: '', ...(t || {}) };
+  const cur = { datum: todayIso(), von: '', bis: '', titel: '', art: merkeLesen('termin-art', 'Arbeitseinsatz'), ort: merkeLesen('termin-ort', ''), notiz: '', tops: '', ...(t || {}) };
   const f = {
     datum: h('input', { type: 'date', value: cur.datum }),
     von: h('input', { type: 'time', value: cur.von }), bis: h('input', { type: 'time', value: cur.bis }),
@@ -6223,6 +6308,15 @@ function terminDialog(t) {
     serie: h('select', null, [['', 'einmalig'], ['woechentlich', 'jede Woche'], ['14tage', 'alle zwei Wochen'], ['monatlich', 'jeden Monat am selben Tag'], ['monatlich_wochentag', 'jeden Monat am selben Wochentag (z. B. erster Dienstag)']].map(([v, l]) => h('option', { value: v }, l))),
     serieBis: h('input', { type: 'date', value: isoInTagen(365) }),
   };
+  // Neuer Termin: der Titel folgt der Art (z. B. »Versammlung« → »Mitgliederversammlung«), solange er nicht von Hand geändert wurde.
+  const TITEL_VORSCHLAG = { Arbeitseinsatz: 'Arbeitseinsatz', Versammlung: 'Mitgliederversammlung', Ablesung: 'Zählerablesung', Fest: 'Sommerfest', Vorstand: 'Vorstandssitzung', Sonstiges: '' };
+  if (isNew) {
+    let vorschlag = f.titel.value ? null : TITEL_VORSCHLAG[f.art.value];
+    if (vorschlag) f.titel.value = vorschlag;
+    f.art.addEventListener('change', () => {
+      if (!f.titel.value || f.titel.value === vorschlag) { vorschlag = TITEL_VORSCHLAG[f.art.value] || ''; f.titel.value = vorschlag; }
+    });
+  }
   const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
   const body = h('div', { class: 'form' },
     fld('Titel *', f.titel, null, true), fld('Datum *', f.datum), fld('Art', f.art),
@@ -6236,6 +6330,7 @@ function terminDialog(t) {
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
       const data = { datum: f.datum.value, von: f.von.value, bis: f.bis.value, titel: f.titel.value, art: f.art.value, ort: f.ort.value, notiz: f.notiz.value.trim(), tops: f.tops.value };
       merkeSchreiben('termin-art', f.art.value);
+      merkeSchreiben('termin-ort', f.ort.value.trim());
       try {
         if (isNew && f.serie.value) {
           const r = await api('POST', '/api/admin/termine-serie', { ...data, rhythmus: f.serie.value, bis: f.serieBis.value });
@@ -6416,7 +6511,6 @@ function viewTermine() {
     } catch (e) { handleErr(e); }
   };
   const loeschen = async (t) => {
-    if (!(await confirmBox(`Termin „${t.titel}“ am ${deDate(t.datum)} löschen?`, 'Löschen', true))) return;
     try { const r = await api('DELETE', `/api/admin/termine/${t.id}`); await reload(); geloeschtToast(r, 'Termin', reload); } catch (e) { handleErr(e); }
   };
   const gruppen = [];
@@ -6427,7 +6521,7 @@ function viewTermine() {
   }
   const naechster = imJahr.find((t) => t.datum >= heute);
   return h('div', null,
-    h('h2', null, `Vereinstermine ${jahr}`),
+    h('h2', null, `Vereinstermine ${jahr}`, ' ', seitenHilfe('termine')),
     h('p', { class: 'hint' }, 'Der Jahresplaner des Vereins: Arbeitseinsätze, Versammlungen, Ablesung, Feste. Als Aushang drucken oder als Kalenderdatei ins Handy übernehmen.'),
     h('div', { class: 'toolbar' },
       h('label', null, 'Jahr'), jahrSel,
