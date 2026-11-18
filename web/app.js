@@ -3780,6 +3780,23 @@ async function beschlussDialog(b) {
   } }]);
 }
 
+// Mehrfachauswahl für Listen: Haken je Zeile, Kopf-Haken für alle, Knopf »Auswahl löschen« (Papierkorb mit Rückgängig).
+function auswahlHelfer(art, liste, pfad, was) {
+  S.verwSel = S.verwSel || {};
+  const sel = (S.verwSel[art] = S.verwSel[art] || new Set());
+  for (const id of [...sel]) if (!liste.some((x) => x.id === id)) sel.delete(id);
+  const neu = () => { S.verw = null; render(); };
+  const kopf = h('input', { type: 'checkbox', 'aria-label': 'Alle auswählen', checked: liste.length > 0 && liste.every((x) => sel.has(x.id)),
+    onchange: (e) => { for (const x of liste) { if (e.target.checked) sel.add(x.id); else sel.delete(x.id); } render(); } });
+  const zelle = (x) => h('input', { type: 'checkbox', 'aria-label': 'Auswählen', checked: sel.has(x.id), onchange: (e) => { if (e.target.checked) sel.add(x.id); else sel.delete(x.id); render(); } });
+  const knopf = sel.size ? h('button', { class: 'btn danger', onclick: async () => {
+    if (!(await confirmBox(`${anz(sel.size, was[0], was[1])} in den Papierkorb legen?`, 'In den Papierkorb', true))) return;
+    const ids = [...sel]; sel.clear();
+    await sammelLoeschen(ids.map((id) => `${pfad}/${id}`), anz(ids.length, was[0], was[1]), async () => neu());
+  } }, `Auswahl löschen (${sel.size})`) : null;
+  return { kopf, zelle, knopf };
+}
+
 function verwaltungBeschluesse() {
   const alle = S.verw.beschluesse;
   const q = (S.beschlussSuche || '').trim().toLowerCase();
@@ -3788,14 +3805,15 @@ function verwaltungBeschluesse() {
   const suche = h('input', { type: 'search', placeholder: 'Suchen, z. B. Wasser oder 2024', value: S.beschlussSuche || '', style: 'width:260px',
     oninput: (e) => { S.beschlussSuche = e.target.value; clearTimeout(S.beschlussTimer); S.beschlussTimer = setTimeout(() => { render(); const el = document.querySelector('.beschluss-suche'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 250); } });
   suche.classList.add('beschluss-suche');
+  const aw = auswahlHelfer('beschluesse', l, '/api/admin/beschluesse', ['Beschluss', 'Beschlüsse']);
   return h('div', null,
     h('p', { class: 'hint' }, 'Was Vorstand und Mitgliederversammlung wann beschlossen haben – mit Abstimmungsergebnis und Stichworten zum Wiederfinden. Die Nummer vergibt das Programm fortlaufend je Jahr (z. B. MV 2025/3).'),
-    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(beschlussDialog(null)) }, '+ Beschluss'), suche,
+    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(beschlussDialog(null)) }, '+ Beschluss'), suche, aw.knopf,
       h('div', { class: 'spacer' }),
       alle.length ? h('button', { class: 'btn', onclick: () => pdfDrucken({ url: '/api/admin/beschlussbuch', oeffnenUrl: '/api/admin/beschlussbuch/oeffnen', titel: 'Beschlussbuch', meldung: () => 'Das Beschlussbuch wurde im PDF-Programm geöffnet.' }) }, 'Beschlussbuch drucken') : null),
     l.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
-      h('thead', null, h('tr', null, ['Nr.', 'Datum', 'Beschluss', 'Ergebnis', ''].map((t) => h('th', null, t)))),
-      h('tbody', null, l.map((b) => h('tr', null, h('td', null, b.nummer), h('td', null, deDate(b.datum), h('div', { class: 'hint' }, b.gremium)),
+      h('thead', null, h('tr', null, h('th', null, aw.kopf), ...['Nr.', 'Datum', 'Beschluss', 'Ergebnis', ''].map((t) => h('th', null, t)))),
+      h('tbody', null, l.map((b) => h('tr', null, h('td', null, aw.zelle(b)), h('td', null, b.nummer), h('td', null, deDate(b.datum), h('div', { class: 'hint' }, b.gremium)),
         h('td', { class: 'wrap' }, h('b', null, b.titel), b.text ? h('div', { class: 'hint' }, b.text) : null, b.stichworte ? h('div', { class: 'hint' }, 'Stichworte: ' + b.stichworte) : null),
         h('td', null, h('span', { class: 'badge ' + (b.ergebnis === 'angenommen' ? 'ok' : b.ergebnis === 'abgelehnt' ? 'err' : 'neu') }, b.ergebnis),
           b.ja + b.nein + b.enthaltung ? h('div', { class: 'hint' }, `${b.ja} : ${b.nein} : ${b.enthaltung}`) : null),
@@ -3841,13 +3859,14 @@ function verwaltungVertraege() {
   const heute = todayIso();
   const in60 = isoInTagen(60);
   const nachher = async (p) => { if (await p) { S.verw = null; render(); } };
+  const aw = auswahlHelfer('vertraege', l, '/api/admin/vertraege', ['Vertrag', 'Verträge']);
   return h('div', null,
     h('p', { class: 'hint' }, 'Versicherungen, Versorger, Zwischenpacht und andere Verträge mit Laufzeit und Kündigungsfrist. Rund zwei Monate vor dem letzten Kündigungstag erinnert das Cockpit – Zeit genug, Angebote zu vergleichen.'),
-    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(vertragDialog(null)) }, '+ Vertrag'),
+    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(vertragDialog(null)) }, '+ Vertrag'), aw.knopf,
       h('div', { class: 'spacer' }), h('span', { class: 'stat' }, `${l.length} Verträge · ${eur(S.verw.jaehrlich)} im Jahr`)),
     l.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
-      h('thead', null, h('tr', null, ['Vertrag', 'Partner', 'Läuft bis', 'Kündigen bis', 'Kosten / Jahr', ''].map((t) => h('th', null, t)))),
-      h('tbody', null, l.map((v) => h('tr', null,
+      h('thead', null, h('tr', null, h('th', null, aw.kopf), ...['Vertrag', 'Partner', 'Läuft bis', 'Kündigen bis', 'Kosten / Jahr', ''].map((t) => h('th', null, t)))),
+      h('tbody', null, l.map((v) => h('tr', null, h('td', null, aw.zelle(v)),
         h('td', { class: 'wrap' }, h('b', null, v.bezeichnung), h('div', { class: 'hint' }, v.art + (v.nummer ? ' · ' + v.nummer : ''))),
         h('td', { class: 'wrap' }, v.partner || ''),
         h('td', null, v.laeuftBis ? deDate(v.laeuftBis) : h('span', { class: 'hint' }, 'unbefristet'), v.verlaengert && !v.gekuendigt ? h('div', { class: 'hint' }, `verlängert sich um ${v.verlaengert} Mon.`) : null),
