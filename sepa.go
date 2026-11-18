@@ -150,7 +150,7 @@ func (m Mandat) verfallen(heute time.Time) bool {
 		basis = m.Unterschrieben
 	}
 	d, err := parseDate(basis)
-	return err == nil && d.AddDate(0, mandatVerfallMonate, 0).Before(heute)
+	return err == nil && monateDazu(d, mandatVerfallMonate).Before(heute)
 }
 
 func (m Mandat) aktiv(heute time.Time) bool { return m.Widerrufen == "" && !m.verfallen(heute) }

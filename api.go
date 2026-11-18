@@ -1208,7 +1208,7 @@ func addYear(date string) string {
 	if err != nil {
 		return date
 	}
-	return t.AddDate(1, 0, 0).Format("2006-01-02")
+	return monateDazu(t, 12).Format("2006-01-02") // 29.02. wird zum 28.02., nicht zum 01.03.
 }
 
 func (a *App) handleNextYear(w http.ResponseWriter, r *http.Request) {

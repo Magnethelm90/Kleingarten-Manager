@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -89,6 +90,8 @@ func (s *Store) abgleichLocked(in abgleichDatei, anwenden bool) abgleichErgebnis
 	for _, p := range s.d.Paechter {
 		aktivePaechterIDs[p.ID] = true
 	}
+	// Was hier gelöscht wurde (Papierkorb), darf über die Datei des anderen Rechners nicht zurückkommen.
+	geloescht := s.papierkorbOriginalIDsLocked()
 
 	// Ausgaben und Zählerstände je Jahr (nur vorhandene, nicht abgeschlossene Jahre)
 	var nAus, dAus, nAb, dAb int
@@ -117,6 +120,7 @@ func (s *Store) abgleichLocked(in abgleichDatei, anwenden bool) abgleichErgebnis
 				continue
 			}
 			c.ID, c.Geprueft, c.GeprueftAm = a.ID, false, ""
+			have[a.ID] = true
 			nAus++
 			if anwenden {
 				mine.Ausgaben = append(mine.Ausgaben, c)
@@ -149,14 +153,14 @@ func (s *Store) abgleichLocked(in abgleichDatei, anwenden bool) abgleichErgebnis
 	}
 	var nT, dT int
 	for _, t := range in.Termine {
-		if t.ID == "" || haveT[t.ID] {
+		if t.ID == "" || haveT[t.ID] || geloescht[t.ID] {
 			dT++
 			continue
 		}
 		nT++
+		haveT[t.ID] = true // auch in der Vorschau: Einsatzstunden zu neuen Terminen zählen mit
 		if anwenden {
 			s.d.Termine = append(s.d.Termine, t)
-			haveT[t.ID] = true
 		}
 	}
 	zeile("Termine", nT, dT)
@@ -168,11 +172,12 @@ func (s *Store) abgleichLocked(in abgleichDatei, anwenden bool) abgleichErgebnis
 	}
 	var nB, dB int
 	for _, b := range in.Beschluesse {
-		if b.ID == "" || haveB[b.ID] {
+		if b.ID == "" || haveB[b.ID] || geloescht[b.ID] {
 			dB++
 			continue
 		}
 		nB++
+		haveB[b.ID] = true
 		if anwenden {
 			if len(b.Datum) >= 4 {
 				for _, x := range s.d.Beschluesse {
@@ -183,7 +188,6 @@ func (s *Store) abgleichLocked(in abgleichDatei, anwenden bool) abgleichErgebnis
 				}
 			}
 			s.d.Beschluesse = append(s.d.Beschluesse, b)
-			haveB[b.ID] = true
 		}
 	}
 	zeile("Beschlüsse", nB, dB)
@@ -195,15 +199,15 @@ func (s *Store) abgleichLocked(in abgleichDatei, anwenden bool) abgleichErgebnis
 	}
 	var nM, dM int
 	for _, m := range in.Maengel {
-		if m.ID == "" || haveM[m.ID] {
+		if m.ID == "" || haveM[m.ID] || geloescht[m.ID] {
 			dM++
 			continue
 		}
 		nM++
+		haveM[m.ID] = true
 		if anwenden {
 			m.Foto = ""
 			s.d.Maengel = append(s.d.Maengel, m)
-			haveM[m.ID] = true
 		}
 	}
 	zeile("Mängel", nM, dM)
@@ -219,10 +223,14 @@ func (s *Store) abgleichLocked(in abgleichDatei, anwenden bool) abgleichErgebnis
 			dS++
 			continue
 		}
+		// Spenden eines Pächters, der hier nicht (mehr) existiert, z. B. nach Löschung auf Wunsch: nicht übernehmen
+		if x.PaechterID != "" && !aktivePaechterIDs[x.PaechterID] {
+			continue
+		}
 		nS++
+		haveS[x.ID] = true
 		if anwenden {
 			s.d.Spenden = append(s.d.Spenden, x)
-			haveS[x.ID] = true
 		}
 	}
 	zeile("Spenden", nS, dS)
@@ -243,9 +251,9 @@ func (s *Store) abgleichLocked(in abgleichDatei, anwenden bool) abgleichErgebnis
 			continue
 		}
 		nE++
+		haveE[k] = true
 		if anwenden {
 			s.d.Einsatzstunden = append(s.d.Einsatzstunden, e)
-			haveE[k] = true
 		}
 	}
 	zeile("Einsatzstunden", nE, dE)
@@ -288,4 +296,18 @@ func (a *App) handleAbgleichEinlesen(w http.ResponseWriter, r *http.Request) {
 		a.st.audit("Abgleich übernommen: %d neue Einträge", res.Neu)
 	}
 	writeJSON(w, 200, res)
+}
+
+// papierkorbOriginalIDsLocked nennt die ursprünglichen IDs aller Einträge im Papierkorb. Der Aufrufer hält s.mu.
+func (s *Store) papierkorbOriginalIDsLocked() map[string]bool {
+	out := map[string]bool{}
+	for _, e := range s.d.Papierkorb {
+		var x struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal(e.Daten, &x) == nil && x.ID != "" {
+			out[x.ID] = true
+		}
+	}
+	return out
 }

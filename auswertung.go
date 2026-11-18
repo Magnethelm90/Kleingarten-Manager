@@ -224,6 +224,8 @@ func (a *App) handleAusgabeCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.ID = newID()
+	// Belege und »geprüft« nur über die eigenen Endpunkte (Hochladen bzw. Kassenprüfung), nie aus der Eingabe
+	in.Belege, in.Beleg, in.Geprueft, in.GeprueftAm = nil, "", false, ""
 	j := a.st.ensureYear(year)
 	j.Ausgaben = append(j.Ausgaben, in)
 	if err := a.st.saveLocked(); err != nil {
@@ -256,7 +258,7 @@ func (a *App) handleAusgabeUpdate(w http.ResponseWriter, r *http.Request) {
 	for i := range j.Ausgaben {
 		if j.Ausgaben[i].ID == id {
 			in.ID = id
-			in.Belege = j.Ausgaben[i].Belege                                              // wird nur über die eigenen Beleg-Endpunkte geändert
+			in.Belege, in.Beleg = j.Ausgaben[i].Belege, j.Ausgaben[i].Beleg               // wird nur über die eigenen Beleg-Endpunkte geändert
 			in.Geprueft, in.GeprueftAm = j.Ausgaben[i].Geprueft, j.Ausgaben[i].GeprueftAm // nur über den eigenen Endpunkt
 			j.Ausgaben[i] = in
 			if err := a.st.saveLocked(); err != nil {

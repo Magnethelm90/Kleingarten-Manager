@@ -44,6 +44,9 @@ func TestMonateDazu(t *testing.T) {
 			t.Errorf("%s + %s Monate = %s, erwartet %s", c[0], c[1], got, c[2])
 		}
 	}
+	if got := addYear("2028-02-29"); got != "2029-02-28" {
+		t.Errorf("addYear(29.02.) = %s", got)
+	}
 	// Monatliche Verlängerung darf vom Monatsende nicht wegwandern
 	v := Vertrag{Ende: "2025-01-31", Verlaengert: 1}
 	if got := v.ansicht(time.Date(2025, 4, 15, 0, 0, 0, 0, time.UTC)).LaeuftBis; got != "2025-04-30" {
@@ -61,5 +64,25 @@ func TestProgrammDateienVollstaendig(t *testing.T) {
 		if _, err := fs.Stat(sub, n); err != nil {
 			t.Errorf("%s fehlt", n)
 		}
+	}
+}
+
+// Belege und der Prüfvermerk lassen sich beim Anlegen oder Ändern einer Ausgabe nicht von außen setzen.
+func TestAusgabeOhneFremdeBelege(t *testing.T) {
+	a, h := newTestApp(t)
+	a.st.mu.Lock()
+	jahr := a.st.d.Settings.Jahr
+	a.st.mu.Unlock()
+	q := "?year=" + strconv.Itoa(jahr)
+	boese := map[string]any{"datum": strconv.Itoa(jahr) + "-03-01", "beschreibung": "Saatgut", "betrag": 12.5,
+		"belege": []string{"Belege/2026/fremd.pdf"}, "beleg": "Belege/2026/alt.pdf", "geprueft": true, "geprueftAm": "2026-01-01"}
+	rec := do(h, "POST", "/api/admin/ausgaben"+q, boese)
+	x := decode[Ausgabe](t, rec)
+	if len(x.Belege) != 0 || x.Beleg != "" || x.Geprueft {
+		t.Fatalf("Anlegen übernimmt Belege/Prüfvermerk: %+v", x)
+	}
+	y := decode[Ausgabe](t, do(h, "PUT", "/api/admin/ausgaben/"+x.ID+q, boese))
+	if len(y.Belege) != 0 || y.Beleg != "" || y.Geprueft {
+		t.Fatalf("Ändern übernimmt Belege/Prüfvermerk: %+v", y)
 	}
 }

@@ -125,3 +125,31 @@ func TestStatistikUndJahresabrechnung(t *testing.T) {
 		t.Error("kein PDF")
 	}
 }
+
+// Vorschau und Übernahme zählen gleich, Gelöschtes kommt nicht zurück, doppelte IDs nur einmal,
+// Spenden gelöschter Pächter bleiben draußen.
+func TestAbgleichVorschauUndGeloeschtes(t *testing.T) {
+	a, h := newTestApp(t)
+	rec := do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Erika", "gartennr": "1", "gartengroesse": 300})
+	p := decode[Paechter](t, rec)
+	a.st.mu.Lock()
+	a.st.d.Termine = []Termin{{ID: "weg", Datum: "2026-05-01", Titel: "Alt"}}
+	a.st.mu.Unlock()
+	if rec := do(h, "DELETE", "/api/admin/termine/weg", nil); rec.Code != 200 {
+		t.Fatalf("Termin löschen: %d %s", rec.Code, rec.Body.String())
+	}
+	d := decode[abgleichDatei](t, do(h, "GET", "/api/admin/abgleich", nil))
+	d.Termine = []Termin{{ID: "weg", Datum: "2026-05-01", Titel: "Alt"}, {ID: "neu", Datum: "2026-06-01", Titel: "Einsatz"}, {ID: "neu", Datum: "2026-06-01", Titel: "Einsatz"}}
+	d.Stunden = []EinsatzStunden{{TerminID: "neu", PaechterID: p.ID, Stunden: 3}}
+	d.Spenden = []Spende{{ID: "s1", Datum: "2026-04-01", Jahr: 2026, Betrag: 10, PaechterID: "gibtsnicht", Name: "Gelöscht"}}
+	v := decode[abgleichErgebnis](t, do(h, "POST", "/api/admin/abgleich", d))
+	w := decode[abgleichErgebnis](t, do(h, "POST", "/api/admin/abgleich?anwenden=1", d))
+	if v.Neu != w.Neu || w.Neu != 2 {
+		t.Fatalf("Vorschau %+v, Übernahme %+v (erwartet je 2: Termin + Stunden)", v, w)
+	}
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	if len(a.st.d.Termine) != 1 || a.st.d.Termine[0].ID != "neu" || len(a.st.d.Spenden) != 0 || len(a.st.d.Einsatzstunden) != 1 {
+		t.Fatalf("Termine %+v, Spenden %d, Stunden %d", a.st.d.Termine, len(a.st.d.Spenden), len(a.st.d.Einsatzstunden))
+	}
+}

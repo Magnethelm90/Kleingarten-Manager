@@ -146,7 +146,8 @@ func (a *App) handleMangelSpeichern(neu bool) http.HandlerFunc {
 				writeErr(w, bad("Es sind sehr viele Mängel gespeichert. Bitte zuerst erledigte löschen"))
 				return
 			}
-			in.ID, in.PaechterID = newID(), p.ID
+			// Foto und Fahrplan-Schritte nur über die eigenen Endpunkte
+			in.ID, in.PaechterID, in.Foto, in.Stufen = newID(), p.ID, "", nil
 			a.st.d.Maengel = append(a.st.d.Maengel, in)
 			a.st.audit("Mangel festgestellt: Garten %s (%s)", in.Gartennr, in.Art)
 		} else {
