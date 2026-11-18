@@ -206,7 +206,7 @@ function toast(msg, kind, aktion) {
   const t = h('div', { class: 'toast ' + (kind || '') }, msg,
     aktion ? h('button', { class: 'toast-aktion', onclick: () => { t.remove(); aktion.fn(); } }, aktion.label) : null);
   box.append(t);
-  setTimeout(() => t.remove(), aktion ? 10000 : kind === 'err' ? 7000 : 3500);
+  setTimeout(() => t.remove(), aktion ? 10000 : kind === 'err' ? 7000 : kind === 'warn' ? 9000 : 3500);
 }
 
 // Fehler an einem Eingabefeld: Feld rot markieren, hineinspringen und die Meldung zeigen. Die Markierung verschwindet beim Tippen.
@@ -219,6 +219,14 @@ function feldFehler(el, msg) {
   el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   el.focus();
   return false;
+}
+
+// Ungewöhnlicher Verbrauch: gleich beim Eintippen sagen, was auffällt (vielleicht ein Tippfehler), einmal je Meldung.
+function verbrauchToast(p, res) {
+  const alt = ((S.state && S.state.hinweise) || {})[p.id] || [];
+  for (const t of (res.hinweise || [])) {
+    if (!alt.includes(t)) toast(`Bitte prüfen – ${t}. Stimmt die Zahl?`, 'warn');
+  }
 }
 
 // Nach dem Löschen: kurze Meldung mit »Rückgängig« (holt den Eintrag aus dem Papierkorb zurück).
@@ -559,7 +567,7 @@ function render() {
       h('div', { class: 'spacer' }),
       globalSearchBox(st),
       h('div', null, h('label', null, 'Jahr'), yearSel),
-      h('button', { class: 'quit help', 'data-tour': 'hilfe', onclick: () => geschichteZeigen(), title: 'Hilfe: kurze Einführung, was wohin gehört', 'aria-label': 'Hilfe' }, '?'),
+      h('button', { class: 'quit help', 'data-tour': 'hilfe', onclick: hilfeMenue, title: 'Hilfe: Rundgang und Wörterbuch', 'aria-label': 'Hilfe' }, '?'),
       h('button', { class: 'quit', onclick: quitApp, title: 'Programm beenden' }, 'Beenden'),
     ),
     h('div', { class: 'shell' },
@@ -1044,6 +1052,74 @@ async function wartungsCheck() {
   [{ label: 'Schließen', cls: 'primary', value: true }]);
 }
 
+// Abgleich zwischen zwei Rechnern: Datei erstellen (USB-Stick) und vom anderen Rechner einlesen. Es kommen nur neue Einträge dazu.
+async function abgleichDialog() {
+  const datei = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none' });
+  const ergebnisBox = h('div');
+  datei.addEventListener('change', async () => {
+    const f = datei.files[0];
+    if (!f) return;
+    ergebnisBox.replaceChildren(h('p', { class: 'hint' }, 'Ich schaue mir die Datei an …'));
+    let inhalt;
+    try { inhalt = JSON.parse(await f.text()); } catch (e) { ergebnisBox.replaceChildren(h('div', { class: 'banner err' }, 'Die Datei lässt sich nicht lesen. Ist es die Abgleich-Datei vom anderen Rechner?')); return; }
+    let v;
+    try { v = await api('POST', '/api/admin/abgleich', inhalt); } catch (e) { ergebnisBox.replaceChildren(h('div', { class: 'banner err' }, e.message)); return; }
+    if (!v.neu) { ergebnisBox.replaceChildren(h('div', { class: 'banner info' }, 'Hier ist schon alles vorhanden – es gibt nichts Neues zu übernehmen.')); return; }
+    ergebnisBox.replaceChildren(
+      h('div', { class: 'banner info' }, `Neu in dieser Datei: ${anz(v.neu, 'Eintrag', 'Einträge')}. Vorhandenes bleibt unverändert.`),
+      h('table', { class: 'tbl' }, h('thead', null, h('tr', null, h('th', null, 'Bereich'), h('th', { class: 'r' }, 'Neu'), h('th', { class: 'r' }, 'Schon vorhanden'))),
+        h('tbody', null, v.zeilen.map((z) => h('tr', null, h('td', null, z.bereich), h('td', { class: 'r' }, h('b', null, String(z.neu))), h('td', { class: 'r' }, String(z.schonDa)))))),
+      h('div', { class: 'actions', style: 'margin-top:10px' }, h('button', { class: 'btn primary', onclick: async (ev) => {
+        ev.target.disabled = true;
+        try {
+          const e = await api('POST', '/api/admin/abgleich?anwenden=1', inhalt);
+          ergebnisBox.replaceChildren(h('div', { class: 'banner info' }, `Fertig: ${anz(e.neu, 'neuer Eintrag', 'neue Einträge')} übernommen.`));
+          toast('Abgleich übernommen', 'ok');
+          await reload();
+        } catch (er) { handleErr(er); ev.target.disabled = false; }
+      } }, `${anz(v.neu, 'Eintrag', 'Einträge')} übernehmen`)));
+  });
+  await modal('Abgleich zwischen zwei Rechnern', h('div', null,
+    h('p', { class: 'hint' }, 'Zwei Personen arbeiten auf zwei Rechnern, zum Beispiel Kassier und Schriftführer? Mit dem USB-Stick bringst du beide wieder zusammen. Es kommen nur neue Einträge dazu, nichts wird überschrieben oder gelöscht.'),
+    h('ol', { class: 'probier' },
+      h('li', null, h('b', null, 'Auf dem einen Rechner: '), 'Datei erstellen und auf den USB-Stick legen.', h('div', null, h('a', { class: 'btn small', href: '/api/admin/abgleich', download: '' }, 'Abgleich-Datei erstellen'))),
+      h('li', null, h('b', null, 'Auf dem anderen Rechner: '), 'die Datei hier einlesen. Du siehst zuerst, was neu ist, und bestätigst dann.', h('div', null, h('button', { class: 'btn small', onclick: () => datei.click() }, 'Abgleich-Datei einlesen')))),
+    h('p', { class: 'hint' }, 'Dabei sind Ausgaben, Spenden, Termine, Beschlüsse, Mängel, Einsatzstunden und Zählerstände. Belege, Fotos und das Bar-Kassenbuch nicht. Die Datei enthält Namen und Beträge – nur auf dem USB-Stick weitergeben und danach löschen.'),
+    datei, ergebnisBox), [{ label: 'Schließen', cls: 'primary', value: true }]);
+}
+
+// Daten aufräumen: zeigt Dubletten und Lücken im Bestand, jeder Fund mit Knopf zum betroffenen Pächter.
+async function datencheckDialog() {
+  const lade = async () => {
+    try { return await api('GET', '/api/admin/datencheck'); } catch (e) { handleErr(e); return null; }
+  };
+  let r = await lade();
+  if (!r) return;
+  for (;;) {
+    const GRUPPEN = [['doppelt', 'Doppelt vorhanden'], ['luecke', 'Angaben fehlen'], ['iban', 'Bankverbindung'], ['garten', 'Gärten']];
+    const inhalt = h('div', null,
+      h('p', { class: 'hint' }, `Ich habe ${anz(r.geprueft, 'Pächter', 'Pächter')} angeschaut und suche nach Doppelten und fehlenden Angaben. Es wird nichts verändert – du entscheidest.`));
+    if (!r.funde.length) inhalt.append(leer('fertig', 'Alles in Ordnung', 'Keine doppelten Einträge und keine fehlenden Angaben gefunden.'));
+    let wahl = null;
+    for (const [art, titel] of GRUPPEN) {
+      const liste = r.funde.filter((f) => f.art === art);
+      if (!liste.length) continue;
+      inhalt.append(h('h4', null, `${titel} (${liste.length})`), ...liste.map((f) => h('div', { class: 'banner ' + (f.stufe === 'warn' ? 'warn' : 'info'), style: 'margin:6px 0' },
+        h('div', null, f.text), h('div', { class: 'hint' }, f.tipp),
+        ...(f.paechterIds || []).map((id) => {
+          const p = (S.state.paechter || []).find((x) => x.id === id);
+          return p ? h('button', { class: 'btn small', style: 'margin:4px 6px 0 0', onclick: (e) => { wahl = id; e.target.closest('dialog').querySelector('.dfoot .btn').click(); } }, `${p.name} öffnen`) : null;
+        }).filter(Boolean))));
+    }
+    await modal('Daten aufräumen', inhalt, [{ label: 'Schließen', cls: 'primary', value: 'zu' }]);
+    if (!wahl) return;
+    const p = (S.state.paechter || []).find((x) => x.id === wahl);
+    if (p && await paechterDialog(p)) await reload();
+    r = await lade();
+    if (!r) return;
+  }
+}
+
 function zweiteSicherungBanner(st, istAdmin) {
   const z = st.zweiteSicherung || {};
   if (S.zweiteDismissed || !istAdmin || !st.paechter.length) return null;
@@ -1062,6 +1138,75 @@ function zweiteSicherungBanner(st, istAdmin) {
       `${tage === null ? 'Im zweiten Sicherungsordner liegt noch keine Kopie.' : `Die letzte Kopie im zweiten Sicherungsordner ist vom ${deDate(z.zuletzt)} (vor ${tage} Tagen).`} Einfach USB-Stick einstecken und »Jetzt sichern« wählen.`, ...knoepfe(true));
   }
   return null;
+}
+
+// Hilfe: Rundgang, Wörterbuch und (bei Beispieldaten) die kleinen Aufgaben an einer Stelle.
+async function hilfeMenue() {
+  const wahl = await modal('Wobei brauchst du Hilfe?', h('div', null,
+    h('p', { class: 'hint' }, 'Such dir aus, was dir weiterhilft. Du kannst nichts kaputt machen.')),
+  [{ label: 'Schließen', value: false },
+    S.state && S.state.demo ? { label: 'Probier es aus', value: 'probier' } : null,
+    { label: 'Wörter erklärt', value: 'woerter' },
+    { label: 'Kurzer Rundgang', cls: 'primary', value: 'rundgang' }].filter(Boolean));
+  if (wahl === 'rundgang') geschichteZeigen();
+  else if (wahl === 'woerter') woerterbuchDialog();
+  else if (wahl === 'probier') probierDialog();
+}
+
+// Wörter, die im Verein jeder benutzt, aber nicht jeder kennt – in einfachen Sätzen.
+const WOERTER = [
+  ['Pächter', 'Wer einen Garten vom Verein gepachtet hat und ihn nutzt.'],
+  ['Parzelle', 'Ein einzelner Garten in der Anlage. Er hat eine Nummer.'],
+  ['Zählerstand', 'Die Zahl, die am Wasser- oder Stromzähler steht. Wir schreiben sie bei der Ablesung auf.'],
+  ['Verbrauch', 'Neuer Zählerstand minus alter Zählerstand. So viel Wasser oder Strom wurde benutzt.'],
+  ['Ablesung', 'Der Rundgang, bei dem man alle Zähler ansieht und die Zahlen notiert.'],
+  ['Rechnung ausstellen', 'Die Rechnung fertig machen und als PDF speichern. Danach ändert sie sich nicht mehr.'],
+  ['Zahlungsziel', 'Bis zu diesem Tag soll das Geld da sein.'],
+  ['Mahnung', 'Ein Brief: Du hast noch nicht bezahlt, bitte zahle bis zu diesem Tag.'],
+  ['Gutschrift', 'Geld, das ein Pächter zurückbekommt, zum Beispiel weil eine Rechnung zu hoch war.'],
+  ['Vorauszahlung', 'Geld, das man schon vor der Rechnung bezahlt, oft in Raten.'],
+  ['Lastschrift', 'Die Bank holt das Geld vom Konto ab. Dafür muss der Pächter vorher erlaubt haben (Mandat).'],
+  ['Mandat', 'Das unterschriebene Blatt, auf dem der Pächter die Lastschrift erlaubt.'],
+  ['Umlage', 'Ein Betrag, den alle Pächter zusammen für gemeinsame Kosten tragen, zum Beispiel für Wege.'],
+  ['Arbeitsstunden', 'Zeit, die jeder für die Gemeinschaft arbeitet. Wer weniger arbeitet, zahlt für die fehlenden Stunden.'],
+  ['Eichfrist', 'Zähler dürfen nur eine bestimmte Zeit benutzt werden. Dann müssen sie getauscht werden.'],
+  ['Jahreswechsel', 'Das alte Jahr abschließen und das neue beginnen. Die Zahlen werden mitgenommen.'],
+  ['Kassenbericht', 'Eine Übersicht: Wie viel Geld ist reingekommen, wie viel wurde ausgegeben?'],
+  ['Kassenprüfung', 'Zwei Mitglieder prüfen, ob die Kasse stimmt, und schreiben das auf.'],
+  ['Beschluss', 'Etwas, worüber abgestimmt wurde. Das Beschlussbuch merkt es sich.'],
+  ['Warteliste', 'Wer einen Garten möchte, aber noch keinen hat, steht auf dieser Liste.'],
+  ['Papierkorb', 'Gelöschtes bleibt hier 30 Tage liegen und lässt sich zurückholen.'],
+  ['Sicherung', 'Eine Kopie aller Daten, falls einmal etwas kaputtgeht. Sie entsteht von selbst.'],
+  ['Abgleich', 'Zwei Rechner haben unterschiedliche Einträge. Der Abgleich bringt beide zusammen.'],
+];
+
+async function woerterbuchDialog() {
+  const suche = h('input', { type: 'search', placeholder: 'Wort suchen …', 'aria-label': 'Wort suchen', style: 'width:100%' });
+  const liste = h('div', { class: 'woerter' });
+  const zeichne = () => {
+    const q = suche.value.trim().toLowerCase();
+    const treffer = WOERTER.filter(([w, t]) => !q || w.toLowerCase().includes(q) || t.toLowerCase().includes(q));
+    liste.replaceChildren(...(treffer.length ? treffer.map(([w, t]) => h('div', { class: 'wort' }, h('b', null, w), h('div', null, t)))
+      : [h('p', { class: 'hint' }, 'Dazu habe ich nichts gefunden.')]));
+  };
+  suche.addEventListener('input', zeichne);
+  zeichne();
+  await modal('Wörter erklärt', h('div', null, suche, liste), [{ label: 'Schließen', cls: 'primary', value: true }]);
+}
+
+// Startkarte: die vier häufigsten Aufgaben als große Knöpfe in einfachen Worten.
+function startKarte(st, istAdmin) {
+  if (!st.paechter.length) return null;
+  const gross = (ic, titel, text, ziel) => h('button', { class: 'start-knopf', onclick: ziel },
+    h('span', { class: 'start-ico' }, icon(ic, 26)), h('b', null, titel), h('span', null, text));
+  return h('div', { class: 'card start-karte' },
+    h('h3', { style: 'margin-top:0' }, 'Was möchtest du tun?'),
+    h('div', { class: 'start-raster' },
+      gross('zaehler', 'Zählerstand eintragen', 'Wasser und Strom von einem Garten', () => { S.tab = 'eingabe'; S.eingabeMode = 'schnell'; render(); }),
+      istAdmin ? gross('rechnung', 'Rechnungen schreiben', 'Prüfen und als PDF fertig machen', () => { S.tab = 'rechnungen'; S.invTab = 'pruefen'; render(); }) : null,
+      istAdmin ? gross('euro', 'Zahlung eintragen', 'Wer hat bezahlt?', () => { S.tab = 'zahlungen'; render(); }) : null,
+      istAdmin ? gross('personen', 'Pächter ansehen', 'Neuen anlegen oder Angaben ändern', () => { adminTabWaehlen('paechter'); render(); }) : null,
+      gross('brief', 'Wörter erklärt', 'Was bedeutet das eigentlich?', woerterbuchDialog)));
 }
 
 function viewUebersicht() {
@@ -1091,6 +1236,7 @@ function viewUebersicht() {
 
   return h('div', null,
     heroKarte(st),
+    startKarte(st, istAdmin),
     beispieldatenKarte(st, istAdmin),
     jubilaeumBanner(st, istAdmin),
     st.demo ? null : zweiteSicherungBanner(st, istAdmin),
@@ -1183,7 +1329,7 @@ function updateCalc(tr, res) {
   const hints = res.hinweise || ((S.state && S.state.hinweise) || {})[tr.dataset.id];
   tr.querySelector('.status').replaceChildren(...[statusBadge(res),
     inf ? h('span', { class: 'badge ' + (inf.geaendert ? 'warn' : 'neu'), title: inf.geaendert ? 'Rechnung wurde ausgestellt, danach wurden Werte geändert' : 'Rechnung ist ausgestellt' }, inf.geaendert ? '⚠ nach Ausstellung geändert' : 'ausgestellt') : null,
-    hints && hints.length ? h('span', { class: 'badge warn', title: hints.join('\n') }, 'Verbrauch prüfen') : null].filter(Boolean));
+    hints && hints.length ? h('span', { class: 'badge warn', title: hints.join('\n') }, 'Stimmt das? Verbrauch prüfen') : null].filter(Boolean));
 }
 
 // Nach einer Änderung neu vom Programm holen, ob eine ausgestellte Rechnung davon betroffen ist.
@@ -1234,6 +1380,7 @@ async function saveRow(tr, p) {
     S.state.ablesungen[p.id] = body;
     S.state.results[p.id] = res;
     S.state.hinweise = S.state.hinweise || {};
+    verbrauchToast(p, res);
     if (res.hinweise && res.hinweise.length) S.state.hinweise[p.id] = res.hinweise; else delete S.state.hinweise[p.id];
     updateCalc(tr, res);
     showSaved();
@@ -4705,6 +4852,7 @@ const AUSGABEN_KATEGORIEN = ['Instandhaltung', 'Anschaffung', 'Verwaltung', 'Ver
 // Neue Ausgaben nacheinander erfassen: »Speichern und nächste« öffnet den Dialog erneut, Datum und Kategorie bleiben stehen.
 async function ausgabeDialog(a) {
   let vorlage = null, r;
+  if (!a) { try { ausgabeDialogEinmal.vorlagen = await api('GET', '/api/admin/kassenvorlagen'); } catch (e) { ausgabeDialogEinmal.vorlagen = []; } }
   do {
     r = await ausgabeDialogEinmal(a, vorlage);
     vorlage = r === 'weiter' ? ausgabeDialogEinmal.letzte : null;
@@ -4721,7 +4869,26 @@ function ausgabeDialogEinmal(a, vorlage) {
   const katList = h('datalist', { id: 'kategorien-liste' }, AUSGABEN_KATEGORIEN.map((x) => h('option', { value: x })));
   const betrag = h('input', { type: 'text', inputmode: 'decimal', value: a ? numIn(a.betrag) : '', autocomplete: 'off' });
   const wiederkehrend = h('input', { type: 'checkbox', checked: !!(a && a.wiederkehrend) });
+  const alsVorlage = h('input', { type: 'checkbox' });
   const fileInput = h('input', { type: 'file', accept: '.jpg,.jpeg,.png,.webp,.pdf', multiple: true });
+  // Vorlagen für wiederkehrende Ausgaben: ein Klick füllt Beschreibung, Kategorie und Betrag.
+  let vorlagenListe = isNew ? (ausgabeDialogEinmal.vorlagen || []) : [];
+  const vorlagenBox = h('div', { class: 'vorlagen' });
+  const zeichneVorlagen = () => {
+    vorlagenBox.replaceChildren(...(vorlagenListe.length ? [h('span', { class: 'hint' }, 'Vorlage einsetzen: '), ...vorlagenListe.map((v) => h('span', { class: 'chip vorlage' },
+      h('button', { type: 'button', class: 'btn small', title: `${v.kategorie || 'Sonstiges'} · ${eur(v.betrag)}`, onclick: () => {
+        besch.value = v.beschreibung; kategorie.value = v.kategorie || ''; betrag.value = v.betrag ? numIn(v.betrag) : '';
+        for (const el of [besch, kategorie, betrag]) el.dispatchEvent(new Event('input', { bubbles: true }));
+        (v.betrag ? datum : betrag).focus();
+      } }, `${v.beschreibung}${v.betrag ? ' · ' + eur(v.betrag) : ''}`),
+      h('button', { type: 'button', class: 'btn small danger', title: 'Vorlage löschen', 'aria-label': `Vorlage ${v.beschreibung} löschen`, onclick: async () => {
+        try {
+          vorlagenListe = await api('PUT', '/api/admin/kassenvorlagen', vorlagenListe.filter((x) => x.id !== v.id));
+          ausgabeDialogEinmal.vorlagen = vorlagenListe; zeichneVorlagen();
+        } catch (e) { handleErr(e); }
+      } }, '×')))] : []));
+  };
+  zeichneVorlagen();
   const fld = (label, input) => h('div', { class: 'field' }, h('label', null, label), input);
 
   // Vorhandene Belege: Liste mit eigenem Entfernen-Knopf je Beleg, aktualisiert
@@ -4753,9 +4920,13 @@ function ausgabeDialogEinmal(a, vorlage) {
   if (!isNew) zeichneBelege();
 
   const body = h('div', { class: 'form' },
+    isNew && vorlagenListe.length ? h('div', { class: 'field wide', style: 'border:none' }, vorlagenBox) : null,
     fld('Datum', datum), fld('Beschreibung (z. B. Rasenmäher, Kontoführungsgebühren)', besch),
     fld('Kategorie', h('div', null, kategorie, katList)),
     h('div', { class: 'field' }, h('label', null, 'Betrag'), h('div', { class: 'inputunit' }, betrag, h('span', null, '€'))),
+    isNew ? h('div', { class: 'field wide', style: 'border:none' },
+      h('label', { class: 'check' }, alsVorlage, ' Als Vorlage merken'),
+      h('span', { class: 'fhint' }, 'Beim nächsten Mal genügt ein Klick auf die Vorlage – Datum und Beleg gibst du dann nur noch neu an.')) : null,
     h('div', { class: 'field wide', style: 'border:none' },
       h('label', { class: 'check' }, wiederkehrend, ' Jährlich wiederkehrend'),
       h('span', { class: 'fhint' }, 'Wird beim Jahreswechsel automatisch als Vorschlag fürs neue Jahr angelegt (gleiche Beschreibung, Kategorie und Betrag, ungeprüft, ohne Beleg) – z. B. für Kontoführungsgebühren. Lässt sich dort weiterhin anpassen oder löschen.')),
@@ -4777,6 +4948,13 @@ function ausgabeDialogEinmal(a, vorlage) {
           await api('POST', `/api/admin/ausgaben/${saved.id}/beleg?year=${S.kasseYear}`, fd, true);
         }
       } catch (e) { handleErr(e); return false; }
+      if (isNew && alsVorlage.checked) {
+        try {
+          const neu = { beschreibung: data.beschreibung, kategorie: data.kategorie, betrag: data.betrag };
+          const rest = (ausgabeDialogEinmal.vorlagen || []).filter((x) => x.beschreibung !== neu.beschreibung);
+          ausgabeDialogEinmal.vorlagen = await api('PUT', '/api/admin/kassenvorlagen', [...rest, neu]);
+        } catch (e) { handleErr(e); }
+      }
       ausgabeDialogEinmal.letzte = { datum: datum.value, kategorie: kategorie.value.trim() };
   };
   return modal(isNew ? 'Ausgabe erfassen' : `Ausgabe bearbeiten – ${a.beschreibung}`, body, [
@@ -7015,6 +7193,30 @@ async function befragungenDialog() {
   return r;
 }
 
+// Statistik: wenige einfache Säulen-Diagramme über die Jahre, jedes mit einem Satz, was man daran sieht.
+async function statistikDialog() {
+  let r;
+  try { r = await api('GET', '/api/admin/statistik'); } catch (e) { handleErr(e); return; }
+  const v = r.kosten.verein;
+  if (!v.length) { toast('Noch keine Jahre vorhanden', 'info'); return; }
+  const karte = (titel, satz, daten, fmt) => h('div', { class: 'card' }, h('h4', null, titel), h('p', { class: 'hint' }, satz),
+    barChart(daten, { valueFmt: fmt }));
+  const eurK = (x) => eur(x);
+  const prozent = (x) => `${nfFlex.format(x)} %`;
+  const tage = (x) => `${nfFlex.format(x)} Tage`;
+  const z = r.zahlung;
+  const inhalt = h('div', { class: 'statistik' },
+    h('p', { class: 'hint' }, 'So hat sich der Verein über die Jahre entwickelt. Jede Säule ist ein Jahr.'),
+    h('div', { class: 'meldung-raster' },
+      karte('Wasser', 'Wie viele Kubikmeter hat der ganze Verein verbraucht?', v.map((x) => ({ label: String(x.jahr), value: x.wasser || 0 })), (x) => `${nfFlex.format(x)} m³`),
+      karte('Strom', 'Wie viele Kilowattstunden hat der ganze Verein verbraucht?', v.map((x) => ({ label: String(x.jahr), value: x.strom || 0 })), (x) => `${nfFlex.format(x)} kWh`),
+      karte('Ausgaben', 'Was hat der Verein ausgegeben?', v.map((x) => ({ label: String(x.jahr), value: x.ausgaben || 0 })), eurK),
+      karte('Rechnungen', 'Wie viel wurde den Pächtern insgesamt in Rechnung gestellt?', v.map((x) => ({ label: String(x.jahr), value: x.rechnungen || 0 })), eurK),
+      z.length ? karte('Bezahlt', 'Wie viel Prozent der Rechnungen sind bezahlt? Je näher an 100, desto besser.', z.map((x) => ({ label: String(x.jahr), value: x.quote })), prozent) : null,
+      z.some((x) => x.tage > 0) ? karte('Zahlungsdauer', 'Nach wie vielen Tagen wird im Durchschnitt bezahlt? Weniger ist besser.', z.filter((x) => x.tage > 0).map((x) => ({ label: String(x.jahr), value: x.tage })), tage) : null));
+  await modal('Statistik', inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
+}
+
 async function kostenvergleichDialog() {
   let k;
   try { k = await api('GET', '/api/admin/kostenvergleich'); } catch (e) { handleErr(e); return; }
@@ -7111,10 +7313,14 @@ function adminBerichte() {
     h('div', { class: 'bericht-raster' },
       kachel('bericht', `Jahresbericht ${jahr}`, 'Für die Mitgliederversammlung: Kennzahlen mit Vorjahresvergleich, Kasse, Ausgaben, Verlauf, Termine – ohne Namen.',
         h('button', { class: 'btn primary', onclick: () => jahresberichtDrucken(jahr) }, 'Als PDF')),
+      kachel('bericht', `Jahresabrechnung ${jahr}`, 'Alle ausgestellten Rechnungen des Jahres in einer Datei: vorn eine Übersicht mit Summen, danach je Pächter eine Seite.',
+        pdfKnopf('jahresabrechnung', `Jahresabrechnung ${jahr}`, `?year=${jahr}`)),
       kachel('waage', `Jahresmeldung ${jahr}`, 'Zahlen für den Landes- oder Regionalverband: Parzellen, Flächen, Wechsel, Warteliste, Stunden, Abgaben.',
         h('div', { class: 'row' }, h('a', { class: 'btn primary', href: `/api/admin/jahresmeldung?year=${jahr}&format=xlsx` }, 'Als Excel'), pdfKnopf('jahresmeldung', `Jahresmeldung ${jahr}`, `?year=${jahr}`))),
       kachel('uhr', `Arbeitsstunden ${jahr}`, 'Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt. Einzelne Stunden lassen sich nachtragen.',
         h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => stundenkontoDialog(jahr) }, 'Ansehen'), pdfKnopf('stundenkonto', `Arbeitsstunden ${jahr}`, `?year=${jahr}`))),
+      kachel('bericht', 'Statistik', 'Wasser, Strom, Ausgaben, Rechnungen und Zahlungsmoral über die Jahre als einfache Diagramme.',
+        h('button', { class: 'btn', onclick: statistikDialog }, 'Ansehen')),
       kachel('bericht', 'Kostenvergleich', 'Wasser, Strom und Ausgaben über die Jahre, je Garten mit Hinweis auf auffälligen Mehrverbrauch.',
         h('div', { class: 'row' }, h('button', { class: 'btn', onclick: kostenvergleichDialog }, 'Ansehen'), pdfKnopf('kostenvergleich', 'Kostenvergleich'))),
       kachel('personen', 'Mitgliederbefragung', 'Fragebogen zum Ausdrucken, Erfassungsbogen zum Auszählen und anonyme Auswertung für die Versammlung.',
@@ -7156,6 +7362,10 @@ function adminBerichte() {
     h('div', { class: 'bericht-raster' },
       kachel('daten', 'Wartungs-Check', 'Ist alles in Ordnung? Datenordner, Sicherungen, zweiter Ordner, Passwort und Programmversion auf einen Blick.',
         h('div', { class: 'row' }, h('button', { class: 'btn', onclick: wartungsCheck }, 'Prüfen'), pdfKnopf('wartung', 'Wartungs-Check'))),
+      kachel('daten', 'Daten aufräumen', 'Findet doppelte Pächter, doppelte Nummern, fehlende Anschriften und ungültige IBAN – und führt mit einem Klick zur Stelle.',
+        h('button', { class: 'btn', onclick: datencheckDialog }, 'Prüfen')),
+      kachel('daten', 'Abgleich zwischen zwei Rechnern', 'Kassier und Schriftführer arbeiten getrennt? Per USB-Stick bringst du beide Stände zusammen – es kommen nur neue Einträge dazu.',
+        h('button', { class: 'btn', onclick: abgleichDialog }, 'Öffnen')),
       kachel('daten', 'Papierkorb', 'Gelöschte Mängel, Termine, Beschlüsse und Verträge 30 Tage lang zurückholen.',
         h('button', { class: 'btn', onclick: papierkorbDialog }, 'Öffnen')),
       kachel('daten', 'Amtsübergabe', 'Vereinsakte für den neuen Vorstand: alle Daten und Dateien plus »Lies mich zuerst« mit Zahlen, Regeln und offenen Punkten.',

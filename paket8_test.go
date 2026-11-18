@@ -1,0 +1,128 @@
+package main
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
+
+func TestKassenvorlagen(t *testing.T) {
+	_, h := newTestApp(t)
+	if rec := do(h, "PUT", "/api/admin/kassenvorlagen", []KassenVorlage{{Beschreibung: "Versicherung", Kategorie: "Versicherung & Gebühren", Betrag: 120}}); rec.Code != 200 {
+		t.Fatalf("PUT: %d %s", rec.Code, rec.Body.String())
+	}
+	v := decode[[]KassenVorlage](t, do(h, "GET", "/api/admin/kassenvorlagen", nil))
+	if len(v) != 1 || v[0].ID == "" || v[0].Betrag != 120 {
+		t.Fatalf("Vorlagen: %+v", v)
+	}
+	if rec := do(h, "PUT", "/api/admin/kassenvorlagen", []KassenVorlage{{Beschreibung: " ", Betrag: 1}}); rec.Code != 400 {
+		t.Errorf("leere Beschreibung: %d", rec.Code)
+	}
+	if rec := do(h, "PUT", "/api/admin/kassenvorlagen", []KassenVorlage{{Beschreibung: "x", Betrag: -5}}); rec.Code != 400 {
+		t.Errorf("negativer Betrag: %d", rec.Code)
+	}
+}
+
+func TestDatencheck(t *testing.T) {
+	a, h := newTestApp(t)
+	a.st.mu.Lock()
+	a.st.d.Paechter = []Paechter{
+		{ID: "a", Mitgliedsnr: "1", Gartennr: "5", Name: "Anna Muster", Gartengroesse: 300, Versand: "Postversand", Strasse: "X", PLZOrt: "1 Y"},
+		{ID: "b", Mitgliedsnr: "1", Gartennr: "5", Name: "anna  muster", Gartengroesse: 0, Versand: "Postversand"},
+		{ID: "c", Mitgliedsnr: "3", Gartennr: "7", Name: "Bert", Gartengroesse: 200, Email: "kaputt", Versand: "Emailsendung"},
+	}
+	a.st.d.Lageplan = map[string]LagePos{"5": {}, "9": {}}
+	a.st.d.Mandate = []Mandat{{ID: "m", PaechterID: "c", IBAN: "DE00"}}
+	a.st.mu.Unlock()
+	r := decode[datencheckErgebnis](t, do(h, "GET", "/api/admin/datencheck", nil))
+	arten := map[string]int{}
+	var alle []string
+	for _, f := range r.Funde {
+		arten[f.Art]++
+		alle = append(alle, f.Text)
+	}
+	text := strings.Join(alle, "\n")
+	for _, w := range []string{"Der Name kommt mehrfach vor", "Mitgliedsnummer 1", "Garten 5 hat mehrere", "Garten 9", "IBAN im Lastschrift-Mandat", "sieht nicht richtig aus", "Gartengröße"} {
+		if !strings.Contains(text, w) {
+			t.Errorf("Fund fehlt: %q\n%s", w, text)
+		}
+	}
+	if r.Geprueft != 3 {
+		t.Errorf("geprüft: %d", r.Geprueft)
+	}
+}
+
+func TestDatencheckSauber(t *testing.T) {
+	_, h := newTestApp(t)
+	r := decode[datencheckErgebnis](t, do(h, "GET", "/api/admin/datencheck", nil))
+	if r.Funde == nil || len(r.Funde) != 0 {
+		t.Fatalf("leerer Bestand: %+v", r)
+	}
+}
+
+func TestAbgleich(t *testing.T) {
+	a, h := newTestApp(t)
+	a.st.mu.Lock()
+	a.st.d.Termine = []Termin{{ID: "t1", Datum: "2026-05-01", Titel: "Einsatz"}}
+	a.st.mu.Unlock()
+	rec := do(h, "GET", "/api/admin/abgleich", nil)
+	if rec.Code != 200 {
+		t.Fatalf("Export: %d", rec.Code)
+	}
+	var d abgleichDatei
+	d = decode[abgleichDatei](t, rec)
+	if d.Kennung != abgleichKennung || len(d.Termine) != 1 {
+		t.Fatalf("Export: %+v", d)
+	}
+	// Zweiter Rechner: neuer Termin und Beschluss, ein vorhandener Termin
+	d.Termine = append(d.Termine, Termin{ID: "t2", Datum: "2026-06-01", Titel: "Fest"})
+	d.Beschluesse = []Beschluss{{ID: "b1", Datum: "2026-03-01", Gremium: "Vorstand", Nummer: "V 2026/1", Titel: "Zaun"}}
+	v := decode[abgleichErgebnis](t, do(h, "POST", "/api/admin/abgleich", d))
+	if v.Neu != 2 || v.Angewandt {
+		t.Fatalf("Vorschau: %+v", v)
+	}
+	a.st.mu.Lock()
+	n := len(a.st.d.Termine)
+	a.st.mu.Unlock()
+	if n != 1 {
+		t.Fatalf("Vorschau hat verändert: %d Termine", n)
+	}
+	v = decode[abgleichErgebnis](t, do(h, "POST", "/api/admin/abgleich?anwenden=1", d))
+	if v.Neu != 2 || !v.Angewandt {
+		t.Fatalf("Übernahme: %+v", v)
+	}
+	a.st.mu.Lock()
+	nt, nb := len(a.st.d.Termine), len(a.st.d.Beschluesse)
+	a.st.mu.Unlock()
+	if nt != 2 || nb != 1 {
+		t.Fatalf("Termine %d Beschlüsse %d", nt, nb)
+	}
+	// zweimal einlesen ändert nichts
+	v = decode[abgleichErgebnis](t, do(h, "POST", "/api/admin/abgleich?anwenden=1", d))
+	if v.Neu != 0 {
+		t.Errorf("doppelt übernommen: %+v", v)
+	}
+	// falsche Datei
+	if rec := do(h, "POST", "/api/admin/abgleich", map[string]any{"kennung": "x"}); rec.Code != 400 {
+		t.Errorf("fremde Datei: %d", rec.Code)
+	}
+}
+
+func TestStatistikUndJahresabrechnung(t *testing.T) {
+	_, h := newTestApp(t)
+	if rec := do(h, "POST", "/api/admin/beispieldaten", nil); rec.Code != 200 {
+		t.Fatalf("Beispieldaten: %d", rec.Code)
+	}
+	st := decode[statistikErgebnis](t, do(h, "GET", "/api/admin/statistik", nil))
+	if len(st.Kosten.Verein) == 0 || st.Zahlung == nil {
+		t.Fatalf("Statistik: %+v", st)
+	}
+	rec := do(h, "GET", "/api/admin/jahresabrechnung/pdf", nil)
+	// ohne ausgestellte Rechnungen: verständlicher Fehler, kein Absturz
+	if rec.Code != 404 && rec.Code != 200 {
+		t.Fatalf("Jahresabrechnung: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec.Code == 200 && !bytes.HasPrefix(rec.Body.Bytes(), []byte("%PDF")) {
+		t.Error("kein PDF")
+	}
+}

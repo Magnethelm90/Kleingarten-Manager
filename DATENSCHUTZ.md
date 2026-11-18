@@ -38,6 +38,7 @@ vorher prüfen.
 - Hinweis- und Notizfelder in aufbewahrten Rechnungen und Jahresunterlagen (auch der Freitext »Grund« von Gutschriften; die Beträge bleiben für die Buchführung),
 - **alles Genannte auch in allen vorhandenen Sicherungen** (inkl. zweitem Sicherungsordner, sofern erreichbar).
   Dafür wird bewusst keine Sicherung „vor dem Löschen“ angelegt.
+- Abgleich-Dateien (»Abgleich zwischen zwei Rechnern«) werden nur auf Wunsch erzeugt und vom Programm nicht aufbewahrt; sie enthalten Namen und Beträge (Spenden, Zählerstände zu Pächter-Nummern) und gehören nur auf den USB-Stick – nach dem Einlesen löschen.
 - den Ordner `Druck/` (kurzlebige Druckdateien wie Sammel-PDF der Postrechnungen und Ablesebogen): er wird beim
   Programmstart und hierbei geleert.
 

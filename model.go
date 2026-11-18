@@ -262,6 +262,9 @@ type Data struct {
 	AllesGeschuetzt bool `json:"allesGeschuetzt,omitempty"`
 
 	// Papierkorb: gelöschte Einträge, 30 Tage wiederherstellbar (papierkorb.go).
+	// KassenVorlagen: Vorlagen für wiederkehrende Ausgaben im Kassenbuch (kassenvorlagen.go)
+	KassenVorlagen []KassenVorlage `json:"kassenVorlagen,omitempty"`
+
 	Papierkorb []PapierkorbEintrag `json:"papierkorb,omitempty"`
 	// Zurueckgestellt: Cockpit-Hinweise, die bis zu einem Datum ausgeblendet sind (Schlüssel = Hash, aufgaben.go).
 	Zurueckgestellt map[string]string `json:"zurueckgestellt,omitempty"`
