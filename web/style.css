@@ -1163,3 +1163,8 @@ ol.probier li{margin:0 0 10px}
 .cockpit-bereich { margin: 0 0 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 4px 10px; }
 .cockpit-bereich > summary { cursor: pointer; padding: 6px 0; }
 .cockpit-bereich[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+
+.anleitung { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 4px 12px; margin: 8px 0; }
+.anleitung > summary { cursor: pointer; padding: 6px 0; }
+.anleitung ol { margin: 6px 0 10px; padding-left: 20px; }
+.anleitung li { margin: 4px 0; }
