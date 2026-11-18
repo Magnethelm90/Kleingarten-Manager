@@ -177,9 +177,7 @@ function adminPaechter() {
           p.gartennr ? [h('button', { class: 'btn small', title: `Gartenakte von Garten ${p.gartennr}: Dokumente, Wertermittlungen, Übergaben, Verlauf`, onclick: () => gartenakteDialog(p.gartennr.trim()) }, 'Akte'), ' '] : null,
           mehrMenue([
             { label: 'Mappe …', title: 'Beiträge, Pachtvertrag, Willkommensmappe, Ehrenamts-Nachweis, Gartenakte und DSGVO-Auskunft an einer Stelle', aktion: () => paechterMappe(p) },
-            p.gartennr && !p.ausgeschiedenAm ? { label: 'Wechsel-Assistent …', title: 'Schritt für Schritt: Kündigung, Wertermittlung, Schlüssel, Übergabe', aktion: () => wechselAssistent(p) } : null,
-            p.gartennr && !p.ausgeschiedenAm ? { label: 'Pächterwechsel …', title: 'Garten an einen neuen Pächter übergeben (Schlussrechnung, Übergabeprotokoll, neuer Pächter)', aktion: () => paechterwechselDialog(p) } : null,
-            p.gartennr && !p.ausgeschiedenAm ? { label: 'Kündigung erfassen …', title: 'Kündigung mit Frist und Fahrplan bis zur Übergabe', aktion: async () => { if (await kuendigungDialog(p)) { adminTabWaehlen('kuendigungen'); render(); } } } : null,
+            p.gartennr && !p.ausgeschiedenAm ? { label: 'Garten abgeben …', title: 'Kündigung, Nachfolger, Wertermittlung, Schlüssel und Übergabe – Schritt für Schritt', aktion: () => wechselAssistent(p) } : null,
             { label: 'In den Papierkorb', gefahr: true, aktion: async () => {
               const ok = await confirmBox(`Pächter „${p.name}“ (${p.mitgliedsnr}) in den Papierkorb legen? Er verschwindet aus allen Ansichten, Zählerstände und Rechnungen bleiben aber erhalten und lassen sich im Papierkorb wiederherstellen.`, 'In den Papierkorb', true);
               if (!ok) return;

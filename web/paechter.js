@@ -101,8 +101,12 @@ async function wechselAssistent(p) {
   const zeichnen = () => {
     if (!k) {
       inhalt.replaceChildren(
-        h('p', null, `Der Wechsel beginnt mit der Kündigung. Danach führt dich dieser Assistent durch Bestätigung, Nachfolger, Wertermittlung, Abnahme, Schlüsselrückgabe und Übergabe.`),
-        h('button', { class: 'btn primary', onclick: async () => { if (await kuendigungDialog(aktuell)) { S.kuend = null; await frisch(); } } }, 'Kündigung erfassen'));
+        h('p', null, `${aktuell.name} gibt Garten ${aktuell.gartennr} ab. Wie soll es losgehen?`),
+        h('div', { class: 'assi-wahl' },
+          h('button', { class: 'assi-option', onclick: async () => { if (await kuendigungDialog(aktuell)) { S.kuend = null; await frisch(); } } },
+            icon('kuendigung', 26), h('b', null, 'Mit Kündigung'), h('span', null, 'Der übliche Weg: Kündigung erfassen. Danach führt dich das Programm durch Bestätigung, Nachfolger, Wertermittlung, Abnahme, Schlüssel und Übergabe.')),
+          h('button', { class: 'assi-option', onclick: async () => { dlg.schliessen(true); await paechterwechselDialog(aktuell); } },
+            icon('personen', 26), h('b', null, 'Sofort übergeben'), h('span', null, 'Wenn alles schon geklärt ist (z. B. Tausch in der Familie): gleich Zählerstände, Schlussrechnung und neuen Pächter eintragen.'))));
       return;
     }
     const fertig = k.schritte.filter((x) => x.erledigt).length;
@@ -124,7 +128,7 @@ async function wechselAssistent(p) {
       fertig === gesamt ? h('p', null, h('b', null, 'Alle Schritte sind erledigt.'), ' Schließe die Kündigung unter »Pächter« im Reiter »Kündigungen« ab. Für den Nachfolger: Pachtvertrag und Willkommensmappe findest du beim neuen Pächter unter »Mehr«.') : h('span'));
   };
   zeichnen();
-  const w = breiterDialog(`Pächterwechsel – Garten ${p.gartennr}`, inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
+  const w = breiterDialog(`Garten ${p.gartennr} abgeben`, inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
   dlg.schliessen = () => { const b = [...document.querySelectorAll('dialog:last-of-type .dfoot button, dialog:last-of-type button')].find((x) => x.textContent === 'Schließen'); if (b) b.click(); };
   await w;
 }
