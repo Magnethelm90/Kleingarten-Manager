@@ -1796,6 +1796,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/pruef-password", a.admin(a.handlePruefPassword))
 	mux.HandleFunc("POST /api/admin/paechter", a.admin(a.handlePaechterCreate))
 	mux.HandleFunc("PUT /api/admin/paechter/{id}", a.admin(a.handlePaechterUpdate))
+	mux.HandleFunc("POST /api/admin/paechter-sammel", a.admin(a.handlePaechterSammel))
 	mux.HandleFunc("DELETE /api/admin/paechter/{id}", a.admin(a.handlePaechterDelete))
 	mux.HandleFunc("GET /api/admin/paechter-papierkorb", a.admin(a.handlePaechterPapierkorb))
 	mux.HandleFunc("POST /api/admin/paechter/{id}/wiederherstellen", a.admin(a.handlePaechterWiederherstellen))

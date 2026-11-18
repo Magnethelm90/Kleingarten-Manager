@@ -139,12 +139,26 @@ function adminPaechter() {
   // Spalte »Umlage« nur, wenn jemand eine abweichende Umlage zahlt (spart Platz im Programmfenster)
   const mitUmlage = list.some((p) => p.umlageAbweichend != null);
   const tbody = h('tbody');
+  // Auswahl für die Sammeländerung (Versandart/Umlage für mehrere auf einmal)
+  const sel = (S.paechterSel = S.paechterSel || new Set());
+  for (const id of [...sel]) if (!list.some((p) => p.id === id)) sel.delete(id);
+  const sammelKnopf = h('button', { class: 'btn', title: 'Versandart oder Umlage für alle ausgewählten Pächter auf einmal ändern', onclick: () => paechterSammelDialog(list.filter((p) => sel.has(p.id))) });
+  const alleKasten = h('input', { type: 'checkbox', 'aria-label': 'Alle angezeigten auswählen' });
+  let shown = [];
+  const auswahlZeigen = () => {
+    sammelKnopf.hidden = !sel.size;
+    sammelKnopf.textContent = `Auswahl ändern (${sel.size})`;
+    alleKasten.checked = shown.length > 0 && shown.every((p) => sel.has(p.id));
+  };
+  alleKasten.addEventListener('change', () => { for (const p of shown) { if (alleKasten.checked) sel.add(p.id); else sel.delete(p.id); } fill(); });
   const fill = () => {
     tbody.replaceChildren();
     const q = S.filter.trim().toLowerCase();
-    const shown = list.filter((p) => !q || [p.mitgliedsnr, p.name, p.gartennr, p.strasse, p.email, p.telefon].some((x) => (x || '').toLowerCase().includes(q)));
+    shown = list.filter((p) => !q || [p.mitgliedsnr, p.name, p.gartennr, p.strasse, p.email, p.telefon].some((x) => (x || '').toLowerCase().includes(q)));
     for (const p of shown) {
       tbody.append(h('tr', null,
+        h('td', { class: 'auswahl' }, h('input', { type: 'checkbox', 'aria-label': 'Auswählen: ' + p.name, checked: sel.has(p.id),
+          onchange: (e) => { if (e.target.checked) sel.add(p.id); else sel.delete(p.id); auswahlZeigen(); } })),
         h('td', null, p.mitgliedsnr), h('td', null, p.gartennr),
         h('td', { class: 'name', title: p.name }, p.name, p.notiz ? h('span', { title: p.notiz, style: 'margin-left:4px;cursor:help', class: 'notiz-zeichen' }, icon('bericht', 14)) : null, schlussBadge(p)),
         h('td', { class: 'wrap' }, [p.strasse, p.plzOrt].filter(Boolean).join(', ')),
@@ -167,8 +181,9 @@ function adminPaechter() {
               try { await api('DELETE', `/api/admin/paechter/${p.id}`); toast('In den Papierkorb gelegt', 'ok'); S.papierkorb = null; await reload(); } catch (e) { handleErr(e); }
             } }]))));
     }
-    if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: mitUmlage ? 9 : 8, class: 'empty' }, list.length ? 'Keine Treffer.'
+    if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: mitUmlage ? 10 : 9, class: 'empty' }, list.length ? 'Keine Treffer.'
       : leer('personen', 'Noch keine Pächter', 'Lege den ersten mit »+ Pächter anlegen« an oder übernimm alle auf einmal aus einer Excel- oder CSV-Liste.', 'Liste importieren', () => { adminTabWaehlen('daten'); render(); }))));
+    auswahlZeigen();
   };
   fill();
   return h('div', null,
@@ -177,10 +192,11 @@ function adminPaechter() {
       h('button', { class: 'btn primary', onclick: async () => { if (await paechterDialog(null)) await reload(); } }, '+ Pächter anlegen'),
       h('input', { type: 'search', placeholder: 'Suchen', value: S.filter, style: 'width:220px', oninput: (e) => { S.filter = e.target.value; fill(); } }),
       h('span', { class: 'stat' }, `${list.length} Pächter`),
+      sammelKnopf,
       h('div', { class: 'spacer' }),
       h('button', { class: 'btn', title: 'Liste aller Pächter mit Anschrift als PDF zum Ausdrucken', onclick: paechterlisteDrucken }, 'Pächterliste drucken')),
     h('div', { class: 'tablewrap' }, h('table', null,
-      h('thead', null, h('tr', null, ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Kontakt', 'Größe', mitUmlage ? 'Umlage' : null, 'Zähler', ''].filter((x) => x !== null).map((x) => h('th', null, x)))), tbody)),
+      h('thead', null, h('tr', null, h('th', { class: 'auswahl' }, alleKasten), ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Kontakt', 'Größe', mitUmlage ? 'Umlage' : null, 'Zähler', ''].filter((x) => x !== null).map((x) => h('th', null, x)))), tbody)),
     uebergabenCard(),
     papierkorbCard());
 }

@@ -1174,3 +1174,4 @@ ol.probier li{margin:0 0 10px}
 .brieftext-zeile { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line, #e3e6e1); }
 .brieftext-zeile .hint { margin-top: 2px; }
 @media (max-width: 700px) { .brieftext-zeile { flex-direction: column; } }
+th.auswahl, td.auswahl { width: 30px; padding-right: 0; }

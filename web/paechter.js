@@ -749,3 +749,38 @@ function adminMaengel() {
       h('div', { class: 'termin-aktionen' }, h('button', { class: 'btn small', onclick: () => speichern(m, { erledigtAm: '' }) }, 'Wieder öffnen'),
         mehrMenue([{ label: 'Löschen', gefahr: true, aktion: () => loeschen(m) }])))))) : null);
 }
+
+// Sammeländerung: Versandart oder Umlage für mehrere ausgewählte Pächter auf einmal setzen.
+async function paechterSammelDialog(auswahl) {
+  if (!auswahl.length) return;
+  const versand = h('select', null, h('option', { value: '' }, 'nicht ändern'), h('option', { value: 'Emailsendung' }, 'Emailsendung'), h('option', { value: 'Postversand' }, 'Postversand'));
+  const umlageArt = h('select', null, h('option', { value: '' }, 'nicht ändern'), h('option', { value: 'standard' }, `Standard (${eur(S.state.settings.umlageStandard)})`), h('option', { value: 'eigen' }, 'eigener Betrag'));
+  const betrag = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'z. B. 25,00' });
+  const betragFeld = h('div', { class: 'field', hidden: true }, h('label', null, 'Umlage in Euro'), betrag);
+  umlageArt.addEventListener('change', () => { betragFeld.hidden = umlageArt.value !== 'eigen'; });
+  const namen = auswahl.map((p) => p.name);
+  const ohneMail = auswahl.filter((p) => !(p.email || '').trim()).length;
+  const mailHinweis = h('p', { class: 'hint', hidden: true }, `${anz(ohneMail, 'Pächter hat', 'Pächter haben')} keine E-Mail-Adresse und ${ohneMail === 1 ? 'bleibt' : 'bleiben'} bei der bisherigen Versandart.`);
+  versand.addEventListener('change', () => { mailHinweis.hidden = !(versand.value === 'Emailsendung' && ohneMail); });
+  const ergebnis = await modal(`${anz(auswahl.length, 'Pächter', 'Pächter')} auf einmal ändern`, h('div', { class: 'form', style: 'grid-template-columns:1fr' },
+    h('p', { class: 'hint' }, 'Ausgewählt: ' + (namen.length > 8 ? namen.slice(0, 8).join(', ') + ` und ${namen.length - 8} weitere` : namen.join(', ')) + '. Alles, was auf »nicht ändern« steht, bleibt, wie es ist.'),
+    h('div', { class: 'field' }, h('label', null, 'Versandart'), versand), mailHinweis,
+    h('div', { class: 'field' }, h('label', null, 'Umlage'), umlageArt), betragFeld),
+  [{ label: 'Abbrechen', value: null },
+    { label: 'Ändern', cls: 'primary', value: true, action: async () => {
+      const data = { ids: auswahl.map((p) => p.id), versand: versand.value, umlageAendern: umlageArt.value !== '', umlage: null };
+      if (umlageArt.value === 'eigen') {
+        const u = parseNum(betrag.value);
+        if (u === null || Number.isNaN(u) || u < 0) return feldFehler(betrag, 'Die Umlage muss eine Zahl ab 0 sein, z. B. 25,00.');
+        data.umlage = u;
+      }
+      if (!data.versand && !data.umlageAendern) { toast('Bitte wähle aus, was geändert werden soll.', 'err'); return false; }
+      try {
+        const r = await api('POST', '/api/admin/paechter-sammel', data);
+        const teile = [r.geaendert ? `${anz(r.geaendert, 'Pächter', 'Pächter')} geändert` : 'Es war schon alles so eingestellt'];
+        if (r.uebersprungen.length) teile.push(`ohne E-Mail-Adresse übersprungen: ${r.uebersprungen.join(', ')}`);
+        toast(teile.join(' – '), r.uebersprungen.length ? 'warn' : 'ok');
+      } catch (e) { handleErr(e); return false; }
+    } }]);
+  if (ergebnis) { S.paechterSel.clear(); await reload(); }
+}
