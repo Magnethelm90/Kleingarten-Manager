@@ -455,7 +455,7 @@ function adminKuendigungen() {
     h('div', { class: 'card' }, h('div', { class: 'toolbar' },
       h('span', null, 'Kündigung muss eingehen bis'), bis, h('span', null, 'zum Pachtende am'), zum, h('span', { class: 'hint' }, '(Monat-Tag, z. B. 08-31 und 11-30)'),
       h('button', { class: 'btn small', onclick: async () => {
-        try { await api('PUT', '/api/admin/kuendigungen/regel', { zum: zum.value.trim(), bis: bis.value.trim() }); toast('Regel gespeichert', 'ok'); S.kuend = null; render(); } catch (e) { handleErr(e); }
+        try { await api('PUT', '/api/admin/kuendigungen/regel', { zum: zum.value.trim(), bis: bis.value.trim() }); toast('Regel gespeichert', 'ok'); S.kuend = null; S.satzungsfristen = null; render(); } catch (e) { handleErr(e); }
       } }, 'Speichern')),
     h('p', { class: 'hint', style: 'margin:6px 0 0' }, 'Steht in eurem Pachtvertrag. Das Bundeskleingartengesetz sieht für Kündigungen durch den Verein den 30. November vor.')));
 }

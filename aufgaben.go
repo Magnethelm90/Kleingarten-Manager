@@ -89,8 +89,8 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 		switch {
 		case t.Art == "Ablesung" && n >= 0 && n <= 21:
 			add("info", fmt.Sprintf("Zählerablesung %s (%s)", inTagen(n), germanDate(t.Datum)), "Ablesebogen für den Rundgang drucken.", "admin:berichte", "Ablesebogen")
-		case t.Art == "Versammlung" && n >= 0 && n <= 28:
-			add("warn", fmt.Sprintf("%s %s", t.Titel, inTagen(n)), "Einladung mit Tagesordnung rechtzeitig verschicken und Anwesenheitsliste drucken.", "tab:termine", "Einladung")
+		case t.Art == "Versammlung":
+			s.versammlungAufgabe(heute, t, add)
 		case t.Art == "Arbeitseinsatz" && n < 0 && n >= -30 && !gebucht[t.ID]:
 			add("warn", fmt.Sprintf("Stunden vom %s eintragen", t.Titel), fmt.Sprintf("Der Einsatz war am %s – wer war dabei?", germanDate(t.Datum)), "tab:termine", "Stunden eintragen")
 		}
@@ -234,6 +234,7 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	}
 	s.schwundAufgabenLocked(heute, add)
 	s.kuendigungAufgabenLocked(heute, add)
+	s.kuendigungsfristAufgabeLocked(heute, add)
 	if s.modulAn("warteliste") {
 		s.nachrueckerAufgabeLocked(add)
 	}

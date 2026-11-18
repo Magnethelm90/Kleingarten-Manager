@@ -252,6 +252,7 @@ type Data struct {
 	Befragungen []Befragung `json:"befragungen,omitempty"`
 	// Kündigungen mit Fahrplan bis zur Übergabe (siehe kuendigung.go)
 	KuendigungsRegel KuendigungsRegel `json:"kuendigungsRegel"`
+	Satzungsfristen  Satzungsfristen  `json:"satzungsfristen"`
 	Kuendigungen     []Kuendigung     `json:"kuendigungen,omitempty"`
 	// Eichfristen der Zähler (siehe eichung.go), Kassenprüfungen je Jahr (siehe pruefung.go),
 	// Ämter des Vereins (siehe aemter.go) und die Pachtobergrenze nach § 5 BKleingG (siehe pachtgrenze.go)

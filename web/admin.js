@@ -355,6 +355,9 @@ function papierkorbCard() {
 // ---- Einstellungen
 
 const HILFE = {
+  einladungTage: 'Steht in eurer Satzung, oft »zwei Wochen vorher«. Das Cockpit erinnert zwei Wochen vor dem letzten Tag, an dem die Einladung verschickt sein muss.',
+  kuendigungBis: 'Bis zu diesem Tag muss eine Kündigung eingegangen sein, damit sie zum Pachtende im selben Jahr gilt. Ist bei einem Garten schon das Zweitschreiben verschickt, erinnert das Cockpit einen Monat vorher.',
+  kuendigungZum: 'Zu diesem Tag endet die Pacht nach einer fristgerechten Kündigung. Das Bundeskleingartengesetz sieht für Kündigungen durch den Verein den 30. November vor.',
   rechnungsdatum: 'Steht auf allen Rechnungen dieses Jahres. Das Zahlungsziel ist der Tag, bis zu dem bezahlt sein soll – danach gilt eine Rechnung als überfällig.',
   einspruchTage: 'So viele Tage haben Pächter Zeit, sich bei Fragen oder Unstimmigkeiten zur Abrechnung zu melden. Der Satz steht auf Rechnung und E-Mail; 0 = kein Hinweis.',
   wasserGrundpreis: 'Fester Betrag je Garten und Jahr, unabhängig vom Verbrauch (z. B. für Zähler und Leitungsnetz). Dazu kommt der Verbrauch mal Preis je m³.',
@@ -421,11 +424,12 @@ function adminSettings() {
   return h('div', null,
     h('div', { class: 'chips', role: 'navigation', 'aria-label': 'Springe zu' },
       h('span', { class: 'hint' }, 'Springe zu:'),
-      [['es-preise', 'Preise und Rechnung'], ['es-pacht', 'Pachtobergrenze'], ['es-bereiche', 'Bereiche ein- und ausblenden'], ['es-briefe', 'Brieftexte'], ['es-aussehen', 'Farbe und Logo']].map(([id, l]) => h('button', { class: 'btn small', onclick: sprung(id) }, l))),
+      [['es-preise', 'Preise und Rechnung'], ['es-pacht', 'Pachtobergrenze'], ['es-fristen', 'Fristen aus der Satzung'], ['es-bereiche', 'Bereiche ein- und ausblenden'], ['es-briefe', 'Brieftexte'], ['es-aussehen', 'Farbe und Logo']].map(([id, l]) => h('button', { class: 'btn small', onclick: sprung(id) }, l))),
     h('p', { class: 'hint', id: 'es-preise' }, `Diese Werte gelten für das laufende Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
     h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'),
       h('button', { class: 'btn', title: 'Die letzten Änderungen ansehen und zurücknehmen', onclick: einstellungsVerlaufDialog }, 'Letzte Änderungen'))),
     h('div', { id: 'es-pacht' }, pachtgrenzeKarte()),
+    h('div', { id: 'es-fristen' }, fristenKarte()),
     h('div', { id: 'es-bereiche' }, bereicheKarte(st)),
     h('div', { id: 'es-briefe' }, brieftexteKarte()),
     h('div', { id: 'es-aussehen' }, aussehenKarte(st)));
@@ -633,6 +637,51 @@ function pachtgrenzeKarte() {
 // ---- Aussehen: Vereinsfarbe und Logo (Programm und Rechnung)
 
 const FARBVORSCHLAEGE = [['#2f6f3e', 'Gartengrün'], ['#1e5aa8', 'Blau'], ['#0f6e6e', 'Petrol'], ['#8c2f39', 'Weinrot'], ['#7a4b1f', 'Erdbraun'], ['#3d4752', 'Anthrazit']];
+
+// ---- Fristen aus der Satzung: Einladungsfrist (Cockpit rechnet den letzten Tag aus) und Kündigungsfrist
+// (dieselbe Regel wie auf der Seite Kündigungen). Tag.Monat wird als MM-TT gespeichert.
+const tagMonatAnzeige = (mmtt) => (/^\d\d-\d\d$/.test(mmtt || '') ? `${mmtt.slice(3)}.${mmtt.slice(0, 2)}.` : '');
+function tagMonatLesen(text) {
+  const m = String(text || '').trim().match(/^(\d{1,2})\.(\d{1,2})\.?$/);
+  return m ? `${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : null;
+}
+function fristenKarte() {
+  if (S.satzungsfristen == null) {
+    if (!S.satzungsfristenLaedt) {
+      S.satzungsfristenLaedt = true;
+      api('GET', '/api/admin/satzungsfristen').then((d) => { S.satzungsfristen = d; }).catch((e) => { handleErr(e); S.satzungsfristen = false; })
+        .finally(() => { S.satzungsfristenLaedt = false; render(); });
+    }
+    return null;
+  }
+  if (!S.satzungsfristen) return null;
+  const f = S.satzungsfristen;
+  const tage = h('input', { type: 'number', min: 1, max: 90, value: f.einladungTage, style: 'width:6em' });
+  const bis = h('input', { type: 'text', value: tagMonatAnzeige(f.kuendigung.bis), placeholder: 'z. B. 31.08.', style: 'width:7em' });
+  const zum = h('input', { type: 'text', value: tagMonatAnzeige(f.kuendigung.zum), placeholder: 'z. B. 30.11.', style: 'width:7em' });
+  const speichern = async () => {
+    const t = Math.round(Number(tage.value));
+    if (!(t >= 1 && t <= 90)) return feldFehler(tage, 'Die Einladungsfrist muss zwischen 1 und 90 Tagen liegen.');
+    const b = tagMonatLesen(bis.value), z = tagMonatLesen(zum.value);
+    if (!b) return feldFehler(bis, 'Bitte Tag und Monat schreiben, z. B. 31.08.');
+    if (!z) return feldFehler(zum, 'Bitte Tag und Monat schreiben, z. B. 30.11.');
+    try {
+      await api('PUT', '/api/admin/satzungsfristen', { einladungTage: t });
+      await api('PUT', '/api/admin/kuendigungen/regel', { zum: z, bis: b });
+      toast('Fristen gespeichert', 'ok');
+      S.satzungsfristen = null; S.kuend = null; S.aufgaben = null; render();
+    } catch (e) { handleErr(e); }
+  };
+  const feld = (label, input, nach, key) => h('div', { class: 'field' }, h('label', null, label, hilfe(HILFE[key])), h('div', { class: 'toolbar', style: 'margin:0' }, input, h('span', { class: 'hint' }, nach)));
+  return h('div', { class: 'card' },
+    h('h3', null, 'Fristen aus der Satzung'),
+    h('p', { class: 'hint' }, 'Trage hier die Fristen aus eurer Satzung und dem Pachtvertrag ein. Das Cockpit rechnet daraus aus, bis wann etwas raus muss – zum Beispiel »Einladung bis 3. März verschicken«.'),
+    h('div', { class: 'form' },
+      feld('Einladung zur Mitgliederversammlung', tage, 'Tage vorher verschicken', 'einladungTage'),
+      feld('Kündigung muss eingegangen sein bis', bis, 'jedes Jahr', 'kuendigungBis'),
+      feld('Pachtende bei Kündigung', zum, 'jedes Jahr', 'kuendigungZum')),
+    h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: speichern }, 'Fristen speichern')));
+}
 
 // ---- Brieftexte: eigene Fassungen der festen Sätze in Briefen (leer = Standard des Programms)
 function brieftexteKarte() {

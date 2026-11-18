@@ -28,7 +28,7 @@ func TestVorstandsCockpit(t *testing.T) {
 		titel = append(titel, a.Stufe+": "+a.Titel)
 	}
 	alle := strings.Join(titel, "\n")
-	for _, erwartet := range []string{"Zählerablesung in 10 Tagen", "Jahreshauptversammlung in 20 Tagen", "Stunden vom Herbsteinsatz eintragen",
+	for _, erwartet := range []string{"Zählerablesung in 10 Tagen", "Einladung zur Jahreshauptversammlung bis", "Stunden vom Herbsteinsatz eintragen",
 		"Mängelfrist abgelaufen", "Spenden ohne Bestätigung", "Bescheid zur Gemeinnützigkeit läuft bald ab", "Warteliste nachfragen"} {
 		if !strings.Contains(alle, erwartet) {
 			t.Errorf("fehlt: %q\n%s", erwartet, alle)

@@ -1820,6 +1820,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/admin/kuendigungen", a.admin(a.handleKuendigungen))
 	mux.HandleFunc("POST /api/admin/kuendigungen", a.admin(a.handleKuendigungSpeichern))
 	mux.HandleFunc("PUT /api/admin/kuendigungen/regel", a.admin(a.handleKuendigungsRegel))
+	mux.HandleFunc("GET /api/admin/satzungsfristen", a.admin(a.handleSatzungsfristen))
+	mux.HandleFunc("PUT /api/admin/satzungsfristen", a.admin(a.handleSatzungsfristenSpeichern))
 	mux.HandleFunc("DELETE /api/admin/kuendigungen/{id}", a.admin(a.handleKuendigungLoeschen))
 	mux.HandleFunc("POST /api/admin/kuendigungen/{id}/schritt", a.admin(a.handleKuendigungSchritt))
 	mux.HandleFunc("GET /api/admin/kuendigungen/{id}/bestaetigung", a.admin(a.pdfAnzeigen(a.kuendigungBestaetigungPDF)))
