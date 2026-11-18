@@ -222,7 +222,13 @@ const NEUERUNGEN = [
     'Fristen aus der Satzung in den Einstellungen: Das Cockpit sagt, bis wann die Einladung zur Versammlung raus muss.',
     'Stehen noch Musterwerte in den Vereinsangaben, fragt das Programm vor dem Ausstellen der Rechnungen nach.',
     'Garten ohne Strom: Haken beim Pächter (unter »Weitere Angaben«) – dann steht kein Strom auf der Rechnung.',
-    'Einstellungen aufgeräumt: Preise oben, alles Seltene unter »Weitere Einstellungen« zum Aufklappen.'] }];
+    'Einstellungen aufgeräumt: Preise oben, alles Seltene unter »Weitere Einstellungen« zum Aufklappen.',
+    'Pächter-Menü »Mehr«: ein Eintrag »Garten abgeben …« statt drei – mit Kündigung oder sofort.',
+    'Übersicht: Jahres-Fahrplan ganz oben mit neuem Schritt »Verschicken«.',
+    'Cockpit zeigt die fünf wichtigsten Hinweise, der Rest ist eingeklappt.',
+    'Kontoauszug einlesen geht jetzt auch direkt bei Spenden und Vorauszahlungen.',
+    'Berichte: »Jahreszahlen« bündelt Jahresbericht, Jahresmeldung, Statistik und Kostenvergleich.',
+    'Druck-Knöpfe einheitlich: »Drucken« und – wo sinnvoll – »Als PDF speichern«.'] }];
 function neuerungenPruefen() {
   const st = S.state;
   if (st.gesperrt || (st.hasPassword && !st.loggedIn)) return;

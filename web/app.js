@@ -187,7 +187,7 @@ const SEITEN_HILFE = {
   spenden: 'Geldspenden erfassen und die Zuwendungsbestätigung für das Finanzamt ausstellen. Zuerst die Gemeinnützigkeit eintragen.',
   vorauszahlung: 'Monatsbeträge, die Pächter vorab überweisen. Betrag je Pächter eintragen, Eingänge erkennt der Kontoauszug.',
   sepa: 'Lastschriften einziehen: Mandate erfassen, dann die Datei für das Online-Banking erstellen.',
-  berichte: 'Alles, was der Vorstand im Jahr abgeben muss: Jahresmeldung, Jahresbericht, Versammlungspaket und mehr.',
+  berichte: 'Alles, was der Vorstand im Jahr abgeben muss. Unter »Jahreszahlen« stehen Jahresbericht, Jahresmeldung, Statistik und Kostenvergleich.',
   jahreswechsel: 'Am Jahresende schließt du das Jahr ab. Die Prüfung oben zeigt, was vorher noch fehlt; sie blockiert nichts.',
   einstellungen: 'Vereinsname, Bankverbindung, Preise und Rechnungsdaten. Das bleibt in allen Folgejahren erhalten.',
   daten: 'Pächter importieren, alles als Excel exportieren und Sicherungen anlegen oder zurückspielen.',
@@ -502,7 +502,6 @@ function adminTabWaehlen(id) {
   if (id === 'sepa') { S.sepa = null; S.sepaVorschau = null; }
   if (id === 'vorauszahlung') S.vz = null;
   if (id === 'paechter') S.uebergaben = null;
-  if (id === 'berichte') S.meldung = null;
 }
 
 async function navGeh(x) {

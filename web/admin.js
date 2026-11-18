@@ -864,7 +864,7 @@ function adminYear() {
         h('li', null, 'Rechnungsdatum und Zahlungsziel rücken um ein Jahr weiter. Prüfe sie danach unter »Preise & Einstellungen«.'),
         h('li', null, 'Vorher wird automatisch eine Sicherung angelegt.')),
       h('p', { class: 'hint', style: 'margin-top:12px' }, 'Tipp: Vor dem Abschluss den ',
-        h('button', { class: 'btn small', onclick: () => jahresberichtDrucken(st.currentYear) }, `Jahresbericht ${st.currentYear}`),
+        druckKnopf({ url: `/api/admin/jahresbericht?year=${st.currentYear}`, oeffnenUrl: `/api/admin/jahresbericht/oeffnen?year=${st.currentYear}`, titel: `Jahresbericht ${st.currentYear}` }, { label: `Jahresbericht ${st.currentYear}`, klein: true }),
         ' für die Mitgliederversammlung drucken (später geht das auch noch im Kassenbericht).'),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: async () => {
         let offen = [];
@@ -1121,7 +1121,7 @@ function barkasseKarte(pruefMode) {
       pruefMode ? null : h('button', { class: 'btn', onclick: anfang }, `Anfangsbestand ${eur(d.anfang)}${d.anfangVorjahr ? ' (Vorjahr)' : ''}`),
       h('div', { class: 'spacer' }),
       leerBuch ? null : h('span', { class: 'stat' }, `Einnahmen ${eur(d.einnahmen)} · Ausgaben ${eur(d.ausgaben)}`),
-      leerBuch ? null : h('button', { class: 'btn', onclick: () => pdfDrucken({ url: `/api/admin/barkasse/kassenbuch?year=${jahr}`, oeffnenUrl: `/api/admin/barkasse/kassenbuch/oeffnen?year=${jahr}`, titel: 'Kassenbuch', meldung: () => 'Das Kassenbuch wurde im PDF-Programm geöffnet.' }) }, 'Kassenbuch drucken')),
+      leerBuch ? null : druckKnopf({ url: `/api/admin/barkasse/kassenbuch?year=${jahr}`, oeffnenUrl: `/api/admin/barkasse/kassenbuch/oeffnen?year=${jahr}`, titel: 'Kassenbuch' }, { label: 'Kassenbuch drucken' })),
     leerBuch ? null : h('div', { class: 'tablewrap', style: 'max-height:360px' }, h('table', { class: 'data' },
       h('thead', null, h('tr', null, ['Beleg', 'Datum', 'Text', 'Kategorie', 'Betrag', 'Bestand', ''].map((x) => h('th', null, x)))),
       h('tbody', null, d.buchungen.map((b, i) => h('tr', null, h('td', null, b.belegNr), h('td', null, deDate(b.datum)), h('td', { class: 'wrap' }, b.text), h('td', null, b.kategorie || ''),
@@ -1151,7 +1151,7 @@ function pruefungKarte() {
       h('div', { class: 'hint' }, 'Geführte Prüfung: Kontostand abgleichen, Belege und Stichprobe prüfen – am Ende steht der Bericht für die Mitgliederversammlung.')),
     h('div', { class: 'spacer' }),
     h('button', { class: 'btn primary', onclick: pruefungDialog }, erledigt || d.pruefung.ergebnis ? 'Prüfung fortsetzen' : 'Prüfung beginnen'),
-    h('button', { class: 'btn', onclick: () => pdfDrucken({ url: `/api/admin/kassenpruefung/bericht?year=${jahr}`, oeffnenUrl: `/api/admin/kassenpruefung/bericht/oeffnen?year=${jahr}`, titel: 'Prüfbericht', meldung: () => 'Der Prüfbericht wurde im PDF-Programm geöffnet.' }) }, 'Prüfbericht'));
+    druckKnopf({ url: `/api/admin/kassenpruefung/bericht?year=${jahr}`, oeffnenUrl: `/api/admin/kassenpruefung/bericht/oeffnen?year=${jahr}`, titel: 'Prüfbericht' }, { label: 'Prüfbericht drucken' }));
 }
 
 async function pruefungDialog() {
@@ -1344,7 +1344,7 @@ function adminKassenbericht(pruefMode) {
     h('h3', null, 'Schwund über die Jahre'),
     schwundKarte(),
     h('div', { class: 'actions', style: 'margin-top:16px;margin-bottom:22px' },
-      h('button', { class: 'btn primary', title: 'Zusammenfassung des Jahres für die Mitgliederversammlung, ohne Namen', onclick: () => jahresberichtDrucken(S.kasseYear) }, `Jahresbericht ${S.kasseYear} (PDF)`),
+      druckKnopf({ url: `/api/admin/jahresbericht?year=${S.kasseYear}`, oeffnenUrl: `/api/admin/jahresbericht/oeffnen?year=${S.kasseYear}`, titel: `Jahresbericht ${S.kasseYear}` }, { label: `Jahresbericht ${S.kasseYear}`, primary: true }),
       h('a', { class: 'btn', href: `/api/admin/export-kassenbericht?year=${S.kasseYear}` }, `Kassenbericht ${S.kasseYear} als Excel`)),
     h('h3', null, 'Verlauf über die Jahre'),
     kassenberichtVerlaufCard());

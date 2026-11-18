@@ -1190,3 +1190,7 @@ details.klapp > .card > .fs-kopf { justify-content: flex-end; }
   .fs-stationen li .fs-text, .fs-stationen li .fs-balken { display: none; }
   .fs-handy { display: block; margin: 10px 0 0; font-size: 13.5px; }
 }
+/* Einheitliche Druck-Knöpfe: »Drucken« mit Symbol, daneben »Als PDF speichern« */
+.druck-gruppe { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.druck-gruppe .btn, .btn:has(> svg) { white-space: nowrap; }
+.btn:has(> svg) { display: inline-flex; align-items: center; gap: 6px; }

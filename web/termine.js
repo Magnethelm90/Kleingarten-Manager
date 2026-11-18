@@ -60,12 +60,6 @@ function terminDialog(t) {
   ]);
 }
 
-// Jahresbericht für die Mitgliederversammlung: Kennzahlen, Kasse, Ausgaben, Verlauf, Termine – ohne Namen.
-const jahresberichtDrucken = (jahr) => pdfDrucken({
-  url: `/api/admin/jahresbericht?year=${jahr}`, oeffnenUrl: `/api/admin/jahresbericht/oeffnen?year=${jahr}`,
-  titel: `Jahresbericht ${jahr}`, meldung: () => 'Der Jahresbericht wurde im PDF-Programm geöffnet – dort drucken.',
-});
-
 const jahresplanDrucken = (jahr) => pdfDrucken({
   url: `/api/termine-druck?jahr=${jahr}`, oeffnenUrl: `/api/termine-druck/oeffnen?jahr=${jahr}`,
   titel: `Vereinstermine ${jahr}`, meldung: () => 'Der Jahresplan wurde im PDF-Programm geöffnet – dort drucken oder aushängen.',
@@ -626,14 +620,6 @@ async function zaehlerErinnerungDialog(jahr) {
 
 // ------------------------------------------------------------------ Berichte & Meldungen
 
-async function loadMeldung(jahr) {
-  if (S.meldungLoading) return;
-  S.meldungLoading = true;
-  try { S.meldung = await api('GET', `/api/admin/jahresmeldung?year=${jahr}`); } catch (e) { handleErr(e); S.meldung = false; }
-  S.meldungLoading = false;
-  render();
-}
-
 // Ablesung mit dem Handy: Ergebnisdatei vom Handy einlesen und zeigen, was übernommen wurde.
 function handyErgebnisEinlesen() {
   const datei = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none' });
@@ -783,18 +769,18 @@ async function befragungenDialog() {
 }
 
 // Statistik: wenige einfache Säulen-Diagramme über die Jahre, jedes mit einem Satz, was man daran sieht.
-async function statistikDialog() {
-  let r;
-  try { r = await api('GET', '/api/admin/statistik'); } catch (e) { handleErr(e); return; }
+// Inhalt des Reiters »Statistik« in den Jahreszahlen.
+async function statistikInhalt() {
+  const r = await api('GET', '/api/admin/statistik');
   const v = r.kosten.verein;
-  if (!v.length) { toast('Noch keine Jahre vorhanden', 'info'); return; }
+  if (!v.length) return h('p', { class: 'hint' }, 'Noch keine Jahre vorhanden.');
   const karte = (titel, satz, daten, fmt) => h('div', { class: 'card' }, h('h4', null, titel), h('p', { class: 'hint' }, satz),
     barChart(daten, { valueFmt: fmt }));
   const eurK = (x) => eur(x);
   const prozent = (x) => `${nfFlex.format(x)} %`;
   const tage = (x) => `${nfFlex.format(x)} Tage`;
   const z = r.zahlung;
-  const inhalt = h('div', { class: 'statistik' },
+  return h('div', { class: 'statistik' },
     h('p', { class: 'hint' }, 'So hat sich der Verein über die Jahre entwickelt. Jede Säule ist ein Jahr.'),
     h('div', { class: 'meldung-raster' },
       karte('Wasser', 'Wie viele Kubikmeter hat der ganze Verein verbraucht?', v.map((x) => ({ label: String(x.jahr), value: x.wasser || 0 })), (x) => `${nfFlex.format(x)} m³`),
@@ -803,18 +789,17 @@ async function statistikDialog() {
       karte('Rechnungen', 'Wie viel wurde den Pächtern insgesamt in Rechnung gestellt?', v.map((x) => ({ label: String(x.jahr), value: x.rechnungen || 0 })), eurK),
       z.length ? karte('Bezahlt', 'Wie viel Prozent der Rechnungen sind bezahlt? Je näher an 100, desto besser.', z.map((x) => ({ label: String(x.jahr), value: x.quote })), prozent) : null,
       z.some((x) => x.tage > 0) ? karte('Zahlungsdauer', 'Nach wie vielen Tagen wird im Durchschnitt bezahlt? Weniger ist besser.', z.filter((x) => x.tage > 0).map((x) => ({ label: String(x.jahr), value: x.tage })), tage) : null));
-  await modal('Statistik', inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
 }
 
-async function kostenvergleichDialog() {
-  let k;
-  try { k = await api('GET', '/api/admin/kostenvergleich'); } catch (e) { handleErr(e); return; }
-  if (!k.verein.length) { toast('Noch keine Jahre vorhanden', 'info'); return; }
+// Inhalt des Reiters »Kostenvergleich« in den Jahreszahlen.
+async function kostenvergleichInhalt() {
+  const k = await api('GET', '/api/admin/kostenvergleich');
+  if (!k.verein.length) return h('p', { class: 'hint' }, 'Noch keine Jahre vorhanden.');
   const wert = (v, einheit) => (v == null ? '–' : `${nfFlex.format(v)}${einheit}`);
   const reihe = (feld, titel, einheit) => h('div', { class: 'card' },
     h('h4', null, titel),
     barChart(k.verein.map((v) => ({ label: String(v.jahr), value: v[feld] || 0 })), { unit: einheit }));
-  const inhalt = h('div', null,
+  return h('div', null,
     k.hinweise.length ? h('div', { class: 'hinweis warn' }, h('b', null, 'Auffällig im Verein: '), k.hinweise.join(' · ')) : null,
     h('p', { class: 'hint' }, 'Verbrauch und Ausgaben der letzten Jahre. Auffällig ist ein Garten, dessen Verbrauch gegenüber dem Vorjahr um die Hälfte gestiegen ist (und über der Mindestabweichung liegt) – oft ein Rohrbruch, tropfender Hahn oder defekter Zähler.'),
     h('table', { class: 'tbl' },
@@ -832,7 +817,49 @@ async function kostenvergleichDialog() {
         ...g.werte.map((w) => h('td', { class: 'r' }, w.wasser == null && w.strom == null ? '–' : `${w.wasser == null ? '–' : nfFlex.format(w.wasser)} / ${w.strom == null ? '–' : nfFlex.format(w.strom)}`)),
         h('td', null, g.hinweise.length ? h('span', { class: 'badge warn' }, g.hinweise.join('; ')) : ''))))),
     h('p', { class: 'hint' }, 'Spalten: Wasser (m³) / Strom (kWh).'));
-  await breiterDialog('Kostenvergleich über die Jahre', inhalt, [{ label: 'Schließen', cls: 'primary', value: true }]);
+}
+
+// Jahresmeldung als Tabelle (früher unten auf der Berichte-Seite).
+async function jahresmeldungInhalt(jahr) {
+  const m = await api('GET', `/api/admin/jahresmeldung?year=${jahr}`);
+  const fmt = (z) => (z.einheit === '€' ? eur(z.wert) : `${nfFlex.format(z.wert)}${z.einheit ? ' ' + z.einheit : ''}`);
+  const gruppen = [];
+  for (const z of m.zeilen) {
+    if (!gruppen.length || gruppen[gruppen.length - 1].g !== z.gruppe) gruppen.push({ g: z.gruppe, z: [] });
+    gruppen[gruppen.length - 1].z.push(z);
+  }
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Zahlen für den Landes- oder Regionalverband: Parzellen, Flächen, Wechsel, Warteliste, Stunden, Abgaben.'),
+    h('div', { class: 'row', style: 'margin-bottom:12px;align-items:center' }, h('a', { class: 'btn primary', href: `/api/admin/jahresmeldung?year=${jahr}&format=xlsx` }, 'Als Excel'),
+      druckKnopf({ url: `/api/admin/jahresmeldung/pdf?year=${jahr}`, oeffnenUrl: `/api/admin/jahresmeldung/pdf/oeffnen?year=${jahr}`, titel: `Jahresmeldung ${jahr}` }, { speichern: `Jahresmeldung_${jahr}.pdf` })),
+    h('div', { class: 'meldung-raster' }, gruppen.map((g) => h('div', { class: 'card' },
+      h('h4', null, g.g),
+      h('table', { class: 'meldung' }, h('tbody', null, g.z.map((z) => h('tr', null, h('td', null, z.angabe), h('td', { class: 'num' }, h('b', null, fmt(z)))))))))),
+    h('p', { class: 'hint', style: 'margin-top:12px' }, 'Neu vergebene Gärten zählen nur Vergaben über Pächterwechsel oder Warteliste, nicht das erstmalige Eintragen langjähriger Pächter. Das Formular eures Verbands kann andere Angaben verlangen – die Excel-Datei lässt sich frei ergänzen.'));
+}
+
+// Jahreszahlen: Jahresbericht, Jahresmeldung, Statistik und Kostenvergleich in einem Fenster mit Reitern.
+async function jahreszahlenDialog(jahr, start) {
+  const reiter = [
+    ['bericht', 'Jahresbericht', async () => h('div', null,
+      h('p', null, `Für die Mitgliederversammlung: Kennzahlen ${jahr} mit Vorjahresvergleich, Kasse, Ausgaben, Verlauf und Termine – ohne Namen.`),
+      druckKnopf({ url: `/api/admin/jahresbericht?year=${jahr}`, oeffnenUrl: `/api/admin/jahresbericht/oeffnen?year=${jahr}`, titel: `Jahresbericht ${jahr}` }, { speichern: `Jahresbericht_${jahr}.pdf`, primary: true }))],
+    ['meldung', 'Jahresmeldung', () => jahresmeldungInhalt(jahr)],
+    ['statistik', 'Statistik', statistikInhalt],
+    ['vergleich', 'Kostenvergleich', async () => h('div', null,
+      h('div', { class: 'row', style: 'margin-bottom:12px' }, druckKnopf({ url: '/api/admin/kostenvergleich/pdf', oeffnenUrl: '/api/admin/kostenvergleich/pdf/oeffnen', titel: 'Kostenvergleich' }, { speichern: 'Kostenvergleich.pdf' })),
+      await kostenvergleichInhalt())],
+  ];
+  let aktiv = start || 'bericht';
+  const kopf = h('div'), inhalt = h('div', { class: 'jz-inhalt' });
+  const zeigen = async () => {
+    kopf.replaceChildren(reiterLeiste(reiter.map(([k, l]) => ({ label: l, aktiv: k === aktiv, geh: () => { aktiv = k; zeigen(); } })), 'Jahreszahlen'));
+    inhalt.replaceChildren(h('p', { class: 'hint' }, 'Wird geladen …'));
+    const r = reiter.find((x) => x[0] === aktiv);
+    try { inhalt.replaceChildren(await r[2]()); } catch (e) { inhalt.replaceChildren(h('p', { class: 'hint' }, 'Konnte nicht geladen werden.')); handleErr(e); }
+  };
+  zeigen();
+  await breiterDialog(`Jahreszahlen ${jahr}`, h('div', null, kopf, inhalt), [{ label: 'Schließen', cls: 'primary', value: true }]);
 }
 
 async function papierkorbDialog() {
@@ -881,7 +908,7 @@ async function papierkorbDialog() {
 async function vordruckeDialog() {
   const st = S.state;
   const zeile = (titel, text, ...knoepfe) => h('div', { class: 'vordruck' }, h('div', null, h('b', null, titel), h('div', { class: 'hint' }, text)), h('div', { class: 'row' }, ...knoepfe));
-  const knopf = (label, fn) => h('button', { class: 'btn', onclick: fn }, label);
+  const knopf = (label, fn) => h('button', { class: 'btn', onclick: fn, title: 'Öffnet das PDF – dort drucken oder speichern' }, label === 'Drucken' ? [icon('drucker', 16), ' Drucken'] : label);
   const body = h('div', { class: 'vordrucke' },
     h('h4', null, 'Für den Rundgang'),
     zeile(`Ablesebogen ${st.currentYear}`, 'Alle Gärten mit Zählern und Vorjahresständen.', knopf('Drucken', () => ablesebogenDrucken(st.currentYear))),
@@ -898,38 +925,23 @@ async function vordruckeDialog() {
 function adminBerichte() {
   const st = S.state;
   const jahr = S.berichtJahr || st.currentYear;
-  if (S.meldung == null || (S.meldung && S.meldung.jahr !== jahr)) { if (!S.meldungLoading) loadMeldung(jahr); }
-  const m = S.meldung && S.meldung.jahr === jahr ? S.meldung : null;
-  const jahrSel = h('select', { onchange: (e) => { S.berichtJahr = Number(e.target.value); S.meldung = null; render(); } },
+  const jahrSel = h('select', { onchange: (e) => { S.berichtJahr = Number(e.target.value); render(); } },
     st.years.map((y) => h('option', { value: y, selected: y === jahr }, String(y))));
   const kachel = (ic, titel, text, knopf) => h('div', { class: 'bericht-kachel' },
     h('span', { class: 'qlico' }, icon(ic, 24)), h('div', null, h('b', null, titel), h('p', { class: 'hint' }, text)), knopf);
-  const fmt = (z) => (z.einheit === '€' ? eur(z.wert) : `${nfFlex.format(z.wert)}${z.einheit ? ' ' + z.einheit : ''}`);
-  // PDF-Knopf für Kacheln, die sonst nur einen Dialog oder eine Excel-Datei haben
-  const pdfKnopf = (pfad, titel, query = '') => h('button', { class: 'btn', onclick: () => pdfDrucken({ url: `/api/admin/${pfad}/pdf${query}`, oeffnenUrl: `/api/admin/${pfad}/pdf/oeffnen${query}`, titel, meldung: () => `${titel} im PDF-Programm geöffnet – dort drucken.` }) }, 'Als PDF');
-  const gruppen = [];
-  for (const z of (m ? m.zeilen : [])) {
-    if (!gruppen.length || gruppen[gruppen.length - 1].g !== z.gruppe) gruppen.push({ g: z.gruppe, z: [] });
-    gruppen[gruppen.length - 1].z.push(z);
-  }
+  const pdfKnopf = (pfad, titel, query = '') => druckKnopf({ url: `/api/admin/${pfad}/pdf${query}`, oeffnenUrl: `/api/admin/${pfad}/pdf/oeffnen${query}`, titel });
   return h('div', null,
     h('p', { class: 'hint' }, 'Alles, was der Vorstand im Jahr vorlegen oder melden muss, an einer Stelle.'),
     h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), jahrSel),
     h('h3', { class: 'bericht-gruppe' }, 'Für Versammlung und Verband'),
     h('p', { class: 'hint' }, 'Zahlen und Unterlagen, die der Vorstand vorlegt oder meldet.'),
     h('div', { class: 'bericht-raster' },
-      kachel('bericht', `Jahresbericht ${jahr}`, 'Für die Mitgliederversammlung: Kennzahlen mit Vorjahresvergleich, Kasse, Ausgaben, Verlauf, Termine – ohne Namen.',
-        h('button', { class: 'btn primary', onclick: () => jahresberichtDrucken(jahr) }, 'Als PDF')),
+      kachel('bericht', `Jahreszahlen ${jahr}`, 'Jahresbericht für die Versammlung, Jahresmeldung für den Verband, Statistik und Kostenvergleich über die Jahre – alles in einem Fenster.',
+        h('button', { class: 'btn primary', onclick: () => jahreszahlenDialog(jahr) }, 'Öffnen')),
       kachel('bericht', `Jahresabrechnung ${jahr}`, 'Alle ausgestellten Rechnungen des Jahres in einer Datei: vorn eine Übersicht mit Summen, danach je Pächter eine Seite.',
         pdfKnopf('jahresabrechnung', `Jahresabrechnung ${jahr}`, `?year=${jahr}`)),
-      kachel('waage', `Jahresmeldung ${jahr}`, 'Zahlen für den Landes- oder Regionalverband: Parzellen, Flächen, Wechsel, Warteliste, Stunden, Abgaben.',
-        h('div', { class: 'row' }, h('a', { class: 'btn primary', href: `/api/admin/jahresmeldung?year=${jahr}&format=xlsx` }, 'Als Excel'), pdfKnopf('jahresmeldung', `Jahresmeldung ${jahr}`, `?year=${jahr}`))),
       kachel('uhr', `Arbeitsstunden ${jahr}`, 'Soll und Ist der Gemeinschaftsarbeit je Garten, mit der Ersatzzahlung, die sonst anfällt. Einzelne Stunden lassen sich nachtragen.',
         h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => stundenkontoDialog(jahr) }, 'Ansehen'), pdfKnopf('stundenkonto', `Arbeitsstunden ${jahr}`, `?year=${jahr}`))),
-      kachel('bericht', 'Statistik', 'Wasser, Strom, Ausgaben, Rechnungen und Zahlungsmoral über die Jahre als einfache Diagramme.',
-        h('button', { class: 'btn', onclick: statistikDialog }, 'Ansehen')),
-      kachel('bericht', 'Kostenvergleich', 'Wasser, Strom und Ausgaben über die Jahre, je Garten mit Hinweis auf auffälligen Mehrverbrauch.',
-        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: kostenvergleichDialog }, 'Ansehen'), pdfKnopf('kostenvergleich', 'Kostenvergleich'))),
       kachel('personen', 'Mitgliederbefragung', 'Fragebogen zum Ausdrucken, Erfassungsbogen zum Auszählen und anonyme Auswertung für die Versammlung.',
         h('button', { class: 'btn', onclick: befragungenDialog }, 'Öffnen'))
     ),
@@ -959,11 +971,5 @@ function adminBerichte() {
         h('button', { class: 'btn', onclick: papierkorbDialog }, 'Öffnen')),
       kachel('daten', 'Amtsübergabe', 'Vereinsakte für den neuen Vorstand: alle Daten und Dateien plus »Lies mich zuerst« mit Zahlen, Regeln und offenen Punkten.',
         h('button', { class: 'btn', onclick: vereinsakteErstellen }, 'Erstellen'))
-    ),
-    h('h3', null, `Jahresmeldung ${jahr} – Übersicht`),
-    !m ? h('p', { class: 'hint' }, S.meldung === false ? 'Konnte nicht geladen werden.' : 'Wird geladen …')
-      : h('div', { class: 'meldung-raster' }, gruppen.map((g) => h('div', { class: 'card' },
-        h('h4', null, g.g),
-        h('table', { class: 'meldung' }, h('tbody', null, g.z.map((z) => h('tr', null, h('td', null, z.angabe), h('td', { class: 'num' }, h('b', null, fmt(z)))))))))),
-    m ? h('p', { class: 'hint', style: 'margin-top:12px' }, 'Neu vergebene Gärten zählen nur Vergaben über Pächterwechsel oder Warteliste, nicht das erstmalige Eintragen langjähriger Pächter. Das Formular eures Verbands kann andere Angaben verlangen – die Excel-Datei lässt sich frei ergänzen.') : null);
+    ));
 }

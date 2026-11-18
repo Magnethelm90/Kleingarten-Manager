@@ -650,6 +650,17 @@ async function pdfDrucken({ url, oeffnenUrl, titel, meldung, body }) {
   } catch (e) { handleErr(e); return false; }
 }
 
+// Einheitlicher Druck-Knopf: öffnet das PDF (dort drucken oder speichern). Mit »speichern« (Dateiname) kommt
+// »Als PDF speichern« dazu – nur für PDFs, die per einfacher Adresse abrufbar sind (nicht für POST mit Text).
+function druckKnopf(opts, { label = 'Drucken', speichern, primary, klein } = {}) {
+  const knopf = h('button', { class: 'btn' + (primary ? ' primary' : '') + (klein ? ' small' : ''), title: 'Öffnet das PDF – dort drucken oder speichern',
+    onclick: () => pdfDrucken({ meldung: () => `${opts.titel} im PDF-Programm geöffnet – dort drucken oder speichern.`, ...opts }) },
+  icon('drucker', klein ? 14 : 16), ' ', label);
+  if (!speichern) return knopf;
+  return h('span', { class: 'druck-gruppe' }, knopf,
+    h('a', { class: 'btn' + (klein ? ' small' : ''), href: opts.url, download: speichern, title: 'Die PDF-Datei auf dem Rechner ablegen' }, 'Als PDF speichern'));
+}
+
 // Alle Rechnungen mit Postversand als eine PDF-Datei zum Ausdrucken (nach Mitgliedsnummer sortiert).
 // Danach als »verschickt« vermerken (für den Jahres-Fahrplan auf der Übersicht).
 async function postRechnungenDrucken(year) {
@@ -738,8 +749,8 @@ function viewAusstellen() {
       bar.append(h('button', { class: 'btn primary', onclick: async () => { try { await issue([p.id], false); } catch (e) { handleErr(e); } } }, 'Rechnung ausstellen & speichern'));
     }
     if (canShow) {
-      bar.append(h('a', { class: 'btn', href: url, target: '_blank' }, 'PDF öffnen / drucken'),
-        h('a', { class: 'btn', href: url, download: `Rechnung_${p.mitgliedsnr}.pdf` }, 'PDF speichern'));
+      bar.append(h('a', { class: 'btn', href: url, target: '_blank', title: 'Öffnet das PDF – dort drucken oder speichern' }, icon('drucker', 16), ' Drucken'),
+        h('a', { class: 'btn', href: url, download: `Rechnung_${p.mitgliedsnr}.pdf`, title: 'Die PDF-Datei auf dem Rechner ablegen' }, 'Als PDF speichern'));
       if (inNativeWindow() && inf && !showLive) {
         bar.append(h('button', { class: 'btn', title: 'Im PDF-Programm des Rechners öffnen und dort drucken', onclick: () => imPdfProgrammOeffnen(inf.id) }, 'Im PDF-Programm öffnen'));
       }
