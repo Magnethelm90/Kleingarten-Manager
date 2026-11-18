@@ -98,8 +98,9 @@ func (d *Data) entfernePerson(id string) bool {
 		changed = true
 	}
 	for i := range d.GartenHistorie {
-		if e := &d.GartenHistorie[i]; e.PaechterID == id && (e.Name != geloeschtText || e.Mitgliedsnr != "") {
-			e.Name, e.Mitgliedsnr, changed = geloeschtText, "", true
+		// auch die ID: über sie ließe sich die Person mit den aufbewahrten Rechnungen wieder verknüpfen
+		if e := &d.GartenHistorie[i]; e.PaechterID == id {
+			e.PaechterID, e.Name, e.Mitgliedsnr, changed = "", geloeschtText, "", true
 		}
 	}
 	for _, j := range d.Jahre {
@@ -364,6 +365,9 @@ type auskunft struct {
 	Inventar    []auskunftInventar  `json:"schluesselUndGeraete"`
 	Kuendigung  []Kuendigung        `json:"kuendigungen"`
 	Geburtstag  *Geburtstag         `json:"geburtstag,omitempty"`
+	Aemter      []Amt               `json:"vereinsaemter"`
+	Papierkorb  []string            `json:"imPapierkorb"`
+	Bankabgl    string              `json:"bankabgleich,omitempty"`
 	Aufbewahrng string              `json:"aufbewahrung"`
 }
 
@@ -485,6 +489,26 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 	for _, e := range s.d.AuditLog {
 		if (p.Name != "" && strings.Contains(e.Aktion, p.Name)) || (p.Mitgliedsnr != "" && strings.Contains(e.Aktion, p.Mitgliedsnr+" ")) {
 			a.Protokoll = append(a.Protokoll, e)
+		}
+	}
+	// Ämter sind nur über den Namen verknüpft (frei eingetragen)
+	a.Aemter = []Amt{}
+	for _, x := range s.d.Aemter {
+		if p.Name != "" && strings.EqualFold(strings.TrimSpace(x.Name), strings.TrimSpace(p.Name)) {
+			a.Aemter = append(a.Aemter, x)
+		}
+	}
+	a.Papierkorb = []string{}
+	for _, e := range s.d.Papierkorb {
+		if e.PaechterID == id {
+			a.Papierkorb = append(a.Papierkorb, fmt.Sprintf("%s: %s (gelöscht am %s, wird nach %d Tagen endgültig entfernt)", papierkorbArten[e.Art], e.Titel, germanDate(e.GeloeschtAm), papierkorbTage))
+		}
+	}
+	for _, pid := range s.d.KontoGelernt {
+		if pid == id {
+			a.Bankabgl = "Beim Einlesen von Kontoauszügen hat sich das Programm gemerkt, dass Zahlungen mit Ihrem Absendernamen " +
+				"zu Ihnen gehören. Gespeichert ist dafür nur ein nicht umkehrbarer Prüfwert, nicht der Name selbst."
+			break
 		}
 	}
 	return a, true

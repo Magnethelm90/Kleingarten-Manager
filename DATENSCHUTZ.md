@@ -20,7 +20,7 @@
 
 | Recht | Wo im Programm |
 | --- | --- |
-| Auskunft (Art. 15) und Datenkopie (Art. 20) | Pächter → Mehr → **Auskunft** (auch im Papierkorb und unter »Datenschutz«): alle Daten einer Person als maschinenlesbare JSON-Datei |
+| Auskunft (Art. 15) und Datenkopie (Art. 20) | Pächter → Mehr → **Auskunft** (auch im Papierkorb und unter »Datenschutz«): alle Daten einer Person als maschinenlesbare JSON-Datei, einschließlich Vereinsämtern, Einträgen im Papierkorb und dem gelernten Bankabgleich. Für die Warteliste: Eintrag → Mehr → **Auskunft nach DSGVO** |
 | Berichtigung (Art. 16) | Pächter → Bearbeiten |
 | Löschung (Art. 17) | Pächter → Mehr → In den Papierkorb → Papierkorb → **Endgültig löschen** |
 | Einschränkung (Art. 18) | Pächter im Papierkorb lassen: er verschwindet aus allen Ansichten und Berechnungen, bleibt aber erhalten |
@@ -34,7 +34,7 @@ vorher prüfen.
 **Endgültig löschen** entfernt sofort:
 
 - Stammdaten (inkl. E-Mail und Telefon), interne Notiz, Zählernummern, offene (nicht abgeschlossene) Zählerstände,
-- den Namen und die Mitgliedsnummer in der Garten-Historie und im Änderungsprotokoll,
+- den Namen, die Mitgliedsnummer und die interne Kennung in der Garten-Historie sowie den Namen im Änderungsprotokoll,
 - Hinweis- und Notizfelder in aufbewahrten Rechnungen und Jahresunterlagen (auch der Freitext »Grund« von Gutschriften; die Beträge bleiben für die Buchführung),
 - **alles Genannte auch in allen vorhandenen Sicherungen** (inkl. zweitem Sicherungsordner, sofern erreichbar).
   Dafür wird bewusst keine Sicherung „vor dem Löschen“ angelegt.
@@ -95,7 +95,13 @@ enthält keine Personendaten.
 
 **Kündigungen und Pachtverträge:** Eine erfasste Kündigung (Datum, Grund, erledigte Schritte) steht in der
 Auskunft und wird beim endgültigen Löschen der Person entfernt. Ein in die Gartenakte gelegter Pachtvertrag gehört
-zur Person und wird mit ihr gelöscht. Beschlussbuch, Vereinsverträge und Haushaltsplan enthalten keine Pächterdaten.
+zur Person und wird mit ihr gelöscht. Vereinsverträge und Haushaltsplan enthalten keine Pächterdaten.
+
+**Ämter und Wahlen:** Die Ämterliste speichert, wer welches Amt seit wann innehat; nach einer Wahl steht das Ergebnis
+mit Namen im Beschlussbuch. Das sind Vereinsunterlagen (Nachweis, wer den Verein vertritt, z. B. gegenüber dem
+Vereinsregister). Ämter sind nur über den Namen mit einer Person verknüpft: Die Auskunft nennt sie, beim endgültigen
+Löschen eines Pächters werden sie aber nicht automatisch geschwärzt. Wer kein Amt mehr hat und gelöscht werden möchte,
+bei Bedarf von Hand anonymisieren (Ämter → Bearbeiten).
 
 **Kontoauszug:** Die CSV-Datei aus dem Online-Banking wird nur im Arbeitsspeicher gelesen und nicht gespeichert;
 sie enthält auch Buchungen Dritter. Übernommen werden nur die bestätigten Zahlungsvermerke an den Rechnungen. Damit
@@ -170,6 +176,7 @@ werden – nur mit Einverständnis der genannten Personen. Das Exposé enthält 
 **Warteliste:** Einträge werden gelöscht, sobald kein Interesse mehr besteht (auch aus allen Sicherungen); wird ein
 Garten vergeben, gehen die Angaben in die Stammdaten des neuen Pächters über. Wer seit über 2 Jahren nicht
 nachgefragt wurde, wird markiert (unter »Warteliste« und »Datenschutz«): dann nachfragen oder löschen.
+Auch Interessenten haben ein Auskunftsrecht: Eintrag → Mehr → »Auskunft nach DSGVO« liefert alle Angaben als Datei.
 Rechtsgrundlage ist die Anbahnung eines Pachtvertrags (Art. 6 Abs. 1 lit. b DSGVO); Interessenten sollten bei der
 Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 

@@ -349,6 +349,7 @@ function adminWarteliste() {
               label, aktion: () => pdfDrucken({ url: `/api/admin/warteliste/${encodeURIComponent(b.id)}/brief?art=${art}`, oeffnenUrl: `/api/admin/warteliste/${encodeURIComponent(b.id)}/brief/oeffnen?art=${art}`,
                 titel: label, meldung: () => 'Der Brief wurde im PDF-Programm geöffnet – dort drucken oder als PDF verschicken.' }) })),
             { label: 'Interesse heute bestätigt', aktion: () => bestaetigen(b) },
+            { label: 'Auskunft nach DSGVO (Datei)', aktion: () => { location.href = `/api/admin/warteliste/${encodeURIComponent(b.id)}/auskunft`; } },
             { label: 'Von der Liste löschen', gefahr: true, aktion: () => loeschen(b) }])))))))
       : leer('personen', 'Niemand auf der Warteliste', 'Wer sich für einen Garten interessiert, kommt hier auf die Liste. Wird ein Garten frei, siehst du sofort, wer als Nächstes dran ist.', '+ Auf die Warteliste setzen', neu));
 }

@@ -51,6 +51,10 @@ func TestLoeschungInAllenBereichen(t *testing.T) {
 	rest.Rechnungen, rest.Jahre, rest.Lastschriften, rest.Spenden = nil, nil, nil, nil
 	ohne, _ := json.Marshal(&rest)
 	for _, p := range alle {
+		// auch die interne ID darf außerhalb der Aufbewahrungsunterlagen nicht mehr vorkommen
+		if i := strings.Index(string(ohne), p.id); i >= 0 {
+			t.Errorf("ID von %q steht noch außerhalb der Aufbewahrungsunterlagen: …%s…", p.name, string(ohne)[max(0, i-100):min(len(ohne), i+40)])
+		}
 		if i := strings.Index(string(ohne), p.name); i >= 0 {
 			t.Errorf("Name %q steht noch außerhalb der Aufbewahrungsunterlagen: …%s…", p.name, string(ohne)[max(0, i-100):min(len(ohne), i+60)])
 		}
