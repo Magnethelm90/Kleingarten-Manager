@@ -120,8 +120,6 @@ function cockpitKarte(st, istAdmin) {
   const zurueck = async (a, tage) => {
     try { await api('POST', '/api/admin/aufgaben/zurueckstellen', { schluessel: a.schluessel, tage }); S.aufgaben = null; render(); } catch (e) { handleErr(e); }
   };
-  const GRUPPE = { err: 'Dringend', warn: 'Bald erledigen', info: 'Zur Kenntnis' };
-  const stufenMenge = new Set(l.map((a) => a.stufe));
   const zeile = (a) => {
     const wahl = h('select', { class: 'zurueck-wahl', 'aria-label': `Hinweis zurückstellen: ${a.titel}`, title: 'Diesen Hinweis für einige Tage ausblenden',
       onchange: (e) => { const t = Number(e.target.value); if (t) zurueck(a, t); } },
@@ -132,24 +130,18 @@ function cockpitKarte(st, istAdmin) {
       wahl,
       h('button', { class: 'btn small', onclick: () => geh(a.ziel) }, a.knopf + ' →'));
   };
-  const teile = [];
-  if (l.length > 6) {
-    // Viele Hinweise: nach Bereich zusammenfassen (Geld, Anlage, Verein). Bereiche mit Dringendem sind aufgeklappt.
-    const rang = { err: 0, warn: 1, info: 2 };
-    for (const b of COCKPIT_BEREICHE) {
-      const gruppe = l.filter((a) => cockpitBereich(a.ziel) === b[0]).sort((x, y) => rang[x.stufe] - rang[y.stufe]);
-      if (!gruppe.length) continue;
-      const dringend = gruppe.filter((a) => a.stufe !== 'info').length;
-      teile.push(h('details', { class: 'cockpit-bereich', open: dringend > 0 },
-        h('summary', null, h('b', null, b[1]), ' ', h('span', { class: 'zahl' }, String(gruppe.length)),
-          dringend ? h('span', { class: 'hint', style: 'margin-left:8px' }, `${dringend} wichtig`) : null),
-        h('ul', { class: 'cockpit-liste' }, gruppe.map(zeile))));
-    }
-  } else for (const stufe of ['err', 'warn', 'info']) {
-    const gruppe = l.filter((a) => a.stufe === stufe);
-    if (!gruppe.length) continue;
-    if (stufenMenge.size > 1) teile.push(h('div', { class: 'cockpit-gruppe' }, GRUPPE[stufe]));
-    teile.push(h('ul', { class: 'cockpit-liste' }, gruppe.map(zeile)));
+  // Die fünf wichtigsten Hinweise stehen offen da (dringend zuerst), alles Weitere ist eingeklappt und nach Bereich sortiert.
+  const rang = { err: 0, warn: 1, info: 2 };
+  const sortiert = [...l].sort((x, y) => rang[x.stufe] - rang[y.stufe]);
+  const oben = sortiert.slice(0, 5), rest = sortiert.slice(5);
+  const teile = [h('ul', { class: 'cockpit-liste' }, oben.map(zeile))];
+  if (rest.length) {
+    const bereiche = COCKPIT_BEREICHE.map((b) => [b, rest.filter((a) => cockpitBereich(a.ziel) === b[0])]).filter(([, g]) => g.length);
+    const mehr = h('details', { class: 'cockpit-bereich', open: !!S.cockpitMehr },
+      h('summary', null, h('b', null, anz(rest.length, 'weiterer Hinweis', 'weitere Hinweise'))),
+      bereiche.map(([b, g]) => [bereiche.length > 1 ? h('div', { class: 'cockpit-gruppe' }, b[1]) : null, h('ul', { class: 'cockpit-liste' }, g.map(zeile))]));
+    mehr.addEventListener('toggle', () => { S.cockpitMehr = mehr.open; });
+    teile.push(mehr);
   }
   const zb = S.aufgabenZurueck || [];
   const zbBox = zb.length ? h('details', { class: 'cockpit-zurueck' },
