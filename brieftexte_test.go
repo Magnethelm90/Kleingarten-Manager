@@ -125,3 +125,22 @@ func TestBrieftexteInAllenBriefen(t *testing.T) {
 		t.Errorf("Mängelschreiben: %v", err)
 	}
 }
+
+// Probebrief: für jede Vorlage ein PDF mit dem eingegebenen Text, ohne ihn zu speichern.
+func TestBrieftextProbebrief(t *testing.T) {
+	a, h := newTestApp(t)
+	for _, v := range brieftextVorlagen {
+		rec := do(h, "POST", "/api/admin/brieftexte/"+v.Key+"/probe", map[string]string{"text": "Probetext {Frist} {Seit} 50 %"})
+		if rec.Code != 200 || !strings.HasPrefix(rec.Body.String(), "%PDF") {
+			t.Errorf("%s: %d %.200s", v.Key, rec.Code, rec.Body.String())
+		}
+	}
+	if rec := do(h, "POST", "/api/admin/brieftexte/mahnung2/probe", map[string]string{"text": strings.Repeat("x", 401)}); rec.Code != 400 {
+		t.Errorf("zu lang: %d", rec.Code)
+	}
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	if a.st.d.Settings.Brieftexte != (Brieftexte{}) {
+		t.Error("Probebrief darf nichts speichern")
+	}
+}

@@ -660,7 +660,11 @@ async function brieftextDialog(b) {
     b.platzhalter.length ? h('div', { class: 'chips' }, h('span', { class: 'hint' }, 'Einsetzen:'),
       b.platzhalter.map((p) => h('button', { class: 'btn small', type: 'button', title: 'Wird im Brief durch die passende Angabe ersetzt', onclick: () => einsetzen(p) }, `{${p}}`))) : null,
     feld, zaehler,
-    h('div', null, h('button', { class: 'btn small', type: 'button', onclick: () => { feld.value = b.standard; zaehle(); feld.dispatchEvent(new Event('input')); } }, 'Standardtext einsetzen'))),
+    h('div', { class: 'toolbar' },
+      h('button', { class: 'btn small', type: 'button', title: 'Zeigt den Brief mit diesem Text und erfundenen Beispieldaten – gespeichert wird dabei nichts', onclick: () => pdfDrucken({
+        url: `/api/admin/brieftexte/${encodeURIComponent(b.key)}/probe`, oeffnenUrl: `/api/admin/brieftexte/${encodeURIComponent(b.key)}/probe/oeffnen`,
+        titel: 'Probebrief', meldung: () => 'Der Probebrief wurde im PDF-Programm geöffnet.', body: { text: feld.value } }) }, 'Probebrief ansehen'),
+      h('button', { class: 'btn small', type: 'button', onclick: () => { feld.value = b.standard; zaehle(); feld.dispatchEvent(new Event('input')); } }, 'Standardtext einsetzen'))),
   [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
     try { await api('PUT', `/api/admin/brieftexte/${encodeURIComponent(b.key)}`, { text: feld.value }); } catch (e) { handleErr(e); return false; }
   } }]);

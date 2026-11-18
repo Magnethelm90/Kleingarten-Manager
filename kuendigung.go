@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/go-pdf/fpdf"
 	"net/http"
 	"sort"
 	"strings"
@@ -316,23 +317,7 @@ func (a *App) kuendigungBestaetigungPDF(r *http.Request) ([]byte, string, error)
 	}
 	s := a.st.d.Settings
 	heute := time.Now().Format("2006-01-02")
-	pdf := neuesPDF(s, "Bestätigung der Kündigung – Garten "+k.Gartennr, false)
-	y := briefAnfang(pdf, s, *p, heute)
-	text := s.Brieftexte.text("anrede", nil) + "\n\n"
-	switch k.Von {
-	case "verein":
-		text += fmt.Sprintf("hiermit halten wir fest, dass der Verein das Pachtverhältnis über den Garten %s zum %s gekündigt hat.", k.Gartennr, germanDate(k.Zum))
-	case "einvernehmlich":
-		text += fmt.Sprintf("wie besprochen endet das Pachtverhältnis über den Garten %s im gegenseitigen Einvernehmen zum %s.", k.Gartennr, germanDate(k.Zum))
-	default:
-		text += fmt.Sprintf("wir bestätigen den Eingang Ihrer Kündigung vom %s. Das Pachtverhältnis über den Garten %s endet zum %s.", germanDate(k.Eingang), k.Gartennr, germanDate(k.Zum))
-	}
-	rueckgabe := ""
-	if len(schluessel) > 0 {
-		rueckgabe = "\n•  Bitte geben Sie bei der Übergabe zurück: " + strings.Join(schluessel, ", ") + "."
-	}
-	text += "\n\n" + s.Brieftexte.text("kuendigung", map[string]string{"Garten": k.Gartennr, "Zum": germanDate(k.Zum), "Schluessel": rueckgabe})
-	briefText(pdf, s, y, "Bestätigung der Kündigung – Garten "+k.Gartennr, text)
+	pdf := buildKuendigungsBestaetigung(s, *p, *k, schluessel, heute)
 	out, err := pdfBytes(pdf)
 	if err != nil {
 		return nil, "", err
@@ -385,4 +370,26 @@ func (d *Data) kuendigungPersonEntfernen(id string) bool {
 	}
 	d.Kuendigungen = behalten
 	return changed
+}
+
+// buildKuendigungsBestaetigung setzt den Brief zur Kündigung (auch für den Probebrief der Brieftexte).
+func buildKuendigungsBestaetigung(s Settings, p Paechter, k Kuendigung, schluessel []string, heute string) *fpdf.Fpdf {
+	pdf := neuesPDF(s, "Bestätigung der Kündigung – Garten "+k.Gartennr, false)
+	y := briefAnfang(pdf, s, p, heute)
+	text := s.Brieftexte.text("anrede", nil) + "\n\n"
+	switch k.Von {
+	case "verein":
+		text += fmt.Sprintf("hiermit halten wir fest, dass der Verein das Pachtverhältnis über den Garten %s zum %s gekündigt hat.", k.Gartennr, germanDate(k.Zum))
+	case "einvernehmlich":
+		text += fmt.Sprintf("wie besprochen endet das Pachtverhältnis über den Garten %s im gegenseitigen Einvernehmen zum %s.", k.Gartennr, germanDate(k.Zum))
+	default:
+		text += fmt.Sprintf("wir bestätigen den Eingang Ihrer Kündigung vom %s. Das Pachtverhältnis über den Garten %s endet zum %s.", germanDate(k.Eingang), k.Gartennr, germanDate(k.Zum))
+	}
+	rueckgabe := ""
+	if len(schluessel) > 0 {
+		rueckgabe = "\n•  Bitte geben Sie bei der Übergabe zurück: " + strings.Join(schluessel, ", ") + "."
+	}
+	text += "\n\n" + s.Brieftexte.text("kuendigung", map[string]string{"Garten": k.Gartennr, "Zum": germanDate(k.Zum), "Schluessel": rueckgabe})
+	briefText(pdf, s, y, "Bestätigung der Kündigung – Garten "+k.Gartennr, text)
+	return pdf
 }

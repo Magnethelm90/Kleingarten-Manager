@@ -1921,6 +1921,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("PUT /api/admin/settings", a.admin(a.handleSettings))
 	mux.HandleFunc("GET /api/admin/brieftexte", a.admin(a.handleBrieftexte))
 	mux.HandleFunc("PUT /api/admin/brieftexte/{key}", a.admin(a.handleBrieftextSpeichern))
+	mux.HandleFunc("POST /api/admin/brieftexte/{key}/probe", a.admin(a.pdfAnzeigen(a.brieftextProbePDF)))
+	mux.HandleFunc("POST /api/admin/brieftexte/{key}/probe/oeffnen", a.admin(a.pdfOeffnen(a.brieftextProbePDF)))
 	mux.HandleFunc("POST /api/admin/jahreswechsel", a.admin(a.handleNextYear))
 	mux.HandleFunc("POST /api/admin/import/preview", a.admin(a.handleImportPreview))
 	mux.HandleFunc("POST /api/admin/import/apply", a.admin(a.handleImportApply))

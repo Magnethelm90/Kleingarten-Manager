@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
 )
 
 // Eigene Brieftexte: Vereine haben ihre eigene Tonlage. Anpassbar sind die festen Sätze der Briefe; was sich je
@@ -196,4 +198,63 @@ func (a *App) handleBrieftextSpeichern(w http.ResponseWriter, r *http.Request) {
 		a.st.audit("Brieftext »%s« geändert", v.Titel)
 	}
 	a.speichernUndAntworten(w, map[string]bool{"ok": true})
+}
+
+// brieftextProbePDF: Probebrief mit dem eingegebenen (noch nicht gespeicherten) Text und erfundenen Beispieldaten.
+// Für Anrede, Gruß und Unterschrift dient das Mängelschreiben als Beispiel.
+func (a *App) brieftextProbePDF(r *http.Request) ([]byte, string, error) {
+	var in struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<16)).Decode(&in); err != nil {
+		return nil, "", bad("Ungültige Eingabe")
+	}
+	key := r.PathValue("key")
+	v, ok := brieftextVorlageZu(key)
+	if !ok {
+		return nil, "", notFound("Unbekannter Brieftext")
+	}
+	text := strings.TrimSpace(strings.ReplaceAll(in.Text, "\r\n", "\n"))
+	if n := len([]rune(text)); n > v.grenze() {
+		return nil, "", bad(fmt.Sprintf("Der Text ist zu lang: %d Zeichen, erlaubt sind höchstens %d.", n, v.grenze()))
+	}
+	a.st.mu.Lock()
+	s := a.st.d.Settings
+	a.st.mu.Unlock()
+	f, _ := brieftextFeld(&s.Brieftexte, key)
+	f.SetString(text)
+
+	heute := time.Now()
+	frist := heute.AddDate(0, 0, 14).Format("2006-01-02")
+	p := Paechter{Mitgliedsnr: "12", Name: "Erika Beispiel", Strasse: "Rosenweg 3", PLZOrt: "12345 Gartenstadt", Gartennr: "7", Versand: "Post"}
+	b := Bewerber{Name: "Hans Beispiel", Strasse: "Lindenstraße 5", PLZOrt: "12345 Gartenstadt", Seit: heute.AddDate(-2, 0, 0).Format("2006-01-02")}
+	name := "Probebrief_" + safeName(v.Titel, 40) + ".pdf"
+	var pdf []byte
+	var err error
+	switch {
+	case strings.HasPrefix(key, "mahnung"):
+		stufe := 1
+		switch key {
+		case "mahnung2":
+			stufe = 2
+		case "mahnung3":
+			stufe = 3
+		}
+		rec := &Rechnung{Jahr: s.Jahr, Nummer: invoiceNumber(s, p), Settings: s, Paechter: p, Status: statusGueltig, Result: Result{Gesamt: 187.45}}
+		pdf, err = buildMahnung(s, p, rec, stufe, frist)
+	case strings.HasPrefix(key, "warteliste"):
+		art := map[string]string{"wartelisteAngebot": "angebot", "wartelisteNachfrage": "nachfrage", "wartelisteBestaetigung": "bestaetigung"}[key]
+		pdf, err = buildWartelistenBrief(s, b, art, "7", heute.Format("2006-01-02"))
+	case key == "kuendigung":
+		k := Kuendigung{Gartennr: "7", Von: "paechter", Eingang: heute.AddDate(0, 0, -3).Format("2006-01-02"), Zum: fmt.Sprintf("%d-11-30", heute.Year())}
+		pdf, err = pdfBytes(buildKuendigungsBestaetigung(s, p, k, []string{"Torschlüssel Nr. 12"}, heute.Format("2006-01-02")))
+	default: // Mängel, Anrede, Gruß, Unterschrift
+		stufe := "erst"
+		if key == "maengelZweit" {
+			stufe = "zweit"
+		}
+		ms := []Mangel{{Art: "Hecke und Bäume", Beschreibung: "Hecke zum Weg über 1,25 m hoch", Datum: heute.Format("2006-01-02"), Frist: frist}}
+		pdf, err = buildMaengelschreiben(s, p, ms, frist, stufe)
+	}
+	return pdf, name, err
 }
