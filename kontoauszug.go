@@ -273,8 +273,11 @@ func (s *Store) zuordnenLocked(bs []kontoBuchung) []offeneRechnung {
 		case wahl != nil:
 			rest := round2(openAmount(wahl) - vergeben[wahl.ID])
 			b.RechnungID = wahl.ID
-			if absf(rest-b.Betrag) < 0.005 {
+			if absf(rest-b.Betrag) < 0.005 || ratePasst(wahl, vergeben[wahl.ID], b.Betrag) {
 				b.Status = "passt"
+				if absf(rest-b.Betrag) >= 0.005 {
+					b.Hinweis = "Rate laut Ratenplan"
+				}
 			} else {
 				b.Status = "teilbetrag"
 				b.Hinweis = fmt.Sprintf("Rechnung %s: offen %s, gezahlt %s", wahl.Nummer, fmtEUR(rest), fmtEUR(b.Betrag))
@@ -296,7 +299,7 @@ func (s *Store) zuordnenLocked(bs []kontoBuchung) []offeneRechnung {
 			mehrere := false
 			for _, x := range offen {
 				name := kompakt(x.Paechter.Name)
-				if len([]rune(name)) < 4 || !(strings.Contains(text, name) || nameTokensEnthalten(text, x.Paechter.Name)) || absf(openAmount(x)-vergeben[x.ID]-b.Betrag) >= 0.005 {
+				if len([]rune(name)) < 4 || !(strings.Contains(text, name) || nameTokensEnthalten(text, x.Paechter.Name)) || !betragPasst(x, vergeben[x.ID], b.Betrag) {
 					continue
 				}
 				if kandidat != nil {
@@ -310,7 +313,7 @@ func (s *Store) zuordnenLocked(bs []kontoBuchung) []offeneRechnung {
 				pid, nr := s.d.KontoGelernt[lernSchluessel(b.Name)], mitgliedsnrAusZweck(b.Zweck)
 				for _, x := range offen {
 					passt := (pid != "" && x.PaechterID == pid) || (nr != "" && strings.TrimLeft(x.Paechter.Mitgliedsnr, "0") == nr)
-					if !passt || absf(openAmount(x)-vergeben[x.ID]-b.Betrag) >= 0.005 {
+					if !passt || !betragPasst(x, vergeben[x.ID], b.Betrag) {
 						continue
 					}
 					if kandidat != nil {

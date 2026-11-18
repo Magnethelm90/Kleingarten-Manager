@@ -107,3 +107,24 @@ func (a *App) handleRatenplan(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, map[string]any{"ok": true, "faellig": faelligAm(x)})
 }
+
+// ratePasst: der Betrag deckt genau die nächste fällige Rate (nach schon Gezahltem und schon vorgeschlagenen Beträgen).
+func ratePasst(r *Rechnung, schonVergeben, betrag float64) bool {
+	if len(r.Ratenplan) == 0 {
+		return false
+	}
+	gezahlt := paidAmount(r) + schonVergeben
+	summe := 0.0
+	for _, ra := range r.Ratenplan {
+		summe += ra.Betrag
+		if summe > gezahlt+0.005 {
+			return absf(round2(summe-gezahlt)-betrag) < 0.005
+		}
+	}
+	return false
+}
+
+// betragPasst: voller offener Betrag oder genau die nächste Rate.
+func betragPasst(r *Rechnung, schonVergeben, betrag float64) bool {
+	return absf(openAmount(r)-schonVergeben-betrag) < 0.005 || ratePasst(r, schonVergeben, betrag)
+}

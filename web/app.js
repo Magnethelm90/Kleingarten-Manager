@@ -2616,7 +2616,8 @@ const payPaid = (e) => (e.bezahltAm ? (e.bezahltBetrag != null ? e.bezahltBetrag
 const payOpen = (e) => Math.round((payTotal(e) - payPaid(e)) * 100) / 100;
 const payIsOpen = (e) => payOpen(e) > 0.004;
 
-async function savePayment(e, patch) {
+async function savePayment(e, patch, opts) {
+  const vorher = { bezahltAm: e.bezahltAm || '', bezahltBetrag: e.bezahltBetrag ?? null, notiz: e.notiz || '' };
   const body = { bezahltAm: e.bezahltAm || '', bezahltBetrag: e.bezahltBetrag ?? null, notiz: e.notiz || '', ...patch };
   await api('PUT', `/api/payment/${e.id}`, body);
   Object.assign(e, { bezahltAm: body.bezahltAm, bezahltBetrag: body.bezahltAm ? body.bezahltBetrag : null, notiz: body.notiz });
@@ -2624,6 +2625,12 @@ async function savePayment(e, patch) {
   if (e.bezahltBetrag != null && Math.round(e.bezahltBetrag * 100) === Math.round(payTotal(e) * 100)) e.bezahltBetrag = null;
   if (e.ratenplan && e.ratenplan.length) e.faellig = ratenFaellig(e);
   if (e.bezahltAm && payOpen(e) < -0.004) toast(`Hinweis: ${eur(-payOpen(e))} mehr als der Rechnungsbetrag eingetragen.`, 'ok');
+  else if (!(opts && opts.stumm)) {
+    const text = !e.bezahltAm ? 'Zahlung zurückgenommen' : payIsOpen(e) ? `Teilzahlung vermerkt – offen bleiben ${eur(payOpen(e))}` : e.gesamt < 0 ? 'Auszahlung vermerkt' : 'Rechnung als bezahlt vermerkt';
+    toast(text, 'ok', { label: 'Rückgängig', fn: async () => {
+      try { await savePayment(e, vorher, { stumm: true }); toast('Zurückgenommen', 'ok'); await reload(); } catch (er) { handleErr(er); }
+    } });
+  }
   // war das die letzte offene Rechnung des Jahres?
   const st = S.state, forderungen = (st.archive || []).filter((x) => x.status === 'gueltig' && x.gesamt > 0);
   S.erfolgGezeigt = S.erfolgGezeigt || {};
@@ -2656,7 +2663,7 @@ function gutschriftListe(e) {
         } }, 'Zurücknehmen') : null))));
 }
 
-async function gutschriftDialog(e) {
+function gutschriftPanel(e) {
   const rest = payTotal(e);
   const betrag = h('input', { type: 'text', inputmode: 'decimal', style: 'width:120px' });
   const datum = h('input', { type: 'date', value: todayIso() });
@@ -2666,9 +2673,7 @@ async function gutschriftDialog(e) {
     h('div', { class: 'field' }, h('label', null, 'Gutschrift über'), h('div', { class: 'inputunit' }, betrag, h('span', null, '€'))),
     h('div', { class: 'field' }, h('label', null, 'Datum'), datum),
     h('div', { class: 'field wide' }, h('label', null, 'Grund (erscheint auf dem Schreiben)'), grund));
-  return modal('Gutschrift ausstellen', body, [
-    { label: 'Abbrechen', value: false },
-    { label: 'Ausstellen', cls: 'primary', value: true, action: async () => {
+  return { el: body, knopf: 'Gutschrift ausstellen', save: async () => {
       const v = parseNum(betrag.value);
       if (v === null || Number.isNaN(v) || v <= 0) { toast('Bitte einen Betrag über 0 angeben.', 'err'); return false; }
       if (v > rest + 0.004) { toast(`Höchstens ${eur(rest)} möglich.`, 'err'); return false; }
@@ -2678,8 +2683,8 @@ async function gutschriftDialog(e) {
         await reload();
         toast(`Gutschrift ${r.nummer} ausgestellt.`, 'ok');
       } catch (er) { handleErr(er); return false; }
-    } },
-  ]);
+      return 'neu';
+  } };
 }
 
 // Ratenplan: gleiche Rechnung, aber in Teilbeträgen. Die Zahlungen laufen wie immer über »Zahlung vermerken«.
@@ -2691,6 +2696,15 @@ function ratenFaellig(e) {
   for (const r of rs) { summe += r.betrag; if (summe > gezahlt + 0.005) return r.faellig; }
   return rs[rs.length - 1].faellig;
 }
+// »Rate 2 von 3« unter dem Fälligkeitsdatum, solange noch etwas offen ist.
+function ratenHinweis(e) {
+  const rs = e.ratenplan || [];
+  if (!rs.length || !payIsOpen(e)) return null;
+  const gezahlt = payPaid(e);
+  let summe = 0, nr = rs.length;
+  for (let i = 0; i < rs.length; i++) { summe += rs[i].betrag; if (summe > gezahlt + 0.005) { nr = i + 1; break; } }
+  return h('div', { class: 'hint', title: 'Ratenplan' }, `Rate ${nr} von ${rs.length}`);
+}
 function monatPlus(iso, n) {
   const [j, m, t] = iso.split('-').map(Number);
   const d = new Date(j, m - 1 + n, 1);
@@ -2698,7 +2712,7 @@ function monatPlus(iso, n) {
   d.setDate(Math.min(t, letzter));
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-async function ratenDialog(e) {
+function ratenPanel(e, ergebnis, schliessen) {
   const total = Math.round(payTotal(e) * 100) / 100;
   let raten = (e.ratenplan || []).map((r) => ({ ...r }));
   const anzahl = h('select', null, ...[2, 3, 4, 5, 6, 8, 10, 12].map((n) => h('option', { value: n, selected: n === (raten.length || 3) }, `${n} Raten`)));
@@ -2733,17 +2747,18 @@ async function ratenDialog(e) {
     h('div', { class: 'field' }, h('label', null, 'Erste Rate am'), start),
     liste, summe,
     h('p', { class: 'hint' }, 'Gezahlt wird wie immer unter »Zahlung vermerken« (Betrag = alles bisher Gezahlte). Das Programm erinnert erst, wenn eine Rate fehlt.'));
-  return modal('Ratenplan', body, [
-    { label: 'Abbrechen', value: false },
-    (e.ratenplan || []).length ? { label: 'Plan löschen', cls: 'danger', value: 'del', action: async () => { try { await api('PUT', `/api/admin/rechnungen/${e.id}/ratenplan`, { raten: [] }); e.ratenplan = null; } catch (er) { handleErr(er); return false; } } } : null,
-    { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+  if ((e.ratenplan || []).length) body.append(h('div', { class: 'toolbar' }, h('button', { class: 'btn danger small', onclick: async () => {
+    try { await api('PUT', `/api/admin/rechnungen/${e.id}/ratenplan`, { raten: [] }); e.ratenplan = null; toast('Ratenplan gelöscht', 'ok'); await reload(); ergebnis.wert = 'neu'; schliessen(); } catch (er) { handleErr(er); }
+  } }, 'Ratenplan löschen')));
+  return { el: body, knopf: 'Ratenplan speichern', save: async () => {
       if (raten.some((r) => !r.faellig || !Number.isFinite(r.betrag) || r.betrag <= 0)) { toast('Bitte bei jeder Rate Datum und Betrag angeben.', 'err'); return false; }
       try { await api('PUT', `/api/admin/rechnungen/${e.id}/ratenplan`, { raten }); e.ratenplan = raten; e.faellig = ratenFaellig(e); } catch (er) { handleErr(er); return false; }
-    } },
-  ].filter(Boolean));
+      await reload();
+      return 'neu';
+  } };
 }
 
-async function paymentDialog(e) {
+function zahlungsPanel(e, ergebnis, schliessen) {
   const date = h('input', { type: 'date', value: e.bezahltAm || todayIso() });
   const amt = h('input', { type: 'text', inputmode: 'decimal', value: numIn(e.bezahltAm ? payPaid(e) : payTotal(e)), style: 'width:120px' });
   const note = h('input', { type: 'text', maxlength: 200, value: e.notiz || '', style: 'width:100%' });
@@ -2753,19 +2768,51 @@ async function paymentDialog(e) {
     (e.ratenplan || []).length ? h('p', { class: 'hint' }, `Ratenplan: ${e.ratenplan.map((r) => `${eur(r.betrag)} bis ${deDate(r.faellig)}`).join(', ')}. Als Betrag unten bitte alles bisher Gezahlte eintragen.`) : null,
     h('div', { class: 'field' }, h('label', null, 'Bezahlt am'), date),
     h('div', { class: 'field' }, h('label', null, 'Bezahlter Betrag (bei Teilzahlung anpassen)'), h('div', { class: 'inputunit' }, amt, h('span', null, '€'))),
-    h('div', { class: 'field wide' }, h('label', null, 'Notiz (z. B. bar, Überweisung, Ratenzahlung)'), note));
-  return modal('Zahlung vermerken', body, [
+    h('div', { class: 'field wide' }, h('label', null, 'Notiz (z. B. bar, Überweisung, Ratenzahlung)'), note),
+    e.bezahltAm ? h('div', { class: 'toolbar' }, h('button', { class: 'btn danger small', onclick: async () => {
+      try { await savePayment(e, { bezahltAm: '', bezahltBetrag: null }); ergebnis.wert = 'undo'; schliessen(); } catch (er) { handleErr(er); }
+    } }, 'Zahlung zurücknehmen')) : null);
+  return { el: body, knopf: 'Speichern', save: async () => {
+    const v = parseNum(amt.value);
+    if (!date.value) { toast('Bitte ein Datum angeben.', 'err'); return false; }
+    if (v === null || Number.isNaN(v) || v < 0) { toast('Bitte einen gültigen Betrag angeben.', 'err'); return false; }
+    try { await savePayment(e, { bezahltAm: date.value, bezahltBetrag: v, notiz: note.value.trim() }); } catch (er) { handleErr(er); return false; }
+    return true;
+  } };
+}
+
+// Ein Dialog für alles rund um eine Rechnung: Zahlung, Ratenplan, Gutschrift (Reiter). Liefert false (nichts
+// geändert), true/'undo' (Zahlung geändert, Liste neu zeichnen) oder 'neu' (Seite wurde schon neu geladen).
+async function paymentDialog(e, start) {
+  const ergebnis = { wert: null };
+  const kannMehr = e.gesamt > 0 && e.status === 'gueltig';
+  const schliessen = () => { const k = document.querySelector('dialog[open] .dfoot .btn'); if (k) k.click(); };
+  const panels = { zahlung: zahlungsPanel(e, ergebnis, schliessen) };
+  if (kannMehr) {
+    if (payIsOpen(e)) panels.raten = ratenPanel(e, ergebnis, schliessen);
+    panels.gutschrift = gutschriftPanel(e);
+  }
+  let aktiv = panels[start] ? start : 'zahlung';
+  const titel = { zahlung: 'Zahlung', raten: (e.ratenplan || []).length ? 'Ratenplan ändern' : 'Ratenplan', gutschrift: 'Gutschrift' };
+  const kopf = h('div'), flaeche = h('div');
+  const zeichne = () => {
+    kopf.replaceChildren(Object.keys(panels).length > 1 ? reiterLeiste(Object.keys(panels).map((k) => ({ label: titel[k], aktiv: k === aktiv, geh: () => { aktiv = k; zeichne(); } })), 'Rechnung') : h('span'));
+    flaeche.replaceChildren(panels[aktiv].el);
+    const pk = document.querySelector('dialog[open] .dfoot .btn.primary');
+    if (pk) pk.textContent = panels[aktiv].knopf;
+  };
+  zeichne();
+  const versprechen = modal(`Rechnung ${e.nummer}`, h('div', null, kopf, flaeche), [
     { label: 'Abbrechen', value: false },
-    e.gesamt > 0 && e.status === 'gueltig' && payIsOpen(e) ? { label: e.ratenplan && e.ratenplan.length ? 'Ratenplan ändern' : 'Ratenplan', value: 'raten' } : null,
-    e.gesamt > 0 && e.status === 'gueltig' ? { label: 'Gutschrift ausstellen', value: 'gutschrift' } : null,
-    e.bezahltAm ? { label: 'Zahlung zurücknehmen', cls: 'danger', value: 'undo', action: async () => { try { await savePayment(e, { bezahltAm: '', bezahltBetrag: null }); } catch (er) { handleErr(er); return false; } } } : null,
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
-      const v = parseNum(amt.value);
-      if (!date.value) { toast('Bitte ein Datum angeben.', 'err'); return false; }
-      if (v === null || Number.isNaN(v) || v < 0) { toast('Bitte einen gültigen Betrag angeben.', 'err'); return false; }
-      try { await savePayment(e, { bezahltAm: date.value, bezahltBetrag: v, notiz: note.value.trim() }); } catch (er) { handleErr(er); return false; }
+      const r = await panels[aktiv].save();
+      if (r === false) return false;
+      ergebnis.wert = r;
     } },
-  ].filter(Boolean));
+  ]);
+  if (aktiv !== 'zahlung') zeichne(); // Knopfbeschriftung des gewählten Reiters
+  const erg = await versprechen;
+  return ergebnis.wert || erg;
 }
 
 const MAHN_TITEL = ['', 'Zahlungserinnerung', 'Mahnung', 'Letzte Mahnung'];
@@ -2865,7 +2912,6 @@ function viewZahlungen() {
           if (v == null || Number.isNaN(v) || v <= 0) { toast('Bitte einen Betrag größer 0 eintragen, z. B. 50,00.', 'err'); ev.target.classList.add('err'); ev.target.focus(); return; }
           try {
             await savePayment(e, { bezahltAm: e.bezahltAm || todayIso(), bezahltBetrag: v });
-            toast(payIsOpen(e) ? `Teilzahlung ${eur(v)} gebucht – offen bleiben ${eur(payOpen(e))}` : 'Rechnung vollständig bezahlt', 'ok');
             draw();
           } catch (er) { handleErr(er); }
         } }) : null;
@@ -2877,13 +2923,13 @@ function viewZahlungen() {
         h('td', null, e.mitgliedsnr), h('td', null, e.name), h('td', { class: 'mono' }, e.nummer),
         h('td', { class: 'r' }, (e.gesamt < 0 ? '−' : '') + eur(payTotal(e)),
           e.gutschriften && e.gutschriften.length ? h('div', { class: 'hint', title: e.gutschriften.map((g) => g.nummer).join(', ') }, `nach Gutschrift (${eur(Math.abs(e.gesamt))})`) : null),
-        h('td', null, deDate(e.faellig)),
+        h('td', null, deDate(e.faellig), ratenHinweis(e)),
         h('td', null, h('span', { class: 'badge ' + (partial || (e.gutschriften && e.gutschriften.length && payOpen(e) < -0.004) ? 'warn' : !open ? 'ok' : late ? 'err' : 'neu') },
           partial ? `Teilzahlung, offen ${eur(payOpen(e))}` : !open && e.gesamt >= 0 && payOpen(e) < -0.004 && e.gutschriften && e.gutschriften.length ? `zu erstatten ${eur(-payOpen(e))}` : !open ? (e.gesamt < 0 ? 'ausgezahlt' : 'bezahlt') : late ? 'überfällig' : e.gesamt < 0 ? 'Guthaben offen' : 'offen'),
           open && e.mahnungen && e.mahnungen.length ? h('div', { class: 'hint', title: 'Letzte Mahnung' }, `${MAHN_TITEL[e.mahnungen[e.mahnungen.length - 1].stufe]} ${deDate(e.mahnungen[e.mahnungen.length - 1].datum)}, Frist ${deDate(e.mahnungen[e.mahnungen.length - 1].frist)}`) : null),
         h('td', { class: 'paycell' }, chk, date, teil),
         h('td', { class: 'note', title: e.notiz || '' }, e.notiz || ''),
-        h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await paymentDialog(e); if (r === 'gutschrift') await gutschriftDialog(e); else if (r === 'raten') { await ratenDialog(e); await reload(); } else if (r !== false && r !== undefined) draw(); } }, 'Details'))));
+        h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await paymentDialog(e); if (r === 'neu') return; if (r !== false && r !== undefined) draw(); } }, 'Details'))));
     }
     if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 10, class: 'empty' },
       !all.length ? leer('euro', 'Noch nichts zu kassieren', `Für ${st.year} wurde noch keine Rechnung ausgestellt. Sobald das passiert ist, hakst du hier die Zahlungen ab.`, 'Zu den Rechnungen', () => { S.tab = 'rechnungen'; render(); })

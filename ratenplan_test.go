@@ -42,3 +42,21 @@ func TestRatenGeprueft(t *testing.T) {
 		t.Error("leerer Plan löscht")
 	}
 }
+
+func TestRatePasst(t *testing.T) {
+	r := &Rechnung{Result: Result{Gesamt: 300}, Ratenplan: []Rate{{"2026-03-01", 100}, {"2026-04-01", 100}, {"2026-05-01", 100}}}
+	if !ratePasst(r, 0, 100) || ratePasst(r, 0, 90) {
+		t.Fatal("erste Rate 100 €")
+	}
+	if !ratePasst(r, 100, 100) {
+		t.Fatal("zweite Rate, wenn die erste schon vorgeschlagen ist")
+	}
+	b := 100.0
+	r.BezahltAm, r.BezahltBetrag = "2026-03-02", &b
+	if !betragPasst(r, 0, 100) || !betragPasst(r, 0, 200) || betragPasst(r, 0, 150) {
+		t.Fatal("nächste Rate oder voller Rest")
+	}
+	if ratePasst(&Rechnung{}, 0, 100) {
+		t.Fatal("ohne Plan keine Rate")
+	}
+}

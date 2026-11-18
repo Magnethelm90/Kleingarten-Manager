@@ -548,7 +548,7 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung, stufe int, frist string
 		{"Mitgliedsnr.:", p.Mitgliedsnr},
 		{"Rechnungsnr.:", invoiceNumber(s, p)},
 		{"Rechnungsdatum:", germanDate(s.Rechnungsdatum)},
-		{"Zahlungsziel war:", germanDate(s.Zahlungsziel)},
+		{"Zahlungsziel war:", germanDate(faelligAm(rec))},
 	}
 	for _, m := range meta {
 		font("", 10)
@@ -576,6 +576,9 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung, stufe int, frist string
 	} else {
 		body = fmt.Sprintf("Für die Rechnung %s vom %s über %s ist bei uns noch kein Zahlungseingang zu verzeichnen.",
 			invoiceNumber(s, p), germanDate(s.Rechnungsdatum), fmtEUR(offen))
+	}
+	if len(rec.Ratenplan) > 0 {
+		body += fmt.Sprintf(" Wir hatten Ratenzahlung vereinbart; die fällige Rate war bis zum %s zu zahlen.", germanDate(faelligAm(rec)))
 	}
 	switch stufe {
 	case 2:
