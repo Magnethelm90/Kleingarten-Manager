@@ -577,21 +577,6 @@ async function woerterbuchDialog() {
   await modal('Wörter erklärt', h('div', null, suche, liste), [{ label: 'Schließen', cls: 'primary', value: true }]);
 }
 
-// Startkarte: die vier häufigsten Aufgaben als große Knöpfe in einfachen Worten.
-function startKarte(st, istAdmin) {
-  if (!st.paechter.length) return null;
-  const gross = (ic, titel, text, ziel) => h('button', { class: 'start-knopf', onclick: ziel },
-    h('span', { class: 'start-ico' }, icon(ic, 26)), h('b', null, titel), h('span', null, text));
-  return h('div', { class: 'card start-karte' },
-    h('h3', { style: 'margin-top:0' }, 'Was möchtest du tun?'),
-    h('div', { class: 'start-raster' },
-      gross('zaehler', 'Zählerstand eintragen', 'Wasser und Strom von einem Garten', () => { S.tab = 'eingabe'; S.eingabeMode = 'schnell'; render(); }),
-      istAdmin ? gross('rechnung', 'Rechnungen schreiben', 'Prüfen und als PDF fertig machen', () => { S.tab = 'rechnungen'; S.invTab = 'pruefen'; render(); }) : null,
-      istAdmin ? gross('euro', 'Zahlung eintragen', 'Wer hat bezahlt?', () => { S.tab = 'zahlungen'; render(); }) : null,
-      istAdmin ? gross('personen', 'Pächter ansehen', 'Neuen anlegen oder Angaben ändern', () => { adminTabWaehlen('paechter'); render(); }) : null,
-      gross('brief', 'Wörter erklärt', 'Was bedeutet das eigentlich?', woerterbuchDialog)));
-}
-
 function viewUebersicht() {
   const st = S.state;
   const istAdmin = !st.hasPassword || st.loggedIn;
@@ -599,13 +584,11 @@ function viewUebersicht() {
   const open = op.alle;
   const today = todayIso();
   const overdue = open.filter((e) => e.faellig && e.faellig < today);
-  const unvollstaendig = st.paechter.filter((p) => !(st.results[p.id] && st.results[p.id].vollstaendig));
 
   const card = (t, big, small, cls, ic) => h('div', { class: 'card stat ' + (cls || '') }, ic ? h('div', { class: 'statico' }, icon(ic, 22)) : null,
     h('div', null, h('div', { class: 'hint' }, t), h('div', { class: 'big' }, big), h('div', { class: 'hint' }, small)));
   const cards = [
     card('Offene Rechnungen', String(open.length), open.length ? `${eur(open.reduce((a, e) => a + payOpen(e), 0))} · ${overdue.length} überfällig${op.vor.length ? ` · ${op.vor.length} aus Vorjahren` : ''}` : 'alles bezahlt', open.length ? 'warn' : 'ok', 'rechnung'),
-    card('Unvollständige Pächter', String(unvollstaendig.length), `von ${st.paechter.length} in ${st.currentYear}`, unvollstaendig.length ? 'warn' : 'ok', 'personen'),
     card('Letzte Sicherung', st.letzteSicherung ? deDate(st.letzteSicherung) : 'noch keine',
       st.sicherungFehler ? 'beschädigt!' : 'automatisch bei jeder Änderung',
       st.sicherungFehler ? 'err' : st.letzteSicherung ? 'ok' : 'warn', 'sicherung'),
@@ -620,7 +603,6 @@ function viewUebersicht() {
   return h('div', null,
     heroKarte(st),
     st.paechter.length ? jahresFortschritt(st, istAdmin) : null,
-    startKarte(st, istAdmin),
     beispieldatenKarte(st, istAdmin),
     jubilaeumBanner(st, istAdmin),
     st.demo ? null : zweiteSicherungBanner(st, istAdmin),
@@ -638,9 +620,6 @@ function heroKarte(st) {
   const datum = jetzt.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const gaerten = new Set(st.paechter.filter((p) => !p.ausgeschiedenAm && (p.gartennr || '').trim()).map((p) => p.gartennr.trim())).size;
   const frei = Object.keys(st.lageplan || {}).filter((nr) => !st.paechter.some((p) => !p.ausgeschiedenAm && (p.gartennr || '').trim() === nr)).length;
-  const heute = todayIso();
-  const naechster = (st.termine || []).find((t) => t.datum >= heute);
-  const tageBis = naechster ? Math.round((isoDatum(naechster.datum) - isoDatum(heute)) / 86400000) : null;
   const fakt = (zahl, text) => h('div', { class: 'hero-fakt' }, h('b', null, zahl), h('span', null, text));
   const bild = h('img', { class: 'hero-bild', src: '/bilder/garten.svg', alt: '', onerror: (e) => e.target.remove() });
   return h('section', { class: 'hero' },
@@ -651,8 +630,7 @@ function heroKarte(st) {
       h('div', { class: 'hero-fakten' },
         fakt(String(gaerten), gaerten === 1 ? 'Garten verpachtet' : 'Gärten verpachtet'),
         frei ? fakt(String(frei), frei === 1 ? 'Garten frei' : 'Gärten frei') : null,
-        st.wartelisteAnzahl && modulAn('warteliste') ? fakt(String(st.wartelisteAnzahl), 'auf der Warteliste') : null,
-        naechster ? fakt(tageBis === 0 ? 'heute' : tageBis === 1 ? 'morgen' : `in ${tageBis} Tagen`, naechster.titel) : null)),
+        st.wartelisteAnzahl && modulAn('warteliste') ? fakt(String(st.wartelisteAnzahl), 'auf der Warteliste') : null)),
     bild);
 }
 

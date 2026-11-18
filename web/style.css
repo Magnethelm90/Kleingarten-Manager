@@ -389,7 +389,7 @@ aside.sidebar {
 .qfoot .spacer { flex: 1; }
 
 /* Kennzahlen */
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px; }
 .card.stat {
   padding: 14px 18px; min-width: 190px; display: flex; gap: 14px; align-items: flex-start; position: relative; overflow: hidden;
 }
@@ -647,22 +647,22 @@ table.meldung td.num { text-align: right; white-space: nowrap; }
 
 /* Begrüßung auf der Übersicht */
 .hero {
-  position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 46%); align-items: center;
-  border-radius: 18px; margin-bottom: 18px; min-height: 230px; border: 1px solid var(--green-line);
+  position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 34%); align-items: center;
+  border-radius: 18px; margin-bottom: 18px; min-height: 0; border: 1px solid var(--green-line);
   background:
     radial-gradient(ellipse at 85% 30%, rgba(255,255,255,.9) 0%, rgba(255,255,255,0) 60%),
     linear-gradient(115deg, var(--green-soft) 0%, var(--green-tint) 55%, #eef5fb 100%);
   box-shadow: var(--shadow);
 }
-.hero-text { padding: 26px 28px; position: relative; z-index: 1; }
+.hero-text { padding: 18px 24px; position: relative; z-index: 1; }
 .hero-gruss { display: inline-block; font-size: 12.5px; font-weight: 650; color: var(--green); background: rgba(255,255,255,.75); padding: 3px 10px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--green-line); }
-.hero h2 { font-size: 27px; margin: 12px 0 6px; letter-spacing: -.4px; color: var(--green-dark); }
-.hero p { margin: 0 0 16px; color: #46524a; max-width: 560px; }
+.hero h2 { font-size: 27px; margin: 8px 0 4px; letter-spacing: -.4px; color: var(--green-dark); }
+.hero p { margin: 0 0 12px; color: #46524a; max-width: 560px; }
 .hero-fakten { display: flex; flex-wrap: wrap; gap: 10px; }
 .hero-fakt { background: rgba(255,255,255,.82); border: 1px solid var(--green-line); border-radius: 12px; padding: 8px 12px; min-width: 110px; box-shadow: var(--shadow-sm); }
 .hero-fakt b { display: block; font-size: 19px; color: var(--green-dark); line-height: 1.2; }
 .hero-fakt span { font-size: 12.5px; color: var(--muted); display: block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hero-bild { width: 100%; height: 100%; max-height: 300px; padding: 14px 14px 0 0; object-fit: contain; object-position: right bottom; align-self: end; }
+.hero-bild { width: 100%; height: 100%; max-height: 190px; padding: 14px 14px 0 0; object-fit: contain; object-position: right bottom; align-self: end; }
 @media (max-width: 1000px) {
   .hero { grid-template-columns: 1fr; }
   .hero-bild { max-height: 190px; order: -1; object-position: center; margin-top: 10px; }
@@ -1134,16 +1134,9 @@ ol.probier{padding-left:20px;margin:0}
 ol.probier li{margin:0 0 10px}
 .vorlagen{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .chip.vorlage{display:inline-flex;gap:2px;align-items:center}
-.start-raster{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
-.start-knopf{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:16px;min-height:112px;border:1px solid var(--line);border-radius:12px;background:var(--card,#fff);cursor:pointer;font:inherit;color:inherit;transition:border-color .15s,box-shadow .15s}
-.start-knopf:hover,.start-knopf:focus-visible{border-color:var(--green);box-shadow:0 2px 10px rgba(0,0,0,.08)}
-.start-knopf b{font-size:16px}
-.start-knopf span:last-child{color:var(--muted,#667);font-size:13.5px}
-.start-ico{color:var(--green)}
 .woerter{margin-top:10px;max-height:56vh;overflow:auto}
 .wort{padding:9px 2px;border-bottom:1px solid var(--line)}
 .wort b{display:block;font-size:15px}
-@media (prefers-reduced-motion: reduce){.start-knopf{transition:none}}
 .vordrucke h4 { margin: 14px 0 4px; }
 .vordrucke h4:first-child { margin-top: 0; }
 .vordruck { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line, #e3e6df); }

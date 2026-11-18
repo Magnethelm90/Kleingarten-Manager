@@ -229,7 +229,8 @@ const NEUERUNGEN = [
     'Kontoauszug einlesen geht jetzt auch direkt bei Spenden und Vorauszahlungen.',
     'Berichte: »Jahreszahlen« bündelt Jahresbericht, Jahresmeldung, Statistik und Kostenvergleich.',
     'Druck-Knöpfe einheitlich: »Drucken« und – wo sinnvoll – »Als PDF speichern«.',
-    'Zählerstände: »Abgelesen am« – das Programm trägt den Tag selbst ein, du kannst ihn ändern.'] }];
+    'Zählerstände: »Abgelesen am« – das Programm trägt den Tag selbst ein, du kannst ihn ändern.',
+    'Übersicht aufgeräumt: Was doppelt da stand, ist weg. Der Fahrplan zeigt, was als Nächstes dran ist.'] }];
 function neuerungenPruefen() {
   const st = S.state;
   if (st.gesperrt || (st.hasPassword && !st.loggedIn)) return;

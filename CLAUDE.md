@@ -180,6 +180,9 @@
   Ablesung.Datum (`ablesedatumSetzen`: beim ersten aktuellen Stand heute; Korrekturen ändern es nicht; Handy-Import, Wechsel = Übergabetag,
   Abgleich ergänzt nur fehlendes), Feld »Abgelesen am« in Schnelleingabe + »Weitere«. CSS: `[hidden] { display:none !important }` ganz oben.
   Handy-Durchlauf: scratchpad handy.js (alle NAV-Reiter + neue Dialoge in 390 px; desk.js = 1366 px).
+- Übersicht so einfach wie möglich (Nutzer): Startkarte »Was möchtest du tun?« entfernt (doppelt zum Fahrplan; »Wörter erklärt« bleibt im »?«-Menü),
+  Kennzahl »Unvollständige Pächter« und Termin-Fakt in der Begrüßung entfernt (doppelt), Begrüßung flacher. Reihenfolge: Begrüßung,
+  Fahrplan, Banner, »Was steht an?«, Termine/Besichtigungen, Kennzahlen (Kasse, offene Rechnungen, Sicherung). Keine Funktion entfernt.
 - Offen: nichts Konkretes.
 
 ## Prüfwerkzeuge (bei größeren Änderungen)
