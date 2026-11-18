@@ -273,6 +273,11 @@ type Data struct {
 	Zurueckgestellt map[string]string `json:"zurueckgestellt,omitempty"`
 	// Probe: Ergebnis der letzten Wiederherstellungs-Probe (wiederherstellung.go).
 	Probe *Wiederherstellungsprobe `json:"probe,omitempty"`
+	// LetzteVersion/Selbsttest: Selbsttest beim ersten Start nach einem Update (selbsttest.go)
+	LetzteVersion string      `json:"letzteVersion,omitempty"`
+	Selbsttest    *Selbsttest `json:"selbsttest,omitempty"`
+	// EinstellungsVerlauf: letzte Stände der Preise und Einstellungen zum Zurücknehmen (einstellungsverlauf.go)
+	EinstellungsVerlauf []EinstellungsStand `json:"einstellungsVerlauf,omitempty"`
 
 	// AusModule: ausgeblendete Bereiche (module.go); leer = alles sichtbar.
 	AusModule []string `json:"ausModule,omitempty"`

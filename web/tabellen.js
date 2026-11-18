@@ -52,6 +52,16 @@
     tab.classList.add('karten');
     const namen = kopf.map(text);
     for (const r of g.zeilen) [...r.cells].forEach((z, i) => { if (!z.dataset.label && namen[i]) z.dataset.label = namen[i]; });
+    // Knopf »Tabelle drucken« über jeder Tabelle mit mehreren Zeilen (Dialoge drucken sich selbst)
+    const mitEingabe = rumpf.querySelector('input:not([type=checkbox]):not([type=hidden]), textarea, select');
+    if (g.zeilen.length >= 2 && !mitEingabe && !tab.closest('dialog') && !(tab._druck && tab._druck.isConnected)) {
+      const d = document.createElement('button');
+      d.type = 'button'; d.className = 'btn small tab-druck'; d.textContent = 'Tabelle drucken';
+      d.title = 'Diese Tabelle ohne Menü und Knöpfe ausdrucken oder als PDF speichern';
+      d.addEventListener('click', () => tabelleDrucken(tab));
+      tab.before(d);
+      tab._druck = d;
+    }
     // Sortierbar nur bei mehr als einer Zeile und ohne Eingabefelder im Rumpf
     if (g.zeilen.length < 2 || rumpf.querySelector('input:not([type=checkbox]):not([type=hidden]), textarea, select')) return;
     const summe = (r) => /sum|total|gesamt/i.test(r.className);
@@ -102,6 +112,32 @@
     });
     const m = merke[schluessel];
     if (m && m.sp < kopf.length) anwenden(m.sp, m.rich); else kopf.forEach((th) => th.dataset.sortierbar && th.setAttribute('aria-sort', 'none'));
+  }
+
+  // Druckfläche: eine bereinigte Kopie der Tabelle (ohne Knöpfe und Spalten ohne Überschrift), alles andere ist beim Druck aus.
+  function tabelleDrucken(tab) {
+    const kopie = tab.cloneNode(true);
+    kopie.querySelectorAll('.sort-reset, .tab-druck').forEach((x) => x.remove());
+    const leer = [];
+    [...(kopie.tHead ? kopie.tHead.rows[0].cells : [])].forEach((th, i) => { if (!th.textContent.trim()) leer.push(i); });
+    leer.sort((x, y) => y - x);
+    for (const r of kopie.rows) for (const i of leer) if (r.cells[i]) r.cells[i].remove();
+    kopie.querySelectorAll('button, select, input').forEach((x) => x.remove());
+    kopie.querySelectorAll('[aria-sort]').forEach((x) => x.removeAttribute('aria-sort'));
+    const ueberschrift = document.querySelector('#app main h2');
+    const flaeche = document.createElement('div');
+    flaeche.id = 'druckflaeche';
+    const kopf = document.createElement('h2');
+    kopf.textContent = (ueberschrift ? ueberschrift.firstChild.textContent.trim() : 'Tabelle');
+    const datum = document.createElement('p');
+    datum.textContent = 'Gedruckt am ' + new Date().toLocaleDateString('de-DE');
+    flaeche.append(kopf, datum, kopie);
+    document.body.append(flaeche);
+    document.body.classList.add('druckt-tabelle');
+    const weg = () => { document.body.classList.remove('druckt-tabelle'); flaeche.remove(); window.removeEventListener('afterprint', weg); };
+    window.addEventListener('afterprint', weg);
+    window.print();
+    setTimeout(weg, 1000);
   }
 
   let geplant = false;

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io/fs"
 	"strconv"
 	"testing"
 	"time"
@@ -110,4 +111,63 @@ func TestProbeAutomatisch(t *testing.T) {
 	if !app.st.probeAutomatischLocked(jetzt.AddDate(0, 0, 31)) {
 		t.Fatal("nach 31 Tagen nicht wiederholt")
 	}
+}
+
+func TestEinFehler(t *testing.T) {
+	ja := [][2]string{{"meyer", "meier"}, {"hekce", "hecke"}, {"hecke", "heckee"}, {"hecke", "hece"}, {"hecke", "hecke"}}
+	nein := [][2]string{{"hecke", "hacke2"}, {"hecke", "heckeee"}, {"hecke", "wiese"}, {"hecke", "hcekk"}}
+	for _, p := range ja {
+		if !einFehler(p[0], p[1]) {
+			t.Errorf("%v sollte passen", p)
+		}
+	}
+	for _, p := range nein {
+		if einFehler(p[0], p[1]) {
+			t.Errorf("%v sollte nicht passen", p)
+		}
+	}
+	if tippfehlerTreffer("hecke am hauptweg", "hekce") != true || tippfehlerTreffer("hecke", "hek") {
+		t.Error("Treffer")
+	}
+}
+
+func TestEinstellungsVerlaufUndSelbsttest(t *testing.T) {
+	app, h := newTestApp(t)
+	app.st.mu.Lock()
+	s := app.st.d.Settings
+	app.st.mu.Unlock()
+	neu := s
+	neu.WasserPreis = s.WasserPreis + 1
+	if rec := do(h, "PUT", "/api/admin/settings", neu); rec.Code != 200 {
+		t.Fatalf("speichern %d %s", rec.Code, rec.Body.String())
+	}
+	l := decode[[]einstellungsZeile](t, do(h, "GET", "/api/admin/einstellungen/verlauf", nil))
+	if len(l) != 1 || len(l[0].Aenderungen) != 1 {
+		t.Fatalf("Verlauf %+v", l)
+	}
+	if rec := do(h, "POST", "/api/admin/einstellungen/verlauf/0/zurueck", nil); rec.Code != 200 {
+		t.Fatalf("zurück %d %s", rec.Code, rec.Body.String())
+	}
+	app.st.mu.Lock()
+	if app.st.d.Settings.WasserPreis != s.WasserPreis {
+		t.Error("Preis nicht zurückgesetzt")
+	}
+	if len(app.st.d.EinstellungsVerlauf) != 2 {
+		t.Errorf("Verlauf muss das Zurücknehmen selbst merken: %d", len(app.st.d.EinstellungsVerlauf))
+	}
+	// Selbsttest: neue Installation = nur Version merken; mit Daten und anderer Version = Test.
+	app.st.d.LetzteVersion = ""
+	if !app.st.selbsttestLocked(time.Now(), webFS) || app.st.d.Selbsttest != nil {
+		t.Error("neue Installation")
+	}
+	app.st.d.Paechter = append(app.st.d.Paechter, Paechter{ID: "p", Name: "A"})
+	app.st.d.LetzteVersion = "0.0.1"
+	sub, _ := fs.Sub(webFS, "web")
+	if !app.st.selbsttestLocked(time.Now(), sub) || app.st.d.Selbsttest == nil || app.st.d.Selbsttest.Version != appVersion {
+		t.Error("Selbsttest nach Update")
+	}
+	if app.st.selbsttestLocked(time.Now(), sub) {
+		t.Error("nur einmal je Version")
+	}
+	app.st.mu.Unlock()
 }

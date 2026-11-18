@@ -586,6 +586,7 @@ type stateResp struct {
 	Paechter        []Paechter          `json:"paechter"`
 	Ablesungen      map[string]Ablesung `json:"ablesungen"`
 	Results         map[string]Result   `json:"results"`
+	Selbsttest      *Selbsttest         `json:"selbsttest,omitempty"`
 	HasPassword     bool                `json:"hasPassword"`
 	LoggedIn        bool                `json:"loggedIn"`
 	// Kassenprüfer-Zugang: eigenes, optionales Passwort mit Lesezugriff auf den
@@ -651,6 +652,9 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		Year: year, ReadOnly: v.ReadOnly, Settings: v.Settings, Paechter: v.Paechter,
 		Ablesungen: v.Ablesungen, Results: map[string]Result{}, HasPassword: has, LoggedIn: loggedIn,
 		HasPruefPassword: hasPruef, PruefLoggedIn: pruefLoggedIn,
+	}
+	if (!has || loggedIn) && a.st.d.Selbsttest != nil && a.st.d.Selbsttest.Version == appVersion {
+		res.Selbsttest = a.st.d.Selbsttest
 	}
 	if res.Paechter == nil {
 		res.Paechter = []Paechter{}
@@ -1165,6 +1169,9 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.ZweiteSicherung != a.st.d.Settings.ZweiteSicherung {
 		a.st.zweiteSicherungGeaendert()
+	}
+	if a.st.d.Settings != in {
+		a.st.einstellungenMerkenLocked(a.st.d.Settings)
 	}
 	a.st.d.Settings = in
 	a.st.audit("Preise und Einstellungen geändert")
@@ -1756,6 +1763,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/archive/{id}", a.handleArchivePDF)
 	mux.HandleFunc("GET /api/archiv-alle", a.handleArchivAlle)
 	mux.HandleFunc("PUT /api/payment/{id}", a.handlePayment)
+	mux.HandleFunc("GET /api/admin/einstellungen/verlauf", a.admin(a.handleEinstellungsVerlauf))
+	mux.HandleFunc("POST /api/admin/einstellungen/verlauf/{index}/zurueck", a.admin(a.handleEinstellungenZurueck))
 	mux.HandleFunc("GET /api/admin/wartungsplan", a.admin(a.handleWartungsplan))
 	mux.HandleFunc("POST /api/admin/wartungsplan", a.admin(a.handleWartungsaufgabeSpeichern))
 	mux.HandleFunc("POST /api/admin/wartungsplan/{id}/erledigt", a.admin(a.handleWartungsaufgabeErledigt))

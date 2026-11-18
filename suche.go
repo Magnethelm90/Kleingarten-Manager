@@ -55,7 +55,7 @@ func (s *Store) sucheLocked(q string) []sucheTreffer {
 	passt := func(felder ...string) bool {
 		heu := sucheNorm(strings.Join(felder, " "))
 		for _, w := range woerter {
-			if !strings.Contains(heu, w) {
+			if !strings.Contains(heu, w) && !tippfehlerTreffer(heu, w) {
 				return false
 			}
 		}
@@ -135,4 +135,43 @@ func (a *App) handleSuche(w http.ResponseWriter, r *http.Request) {
 	res := a.st.sucheLocked(q)
 	a.st.mu.Unlock()
 	writeJSON(w, 200, res)
+}
+
+// tippfehlerTreffer: ein Wort ab 5 Buchstaben findet auch Wörter, die sich in einem Buchstaben unterscheiden
+// (»Meyer« findet »Meier«, »Hekce« findet »Hecke«).
+func tippfehlerTreffer(heu, w string) bool {
+	if len([]rune(w)) < 5 {
+		return false
+	}
+	for _, t := range strings.Fields(heu) {
+		if einFehler(t, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// einFehler: höchstens ein Buchstabe ersetzt, vergessen, zu viel oder zwei Buchstaben vertauscht.
+func einFehler(a, b string) bool {
+	x, y := []rune(a), []rune(b)
+	if len(x) < len(y) {
+		x, y = y, x
+	}
+	if len(x)-len(y) > 1 {
+		return false
+	}
+	i := 0
+	for i < len(y) && x[i] == y[i] {
+		i++
+	}
+	if i == len(y) {
+		return len(x)-len(y) <= 1
+	}
+	if len(x) == len(y) {
+		if string(x[i+1:]) == string(y[i+1:]) {
+			return true // ein Buchstabe ersetzt
+		}
+		return i+1 < len(x) && x[i] == y[i+1] && x[i+1] == y[i] && string(x[i+2:]) == string(y[i+2:]) // vertauscht
+	}
+	return string(x[i+1:]) == string(y[i:])
 }

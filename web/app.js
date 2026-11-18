@@ -770,13 +770,29 @@ document.addEventListener('keydown', (e) => {
 
 // Globale Suche im Kopfbereich: springt von jeder Seite direkt zur
 // Schnellansicht eines Pächters (Nummer, Gartennummer, Name oder Straße).
+// Suche tolerant: Umlaute ausgeschrieben (Mueller = Müller), Wörter ab 5 Buchstaben dürfen einen Tippfehler haben.
+const sucheNorm = (s) => (s || '').toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[^\p{L}\p{N}\s]/gu, '');
+function einFehler(a, b) {
+  if (a.length < b.length) [a, b] = [b, a];
+  if (a.length - b.length > 1) return false;
+  let i = 0;
+  while (i < b.length && a[i] === b[i]) i++;
+  if (i === b.length) return true;
+  if (a.length === b.length) return a.slice(i + 1) === b.slice(i + 1) || (a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2));
+  return a.slice(i + 1) === b.slice(i);
+}
+function sucheTrifft(felder, anfrage) {
+  const heu = sucheNorm(felder.join(' '));
+  const teile = heu.split(/\s+/);
+  return sucheNorm(anfrage).split(/\s+/).filter(Boolean).every((w) => heu.includes(w) || (w.length >= 5 && teile.some((t) => einFehler(t, w))));
+}
+
 function globalSearchBox(st) {
   const list = st.paechter || [];
   const find = (q) => {
-    q = q.trim().toLowerCase();
+    q = q.trim();
     if (!q) return [];
-    return list.filter((p) => [p.mitgliedsnr, p.gartennr, p.name, p.strasse].some((x) => (x || '').toLowerCase().includes(q)))
-      .sort(cmpNr).slice(0, 8);
+    return list.filter((p) => sucheTrifft([p.mitgliedsnr, p.gartennr, p.name, p.strasse], q)).sort(cmpNr).slice(0, 8);
   };
   const results = h('div', { class: 'globalsearch-results' });
   const goTo = (p) => {
@@ -4805,10 +4821,27 @@ function adminSettings() {
       h('span', { class: 'hint' }, 'Springe zu:'),
       [['es-preise', 'Preise und Rechnung'], ['es-pacht', 'Pachtobergrenze'], ['es-bereiche', 'Bereiche ein- und ausblenden'], ['es-aussehen', 'Farbe und Logo']].map(([id, l]) => h('button', { class: 'btn small', onclick: sprung(id) }, l))),
     h('p', { class: 'hint', id: 'es-preise' }, `Diese Werte gelten für das laufende Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
-    h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'))),
+    h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'),
+      h('button', { class: 'btn', title: 'Die letzten Änderungen ansehen und zurücknehmen', onclick: einstellungsVerlaufDialog }, 'Letzte Änderungen'))),
     h('div', { id: 'es-pacht' }, pachtgrenzeKarte()),
     h('div', { id: 'es-bereiche' }, bereicheKarte(st)),
     h('div', { id: 'es-aussehen' }, aussehenKarte(st)));
+}
+
+// Änderungsverlauf: die letzten gespeicherten Stände der Preise, einzeln zurücknehmbar (Jahr und Sicherungsordner bleiben).
+async function einstellungsVerlaufDialog() {
+  let l;
+  try { l = await api('GET', '/api/admin/einstellungen/verlauf'); } catch (e) { handleErr(e); return; }
+  const box = h('div');
+  const zeichne = () => box.replaceChildren(l.length ? h('div', null, l.map((z) => h('div', { class: 'vordruck' },
+    h('div', null, h('b', null, z.datum.replace(/^(\d{4})-(\d\d)-(\d\d)/, '$3.$2.$1')), h('ul', { style: 'margin:4px 0 0;padding-left:18px' }, z.aenderungen.map((t) => h('li', null, t)))),
+    h('div', { class: 'row' }, h('button', { class: 'btn', onclick: async () => {
+      try { await api('POST', `/api/admin/einstellungen/verlauf/${z.index}/zurueck`); toast('Der alte Stand ist wieder da', 'ok'); box.closest('dialog').close(); await reload(); } catch (e) { handleErr(e); }
+    } }, 'Zurücknehmen')))))
+    : h('p', { class: 'hint' }, 'Noch keine Änderungen gespeichert. Sobald du Preise oder Einstellungen änderst, steht der alte Stand hier.'));
+  zeichne();
+  await modal('Letzte Änderungen', h('div', null, h('p', { class: 'hint' }, 'Hier siehst du, was sich geändert hat. »Zurücknehmen« stellt den alten Stand wieder her – das Abrechnungsjahr und der zweite Sicherungsordner bleiben, wie sie sind.'), box),
+    [{ label: 'Schließen', cls: 'primary', value: true }]);
 }
 
 // ------------------------------------------------------------------ Einrichtungs-Assistent
@@ -7810,6 +7843,14 @@ function anstehendKarte(st, istAdmin) {
     inhalt || h('p', { class: 'hint', style: 'margin:0' }, 'Wird geladen …'));
 }
 
+const COCKPIT_BEREICHE = [['geld', 'Geld und Rechnungen'], ['anlage', 'Anlage und Gärten'], ['verein', 'Verein und Termine']];
+function cockpitBereich(ziel) {
+  const w = (ziel || '').split(':')[1] || '';
+  if (['zahlungen', 'rechnungen', 'vorauszahlung', 'lastschrift', 'kassenbericht', 'haushalt', 'spenden', 'eingabe', 'berichte', 'kasse'].includes(w)) return 'geld';
+  if (['inventar', 'maengel', 'bauten', 'lageplan', 'paechter', 'warteliste', 'kuendigungen', 'jubilaeen'].includes(w)) return 'anlage';
+  return 'verein';
+}
+
 function cockpitKarte(st, istAdmin) {
   if (!istAdmin || st.leer) return null;
   if (S.aufgaben == null) { if (!S.aufgabenLoading) loadAufgaben(); return null; }
@@ -7819,8 +7860,7 @@ function cockpitKarte(st, istAdmin) {
       h('div', null, h('b', null, 'Gerade steht nichts an'), h('div', { class: 'hint' }, 'Termine, Fristen, Zahlungen und Spenden sind im grünen Bereich.'),
         (S.aufgabenZurueck || []).length ? h('div', { class: 'hint' }, `${anz(S.aufgabenZurueck.length, 'Hinweis ist', 'Hinweise sind')} zurückgestellt.`) : null));
   }
-  const alle = S.aufgabenAlle || S.aufgaben.length <= 5;
-  const l = alle ? S.aufgaben : S.aufgaben.slice(0, 5);
+  const l = S.aufgaben;
   const zurueck = async (a, tage) => {
     try { await api('POST', '/api/admin/aufgaben/zurueckstellen', { schluessel: a.schluessel, tage }); S.aufgaben = null; render(); } catch (e) { handleErr(e); }
   };
@@ -7837,7 +7877,19 @@ function cockpitKarte(st, istAdmin) {
       h('button', { class: 'btn small', onclick: () => geh(a.ziel) }, a.knopf + ' →'));
   };
   const teile = [];
-  for (const stufe of ['err', 'warn', 'info']) {
+  if (l.length > 6) {
+    // Viele Hinweise: nach Bereich zusammenfassen (Geld, Anlage, Verein). Bereiche mit Dringendem sind aufgeklappt.
+    const rang = { err: 0, warn: 1, info: 2 };
+    for (const b of COCKPIT_BEREICHE) {
+      const gruppe = l.filter((a) => cockpitBereich(a.ziel) === b[0]).sort((x, y) => rang[x.stufe] - rang[y.stufe]);
+      if (!gruppe.length) continue;
+      const dringend = gruppe.filter((a) => a.stufe !== 'info').length;
+      teile.push(h('details', { class: 'cockpit-bereich', open: dringend > 0 },
+        h('summary', null, h('b', null, b[1]), ' ', h('span', { class: 'zahl' }, String(gruppe.length)),
+          dringend ? h('span', { class: 'hint', style: 'margin-left:8px' }, `${dringend} wichtig`) : null),
+        h('ul', { class: 'cockpit-liste' }, gruppe.map(zeile))));
+    }
+  } else for (const stufe of ['err', 'warn', 'info']) {
     const gruppe = l.filter((a) => a.stufe === stufe);
     if (!gruppe.length) continue;
     if (stufenMenge.size > 1) teile.push(h('div', { class: 'cockpit-gruppe' }, GRUPPE[stufe]));
@@ -7850,7 +7902,6 @@ function cockpitKarte(st, istAdmin) {
       h('div', { class: 'cockpit-text' }, h('b', null, a.titel), h('div', { class: 'hint' }, `Ausgeblendet bis ${isoDatum(a.zurueckBis).toLocaleDateString('de-DE')}`)),
       h('button', { class: 'btn small', onclick: () => zurueck(a, 0) }, 'Wieder anzeigen'))))) : null;
   return h('div', null, ...teile,
-    alle ? null : h('button', { class: 'btn small', style: 'margin-top:6px', onclick: () => { S.aufgabenAlle = true; render(); } }, `Alle ${S.aufgaben.length} anzeigen`),
     zbBox,
     h('p', { class: 'hint', style: 'margin:8px 0 0' }, h('a', { href: '/api/admin/fristen.ics', download: 'Vereinsfristen.ics', title: 'Mängelfristen, Kündigungstermine und Zahlungsfristen als Kalenderdatei mit Erinnerung am Vortag' }, 'Fristen als Kalenderdatei')));
 }
@@ -7911,7 +7962,12 @@ const NEUERUNGEN = [
     'Haushaltsplan: Posten ab 90 % werden gelb, das Cockpit meldet sie.',
     'Geburtstage (nur mit Einverständnis) in der Pächter-Mappe, Erinnerung im Cockpit.',
     'Auf der Seite »Zählerstände« steht jetzt der Wasser-Vergleich mit dem Hauptzähler.',
-    'Die Wiederherstellungs-Probe läuft alle 30 Tage von selbst.'] }];
+    'Die Wiederherstellungs-Probe läuft alle 30 Tage von selbst.',
+    'Suche findet auch Wörter mit einem Tippfehler (Meyer = Meier).',
+    'Über jeder Tabelle steht »Tabelle drucken«.',
+    'Bei vielen Hinweisen ist das Cockpit nach Geld, Anlage und Verein sortiert.',
+    'In den Einstellungen kannst du die »Letzten Änderungen« ansehen und zurücknehmen.',
+    'Nach einem Update prüft sich das Programm selbst (Ergebnis siehst du hier).'] }];
 function neuerungenPruefen() {
   const st = S.state;
   if (st.gesperrt || (st.hasPassword && !st.loggedIn)) return;
@@ -7922,7 +7978,11 @@ function neuerungenPruefen() {
   if (!neu) return;
   modal(`Neu in Version ${st.version}`, h('div', null,
     h('p', { class: 'hint' }, 'Das Programm wurde aktualisiert. Das ist neu:'),
-    h('ul', null, neu.punkte.map((t) => h('li', null, t)))), [{ label: 'Verstanden', cls: 'primary', value: true }]);
+    h('ul', null, neu.punkte.map((t) => h('li', null, t))),
+    st.selbsttest ? h('div', { class: 'banner ' + (st.selbsttest.ok ? 'info' : 'err'), style: 'margin-top:10px' },
+      h('b', null, st.selbsttest.ok ? 'Selbsttest: alles in Ordnung. ' : 'Selbsttest: Es gibt Hinweise. '),
+      st.selbsttest.zeilen.filter((z) => z.stufe !== 'ok').map((z) => h('div', null, `${z.titel}: ${z.text}`))) : null),
+  [{ label: 'Verstanden', cls: 'primary', value: true }]);
 }
 
 (async function start() {
