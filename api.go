@@ -940,6 +940,7 @@ func (a *App) handlePaechterUpdate(w http.ResponseWriter, r *http.Request) {
 			alt := a.st.d.Paechter[i]
 			in.ID = id
 			in.AusgeschiedenAm = alt.AusgeschiedenAm // wird nur über den Pächterwechsel gesetzt
+			in.Geloescht, in.GeloeschtAm = false, "" // gelöscht wird nur über den Papierkorb
 			in.WasserEichjahr, in.StromEichjahr = alt.WasserEichjahr, alt.StromEichjahr
 			a.st.d.Paechter[i] = in
 			a.st.gartenWechsel(id, alt.Gartennr, in.Gartennr, in.Mitgliedsnr, in.Name)
@@ -1372,6 +1373,8 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 	added, updated := 0, 0
 	for _, row := range in.Rows {
 		p := row.Paechter
+		// Zustandsfelder kommen nie aus der Importdatei
+		p.Geloescht, p.GeloeschtAm, p.AusgeschiedenAm = false, "", ""
 		idx := -1
 		for i, q := range a.st.d.Paechter {
 			if !q.Geloescht && strings.EqualFold(strings.TrimSpace(q.Mitgliedsnr), p.Mitgliedsnr) {
