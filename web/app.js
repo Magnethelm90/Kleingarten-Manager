@@ -323,7 +323,8 @@ function modal(title, body, buttons) {
         dlg.dataset.frage = '1';
         const ok = await confirmBox('Die Eingaben in diesem Fenster sind noch nicht gespeichert. Wirklich schließen? Beim nächsten Öffnen lassen sie sich zurückholen, bis das Programm beendet wird.', 'Schließen', true);
         delete dlg.dataset.frage;
-        if (!ok) return;
+        // Beim wiederholten Esc schließt der Browser den Dialog trotz preventDefault – dann wieder öffnen
+        if (!ok) { if (!dlg.open && dlg.isConnected) dlg.showModal(); return; }
       }
       close(undefined);
     });

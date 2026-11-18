@@ -514,10 +514,14 @@ async function einrichtungsAssistent() {
     e.preventDefault();
     if (fragt) return;
     fragt = true;
-    try { if (i === 3 || await confirmBox('Einrichtung abbrechen? Bisher Eingetragenes wird nicht gespeichert.', 'Abbrechen')) ende(); } finally { fragt = false; }
+    try {
+      if (i === 3 || await confirmBox('Einrichtung abbrechen? Bisher Eingetragenes wird nicht gespeichert.', 'Einrichtung beenden')) ende();
+      else if (!beendet && !dlg.open) dlg.showModal(); // der Browser hat ihn beim zweiten Esc schon geschlossen: wieder öffnen
+    } finally { fragt = false; }
   });
-  // Zweimal Esc hintereinander schließt den Dialog am Programm vorbei (Browser-Verhalten): dann sauber aufräumen.
-  dlg.addEventListener('close', () => ende());
+  // Zweimal Esc hintereinander schließt den Dialog am Programm vorbei (Browser-Verhalten). Läuft gerade die Rückfrage,
+  // entscheidet deren Antwort; sonst sauber aufräumen.
+  dlg.addEventListener('close', () => { if (!fragt) ende(); });
   dlg.append(h('button', { class: 'gs-zu', title: 'Schließen (Esc)', onclick: () => dlg.dispatchEvent(new Event('cancel', { cancelable: true })) }, 'Schließen ✕'),
     kopf, koerper, h('div', { class: 'assi-fuss' }, zurueck, weiter));
   document.body.append(dlg);
