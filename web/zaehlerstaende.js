@@ -262,6 +262,8 @@ function viewEingabe() {
       h('div', { class: 'spacer' }),
       h('button', { class: 'btn', disabled: !st.paechter.length, title: 'Liste aller Gärten mit Zählernummern und Vorjahresständen zum Ausdrucken, mit leeren Feldern für den Ablese-Rundgang',
         onclick: () => ablesebogenDrucken(st.year) }, 'Ablesebogen drucken'),
+      (!st.hasPassword || st.loggedIn) ? h('button', { class: 'btn', disabled: !st.paechter.length, title: 'Je Garten ein Zettel zum Ausfüllen: Pächter tragen ihren Zählerstand ein und werfen ihn in den Vereinsbriefkasten',
+        onclick: () => zaehlerzettelDialog(st.year) }, 'Zettel zum Einwerfen') : null,
       (!st.hasPassword || st.loggedIn) && modulAn('eichung') ? h('button', { class: 'btn', disabled: !st.paechter.length, title: 'Wann müssen die Zähler nach dem Eichgesetz getauscht werden?', onclick: eichungDialog }, 'Eichfristen') : null),
     S.eingabeMode === 'schnell' ? viewSchnell() : viewTabelle());
 }
@@ -493,4 +495,19 @@ async function issue(ids, replace) {
   if (wahl === 'ordner') await api('POST', '/api/open-folder', { which: 'rechnungen', year: st.year }).catch(handleErr);
   else if (wahl === 'post') await postRechnungenDrucken(neu.year);
   else if (wahl === 'mail') { S.selInvoice = mailOffen[0].id; S.invView = 'archiv'; await emailVorbereiten(neu.issued[mailOffen[0].id].id); }
+}
+
+// Zählerstand-Zettel: je Garten ein Zettel zum Ausfüllen (drei je Seite), wahlweise nur für Gärten ohne neuen Stand.
+async function zaehlerzettelDialog(year) {
+  const frist = h('input', { type: 'date', value: isoInTagen(21) });
+  const nurOffen = h('input', { type: 'checkbox', checked: true });
+  const ok = await modal('Zettel zum Einwerfen', h('div', { class: 'form' },
+    h('p', { class: 'hint' }, 'Jeder Garten bekommt einen Zettel mit seinen Zählernummern und dem Stand vom Vorjahr. Der Pächter schreibt den neuen Stand dazu und wirft den Zettel in den Vereinsbriefkasten. Drei Zettel passen auf eine Seite.'),
+    h('div', { class: 'field' }, h('label', null, 'Bitte einwerfen bis'), frist),
+    h('label', { class: 'inline' }, nurOffen, ' Nur für Gärten, bei denen noch ein Zählerstand fehlt')),
+  [{ label: 'Abbrechen', value: false }, { label: 'Zettel erstellen', cls: 'primary', value: true }]);
+  if (!ok) return;
+  const q = `?year=${year}&frist=${encodeURIComponent(frist.value)}${nurOffen.checked ? '&nur=offen' : ''}`;
+  pdfDrucken({ url: `/api/admin/zaehlerzettel${q}`, oeffnenUrl: `/api/admin/zaehlerzettel/oeffnen${q}`, titel: 'Zählerstand-Zettel',
+    meldung: () => 'Die Zettel wurden im PDF-Programm geöffnet – dort drucken und ausschneiden.' });
 }

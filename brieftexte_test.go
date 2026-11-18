@@ -144,3 +144,20 @@ func TestBrieftextProbebrief(t *testing.T) {
 		t.Error("Probebrief darf nichts speichern")
 	}
 }
+
+func TestZaehlerzettel(t *testing.T) {
+	_, h := newTestApp(t)
+	if rec := do(h, "GET", "/api/admin/zaehlerzettel", nil); rec.Code != 400 {
+		t.Errorf("ohne Pächter: %d", rec.Code)
+	}
+	do(h, "POST", "/api/admin/beispieldaten", map[string]any{})
+	for _, q := range []string{"", "?frist=2026-12-01", "?nur=offen"} {
+		rec := do(h, "GET", "/api/admin/zaehlerzettel"+q, nil)
+		if rec.Code != 200 && !(q == "?nur=offen" && rec.Code == 400) {
+			t.Errorf("%s: %d %s", q, rec.Code, rec.Body.String())
+		}
+	}
+	if rec := do(h, "GET", "/api/admin/zaehlerzettel?frist=kaputt", nil); rec.Code != 400 {
+		t.Errorf("ungültiges Datum: %d", rec.Code)
+	}
+}
