@@ -142,11 +142,14 @@ func zahlWort(n int) string {
 	s := ""
 	if m := n / 1000000; m > 0 {
 		if m == 1 {
-			s += "einemillion"
+			s += "eine Million"
 		} else {
-			s += unter1000(m) + "millionen"
+			s += unter1000(m) + " Millionen"
 		}
 		n %= 1000000
+		if n > 0 {
+			s += " " // »eine Million zweihunderttausend«
+		}
 	}
 	if t := n / 1000; t > 0 {
 		s += unter1000(t) + "tausend"

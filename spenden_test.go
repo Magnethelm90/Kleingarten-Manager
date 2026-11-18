@@ -14,7 +14,7 @@ func TestBetragInWorten(t *testing.T) {
 	for b, want := range map[float64]string{
 		1: "ein Euro", 2: "zwei Euro", 11: "elf Euro", 21: "einundzwanzig Euro", 100: "einhundert Euro", 101: "einhunderteins Euro",
 		250.5: "zweihundertfünfzig Euro fünfzig Cent", 1000: "eintausend Euro", 1234.56: "eintausendzweihundertvierunddreißig Euro sechsundfünfzig Cent",
-		0.01: "null Euro ein Cent", 1000001: "einemillioneins Euro", 2500000: "zweimillionenfünfhunderttausend Euro", 31: "einunddreißig Euro",
+		0.01: "null Euro ein Cent", 1000001: "eine Million eins Euro", 2500000: "zwei Millionen fünfhunderttausend Euro", 31: "einunddreißig Euro",
 	} {
 		if got := betragInWorten(b); got != want {
 			t.Errorf("%v: %q, erwartet %q", b, got, want)

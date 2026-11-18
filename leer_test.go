@@ -101,3 +101,16 @@ func TestKeineMinusNull(t *testing.T) {
 		t.Errorf("fmtEUR(-1234.5) = %q", got)
 	}
 }
+
+func TestBetragInWortenMillionen(t *testing.T) {
+	for b, w := range map[float64]string{
+		1: "ein Euro", 21: "einundzwanzig Euro", 101: "einhunderteins Euro", 1001: "eintausendeins Euro",
+		1234.56: "eintausendzweihundertvierunddreißig Euro sechsundfünfzig Cent", 0.01: "null Euro ein Cent",
+		1000000: "eine Million Euro", 2000001: "zwei Millionen eins Euro",
+		1234567: "eine Million zweihundertvierunddreißigtausendfünfhundertsiebenundsechzig Euro",
+	} {
+		if got := betragInWorten(b); got != w {
+			t.Errorf("%v: %q, erwartet %q", b, got, w)
+		}
+	}
+}
