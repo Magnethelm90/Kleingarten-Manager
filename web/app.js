@@ -237,6 +237,16 @@ function geloeschtToast(r, was, neuLaden) {
   } } : null);
 }
 
+// Mehrere Einträge auf einmal in den Papierkorb legen; ein Rückgängig holt alle zurück.
+async function sammelLoeschen(pfade, was, neuLaden) {
+  const ids = [];
+  try { for (const pfad of pfade) { const r = await api('DELETE', pfad); if (r && r.papierkorbId) ids.push(r.papierkorbId); } } catch (e) { handleErr(e); }
+  await neuLaden();
+  toast(`${was} gelöscht`, 'ok', ids.length ? { label: 'Rückgängig', fn: async () => {
+    try { for (const id of ids) await api('POST', `/api/admin/papierkorb/${encodeURIComponent(id)}/wiederherstellen`); toast('Wiederhergestellt', 'ok'); await neuLaden(); } catch (e) { handleErr(e); }
+  } } : null);
+}
+
 // Fehlermeldungen, die auf eine fehlende Vorbereitung hinweisen, bekommen gleich den Weg dorthin.
 const FEHLER_HILFE = [
   [/keine Pächter angelegt|noch keine Gärten|keine Gärten mit Gartennummer/i, 'Pächter anlegen', 'admin:paechter'],
@@ -3231,6 +3241,12 @@ async function rundschreibenDialog(x) {
     h('div', { class: 'field' }, h('label', null, 'Vorlagen'), vorlagen),
     fld('Betreff *', f.betreff),
     fld('Text *', f.text, 'Anrede und Text schreiben; Gruß und »Der Vorstand« setzt das Programm darunter. Leerzeilen trennen Absätze.'),
+    h('div', { class: 'field wide' }, h('label', null, 'Persönlich einsetzen'), h('div', { class: 'toolbar' },
+      ...[['{Name}', 'Name'], ['{Garten}', 'Garten'], ['{Mitgliedsnr}', 'Mitgliedsnr.'], ['{Offen}', 'offener Betrag']].map(([t, l]) => h('button', { class: 'btn small', type: 'button', title: `Setzt ${t} an die Cursorstelle`, onclick: () => {
+        const a = f.text.selectionStart ?? f.text.value.length, b = f.text.selectionEnd ?? a;
+        f.text.setRangeText(t, a, b, 'end'); f.text.focus(); f.text.dispatchEvent(new Event('input', { bubbles: true }));
+      } }, l)),
+      h('span', { class: 'hint' }, 'In Briefen steht dort der Wert des Pächters, in Aushang und Sammel-E-Mail ein neutrales Wort.'))),
     h('div', { class: 'field wide' }, h('label', null, 'Empfänger'), h('div', null, radio('alle', 'alle Pächter'), radio('auswahl', 'nur ausgewählte'))),
     h('div', { class: 'field wide' }, auswahlBox)),
   [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
@@ -4413,13 +4429,10 @@ function adminPaechter() {
           h('button', { class: 'btn small', onclick: async () => { if (await paechterDialog(p)) await reload(); } }, 'Bearbeiten'), ' ',
           p.gartennr ? [h('button', { class: 'btn small', title: `Gartenakte von Garten ${p.gartennr}: Dokumente, Wertermittlungen, Übergaben, Verlauf`, onclick: () => gartenakteDialog(p.gartennr.trim()) }, 'Akte'), ' '] : null,
           mehrMenue([
-            { label: 'Beitragsübersicht …', title: 'Alle Rechnungen, Zahlungen und Mahnungen dieses Pächters über die Jahre, mit Saldo', aktion: () => beitragskontoDialog(p) },
+            { label: 'Mappe …', title: 'Beiträge, Pachtvertrag, Willkommensmappe, Ehrenamts-Nachweis, Gartenakte und DSGVO-Auskunft an einer Stelle', aktion: () => paechterMappe(p) },
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Wechsel-Assistent …', title: 'Schritt für Schritt: Kündigung, Wertermittlung, Schlüssel, Übergabe', aktion: () => wechselAssistent(p) } : null,
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Pächterwechsel …', title: 'Garten an einen neuen Pächter übergeben (Schlussrechnung, Übergabeprotokoll, neuer Pächter)', aktion: () => paechterwechselDialog(p) } : null,
             p.gartennr && !p.ausgeschiedenAm ? { label: 'Kündigung erfassen …', title: 'Kündigung mit Frist und Fahrplan bis zur Übergabe', aktion: async () => { if (await kuendigungDialog(p)) { adminTabWaehlen('kuendigungen'); render(); } } } : null,
-            p.gartennr && p.gartengroesse > 0 ? { label: 'Pachtvertrag …', title: 'Unterpachtvertrag zum Unterschreiben, auf Wunsch in die Gartenakte', aktion: () => pachtvertragDialog(p) } : null,
-            p.gartennr && !p.ausgeschiedenAm ? { label: 'Willkommensmappe', title: 'PDF für neue Pächter: Garten, Zähler, Termine, Lageplan, Ansprechpartner', aktion: () => willkommenDrucken(p) } : null,
-            { label: 'Auskunft (DSGVO)', title: 'Alle gespeicherten Daten dieser Person als Datei herunterladen (Art. 15 DSGVO)', aktion: () => { location.href = `/api/admin/paechter/${encodeURIComponent(p.id)}/auskunft`; } },
             { label: 'In den Papierkorb', gefahr: true, aktion: async () => {
               const ok = await confirmBox(`Pächter „${p.name}“ (${p.mitgliedsnr}) in den Papierkorb legen? Er verschwindet aus allen Ansichten, Zählerstände und Rechnungen bleiben aber erhalten und lassen sich im Papierkorb wiederherstellen.`, 'In den Papierkorb', true);
               if (!ok) return;
@@ -4906,6 +4919,10 @@ function abschlussPruefung() {
     h('div', { class: 'fs-kopf' }, h('h3', { style: 'margin:0' }, `Prüfung vor dem Abschluss ${d.jahr}`),
       h('button', { class: 'btn small', onclick: () => { S.abschluss = null; render(); } }, 'Neu prüfen')),
     h('div', { class: 'ampel-gesamt ' + gesamt[0] }, h('i', null), gesamt[1]),
+    (() => {
+      const n = d.punkte.find((x) => x.stufe === 'err' && x.ziel) || d.punkte.find((x) => x.stufe === 'warn' && x.ziel);
+      return n ? h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => zielOeffnen(n.ziel) }, `Nächster Schritt: ${n.titel} →`)) : null;
+    })(),
     h('ul', { class: 'ampel-liste' }, d.punkte.map((x) => h('li', null,
       h('i', { class: 'ampel ' + x.stufe, title: x.stufe === 'err' ? 'Vorher erledigen' : x.stufe === 'warn' ? 'Bitte ansehen' : 'In Ordnung' }),
       h('div', { class: 'ampel-text' }, h('b', null, x.titel), x.text ? h('div', { class: 'hint' }, x.text) : null),
@@ -5876,9 +5893,7 @@ function naechsteMitgliedsnr() {
 // ------------------------------------------------------------------ Pächterwechsel-Assistent
 // Führt Schritt für Schritt durch den Wechsel eines Gartens. Der Stand kommt aus dem Fahrplan der Kündigung; jeder
 // Schritt hat einen Knopf, der die vorhandene Funktion öffnet. Nach jeder Aktion zeigt der Assistent den neuen Stand.
-async function beitragskontoDialog(p) {
-  let k;
-  try { k = await api('GET', `/api/admin/paechter/${encodeURIComponent(p.id)}/konto`); } catch (e) { handleErr(e); return; }
+function beitragskontoInhalt(k) {
   const dat = (iso) => (iso ? isoDatum(iso).toLocaleDateString('de-DE') : '–');
   const saldoText = k.saldo > 0.004 ? `Noch zu zahlen: ${eur(k.saldo)}` : k.saldo < -0.004 ? `Guthaben des Pächters: ${eur(-k.saldo)}` : 'Ausgeglichen';
   const tabelle = k.zeilen.length ? h('div', { class: 'tablewrap', style: 'max-height:42vh' }, h('table', { class: 'data' },
@@ -5890,14 +5905,33 @@ async function beitragskontoDialog(p) {
       h('td', { class: 'num' }, Math.abs(z.offen) > 0.004 ? eur(z.offen) : '–'),
       h('td', null, z.mahnstufe ? String(z.mahnstufe) : '–')))))) : h('p', { class: 'hint' }, 'Für diesen Pächter gibt es noch keine Rechnungen.');
   const vz = k.vorauszahlungen.length ? h('p', { class: 'hint' }, 'Vorauszahlungen: ' + k.vorauszahlungen.map((v) => `${v.jahr}: ${eur(v.summe)} (${v.anzahl}×${v.gebucht ? '' : ', teils vorgemerkt'})`).join(' · ')) : null;
-  await modal(`Beitragsübersicht – ${k.name}`, h('div', null,
+  return h('div', null,
     h('p', { class: 'hint' }, [k.gartennr ? `Garten ${k.gartennr}` : '', k.mitgliedsnr ? `Mitgliedsnr. ${k.mitgliedsnr}` : ''].filter(Boolean).join(' · ')),
-    tabelle, vz, h('p', null, h('b', null, saldoText))),
-  [{ label: 'Schließen', value: null },
-    { label: 'PDF', cls: 'primary', value: true, action: async () => {
-      await pdfDrucken({ url: `/api/admin/paechter/${encodeURIComponent(p.id)}/konto/pdf`, oeffnenUrl: `/api/admin/paechter/${encodeURIComponent(p.id)}/konto/pdf/oeffnen`, titel: 'Beitragsübersicht', meldung: () => 'Die Beitragsübersicht wurde im PDF-Programm geöffnet.' });
-      return false;
-    } }]);
+    tabelle, vz, h('p', null, h('b', null, saldoText)));
+}
+
+const kontoPdfDrucken = (p) => pdfDrucken({ url: `/api/admin/paechter/${encodeURIComponent(p.id)}/konto/pdf`, oeffnenUrl: `/api/admin/paechter/${encodeURIComponent(p.id)}/konto/pdf/oeffnen`, titel: 'Beitragsübersicht', meldung: () => 'Die Beitragsübersicht wurde im PDF-Programm geöffnet – dort drucken.' });
+
+// Eine Mappe je Pächter: Beiträge und alle Dokumente an einer Stelle (statt vieler Einzelpunkte im Menü).
+async function paechterMappe(p) {
+  let k;
+  try { k = await api('GET', `/api/admin/paechter/${encodeURIComponent(p.id)}/konto`); } catch (e) { handleErr(e); return; }
+  let aktiv = 'beitraege';
+  const flaeche = h('div'), kopf = h('div');
+  const zeile = (titel, text, label, fn) => h('div', { class: 'vordruck' }, h('div', null, h('b', null, titel), h('div', { class: 'hint' }, text)), h('div', { class: 'row' }, h('button', { class: 'btn', onclick: fn }, label)));
+  const dokumente = () => h('div', { class: 'vordrucke' },
+    zeile('Beitragsübersicht', 'Alle Rechnungen, Zahlungen und Mahnungen über die Jahre als PDF.', 'PDF', () => kontoPdfDrucken(p)),
+    p.gartennr && p.gartengroesse > 0 ? zeile('Pachtvertrag', 'Unterpachtvertrag zum Unterschreiben, auf Wunsch in die Gartenakte.', 'Öffnen', () => pachtvertragDialog(p)) : null,
+    p.gartennr && !p.ausgeschiedenAm ? zeile('Willkommensmappe', 'Garten, Zähler, Termine, Lageplan, Ansprechpartner.', 'PDF', () => willkommenDrucken(p)) : null,
+    zeile('Ehrenamts-Nachweis', 'Bescheinigung über Stunden und Ämter.', 'PDF', () => ehrenamtDrucken(S.state.currentYear, p.id)),
+    p.gartennr ? zeile('Gartenakte', 'Dokumente, Wertermittlungen, Übergaben und Verlauf.', 'Öffnen', () => gartenakteDialog(p.gartennr.trim())) : null,
+    zeile('Auskunft nach DSGVO', 'Alle gespeicherten Daten dieser Person als Datei (Art. 15 DSGVO).', 'Herunterladen', () => { location.href = `/api/admin/paechter/${encodeURIComponent(p.id)}/auskunft`; }));
+  const zeichne = () => {
+    kopf.replaceChildren(reiterLeiste([['beitraege', 'Beiträge'], ['dokumente', 'Dokumente']].map(([key, label]) => ({ label, aktiv: key === aktiv, geh: () => { aktiv = key; zeichne(); } })), 'Pächter-Mappe'));
+    flaeche.replaceChildren(aktiv === 'beitraege' ? beitragskontoInhalt(k) : dokumente());
+  };
+  zeichne();
+  await modal(`Mappe – ${k.name}`, h('div', null, kopf, flaeche), [{ label: 'Schließen', cls: 'primary', value: true }]);
 }
 
 async function wechselAssistent(p) {
@@ -6861,6 +6895,11 @@ function viewTermine() {
       h('label', null, 'Jahr'), jahrSel,
       istAdmin ? h('button', { class: 'btn primary', onclick: () => neu({ datum: jahr === new Date().getFullYear() ? heute : `${jahr}-01-01` }) }, '+ Termin eintragen') : null,
       istAdmin && vorjahr ? h('button', { class: 'btn', title: `Alle Termine aus ${jahr - 1} auf denselben Wochentag in ${jahr} übertragen`, onclick: uebernehmen }, `Termine aus ${jahr - 1} übernehmen`) : null,
+      istAdmin && imJahr.filter((t) => t.datum < heute).length > 1 ? h('button', { class: 'btn', title: 'Alle vergangenen Termine dieses Jahres in den Papierkorb legen (Rückgängig möglich)', onclick: async () => {
+        const alt = imJahr.filter((t) => t.datum < heute);
+        if (!(await confirmBox(`${alt.length} vergangene Termine aus ${jahr} in den Papierkorb legen?`, 'In den Papierkorb', true))) return;
+        await sammelLoeschen(alt.map((t) => `/api/admin/termine/${t.id}`), anz(alt.length, 'Termin', 'Termine'), reload);
+      } }, 'Vergangene aufräumen') : null,
       h('div', { class: 'spacer' }),
       h('button', { class: 'btn', disabled: !imJahr.length, onclick: () => jahresplanDrucken(jahr) }, 'Als Aushang drucken'),
       h('a', { class: 'btn', href: '/api/termine.ics', download: 'Vereinstermine.ics', title: 'Kalenderdatei für Outlook, Google-Kalender oder das Handy' }, 'In den Kalender')),
@@ -7444,6 +7483,24 @@ async function papierkorbDialog() {
   if (ok === 'leeren') { await leeren(); }
 }
 
+// Alle druckbaren Vordrucke an einer Stelle.
+async function vordruckeDialog() {
+  const st = S.state;
+  const zeile = (titel, text, ...knoepfe) => h('div', { class: 'vordruck' }, h('div', null, h('b', null, titel), h('div', { class: 'hint' }, text)), h('div', { class: 'row' }, ...knoepfe));
+  const knopf = (label, fn) => h('button', { class: 'btn', onclick: fn }, label);
+  const body = h('div', { class: 'vordrucke' },
+    h('h4', null, 'Für den Rundgang'),
+    zeile(`Ablesebogen ${st.currentYear}`, 'Alle Gärten mit Zählern und Vorjahresständen.', knopf('Drucken', () => ablesebogenDrucken(st.currentYear))),
+    zeile('Saison-Liste Wasser', 'Frühjahr (Wasser an) oder Herbst (winterfest).', knopf('Frühjahr', () => saisonlisteDrucken('fruehjahr')), knopf('Herbst', () => saisonlisteDrucken('herbst'))),
+    zeile('Begehungsliste', 'Mit den noch offenen Mängeln je Garten.', knopf('Drucken', begehungslisteDrucken)),
+    h('h4', null, 'Für Schaukasten und Vorstand'),
+    zeile('Aushang', 'Kurze Mitteilung mit großer Überschrift, mit Vorlagen.', knopf('Erstellen', aushangDialog)),
+    zeile(`Vereinstermine ${new Date().getFullYear()}`, 'Jahresplaner als Aushang.', knopf('Drucken', () => jahresplanDrucken(new Date().getFullYear()))),
+    zeile('Lageplan', 'Als Aushang ohne Namen oder für den Vorstand mit Namen.', knopf('Drucken', () => lageplanDrucken(true))),
+    zeile('Pächterliste', 'Mit Anschrift, Kontakt und Zählern (vertraulich).', knopf('Drucken', paechterlisteDrucken)));
+  await breiterDialog('Vordrucke und Aushänge', body, [{ label: 'Schließen', cls: 'primary', value: true }]);
+}
+
 function adminBerichte() {
   const st = S.state;
   const jahr = S.berichtJahr || st.currentYear;
@@ -7482,34 +7539,16 @@ function adminBerichte() {
       kachel('personen', 'Mitgliederbefragung', 'Fragebogen zum Ausdrucken, Erfassungsbogen zum Auszählen und anonyme Auswertung für die Versammlung.',
         h('button', { class: 'btn', onclick: befragungenDialog }, 'Öffnen'))
     ),
-    h('h3', { class: 'bericht-gruppe' }, 'Rundgang und Zähler'),
-    h('p', { class: 'hint' }, 'Vordrucke und Hilfen für den Gang durch die Anlage.'),
+    h('h3', { class: 'bericht-gruppe' }, 'Rundgang, Zähler und Vordrucke'),
+    h('p', { class: 'hint' }, 'Alles zum Ausdrucken und für den Gang durch die Anlage.'),
     h('div', { class: 'bericht-raster' },
-      kachel('zaehler', `Ablesebogen ${st.currentYear}`, 'Alle Gärten mit Zählern und Vorjahresständen für den Rundgang.',
-        h('button', { class: 'btn', onclick: () => ablesebogenDrucken(st.currentYear) }, 'Drucken')),
+      kachel('bericht', 'Vordrucke und Aushänge', 'Ablesebogen, Saison-Liste, Begehungsliste, Pächterliste, Lageplan, Vereinstermine und Aushang – alles Druckbare an einer Stelle.',
+        h('button', { class: 'btn primary', onclick: vordruckeDialog }, 'Öffnen')),
       kachel('zaehler', `Ablesung mit dem Handy ${st.currentYear}`, 'Eine Datei fürs Handy, die ohne Internet funktioniert: Zählerstände beim Rundgang eintippen, das Ergebnis hier wieder einlesen. Die Datei enthält Namen – vertraulich behandeln.',
         h('div', { class: 'toolbar-gruppe' }, h('a', { class: 'btn', href: '/api/admin/ablesung-handy', download: '' }, 'Datei fürs Handy'), ' ',
           h('button', { class: 'btn', onclick: handyErgebnisEinlesen }, 'Ergebnis einlesen'))),
       kachel('zaehler', `Fehlende Zählerstände ${st.currentYear}`, 'Wer hat noch keinen Stand gemeldet? Mit Aushang ohne Namen und E-Mail-Erinnerung.',
         h('button', { class: 'btn', onclick: () => zaehlerErinnerungDialog(st.currentYear) }, 'Prüfen')),
-      kachel('zaehler', 'Saison-Liste Wasser', 'Vordruck für den Rundgang im Frühjahr (Wasser an) oder Herbst (Wasser ab, winterfest) mit Ablauf und Zeile je Garten.',
-        h('div', { class: 'row' },
-          h('button', { class: 'btn', onclick: () => saisonlisteDrucken('fruehjahr') }, 'Frühjahr'),
-          h('button', { class: 'btn', onclick: () => saisonlisteDrucken('herbst') }, 'Herbst'))),
-      kachel('warnung', 'Begehungsliste', 'Vordruck für den Rundgang durch die Anlage, mit den noch offenen Mängeln je Garten.',
-        h('button', { class: 'btn', onclick: begehungslisteDrucken }, 'Drucken'))
-    ),
-    h('h3', { class: 'bericht-gruppe' }, 'Aushänge, Listen und Texte'),
-    h('p', { class: 'hint' }, 'Zum Ausdrucken für Schaukasten, Mitglieder und Neue.'),
-    h('div', { class: 'bericht-raster' },
-      kachel('bericht', 'Aushang', 'Kurze Mitteilung für den Schaukasten mit großer Überschrift – Sperrung, Arbeitseinsatz, Fundsache. Mit Vorlagen.',
-        h('button', { class: 'btn', onclick: aushangDialog }, 'Erstellen')),
-      kachel('kalender', `Vereinstermine ${new Date().getFullYear()}`, 'Jahresplaner als Aushang für den Schaukasten.',
-        h('button', { class: 'btn', onclick: () => jahresplanDrucken(new Date().getFullYear()) }, 'Drucken')),
-      kachel('karte', 'Lageplan', 'Als Aushang ohne Namen oder für den Vorstand mit Namen.',
-        h('button', { class: 'btn', onclick: () => lageplanDrucken(true) }, 'Drucken')),
-      kachel('personen', 'Pächterliste', 'Alle Pächter mit Anschrift, Kontakt und Zählern zum Ausdrucken (vertraulich).',
-        h('button', { class: 'btn', onclick: paechterlisteDrucken }, 'Drucken')),
       kachel('personen', 'Willkommensmappe & Exposé', 'Texte für die Mappe neuer Pächter und den Steckbrief freier Gärten: Ansprechpartner und das Wichtigste aus der Gartenordnung.',
         h('button', { class: 'btn', onclick: vereinsinfoDialog }, 'Texte bearbeiten'))
     ),
@@ -7608,6 +7647,10 @@ function vereinsjahrKarte(st, istAdmin) {
           h('div', { class: 'vj-text' }, h('b', null, p.titel), p.erkannt ? h('span', { class: 'badge ok', style: 'margin-left:6px' }, 'erledigt') : null, h('div', { class: 'hint' }, p.text)),
           h('button', { class: 'btn small', onclick: () => zielOeffnen(p.ziel) }, p.knopf + ' →'));
       })) : h('p', { class: 'hint' }, 'In diesem Monat steht nichts Besonderes an.'),
+      h('div', { class: 'toolbar' }, h('button', { class: 'btn small', title: 'Neuen Termin in diesem Monat eintragen', onclick: async () => {
+        const mm = String(sel).padStart(2, '0'), tag = d.jahr === heuteJahr && sel === heuteMonat ? d.heute : `${d.jahr}-${mm}-01`;
+        if (await terminDialog({ datum: tag })) { S.vj = null; await reload(); }
+      } }, `+ Termin im ${MONATE[sel - 1]}`)),
       monat.termine.length ? h('div', { class: 'vj-termine' }, h('span', { class: 'hint' }, 'Termine: '),
         monat.termine.map((t, i) => [i ? ' · ' : '', h('span', null, `${deDate(t.datum).slice(0, 6)} ${t.titel}`)])) : null));
 }

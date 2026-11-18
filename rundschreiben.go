@@ -232,7 +232,7 @@ func (a *App) rundschreibenBriefePDF(r *http.Request) ([]byte, string, error) {
 	pdf := neuesPDF(s, rs.Betreff, false)
 	for _, p := range post {
 		y := briefAnfang(pdf, s, p, rs.Datum)
-		briefText(pdf, s, y, rs.Betreff, rs.Text)
+		briefText(pdf, s, y, rs.Betreff, a.st.platzhalterLocked(rs.Text, &p))
 	}
 	out, err := pdfBytes(pdf)
 	if err != nil {
@@ -257,7 +257,7 @@ func (a *App) rundschreibenAushangPDF(r *http.Request) ([]byte, string, error) {
 	pdf.SetFont("lib", "", 10)
 	pdf.SetXY(leftX, 34)
 	pdf.CellFormat(rightX-leftX, 6, "Aushang · "+germanDate(rs.Datum), "", 0, "R", false, 0, "")
-	briefText(pdf, s, 44, rs.Betreff, rs.Text)
+	briefText(pdf, s, 44, rs.Betreff, a.st.platzhalterLocked(rs.Text, nil))
 	out, err := pdfBytes(pdf)
 	return out, "Rundschreiben-Aushang.pdf", err
 }
@@ -323,7 +323,7 @@ func (a *App) handleRundschreibenMail(w http.ResponseWriter, r *http.Request) {
 	for i, p := range mail {
 		adressen[i] = p.Email
 	}
-	text := rs.Text + "\n\nMit freundlichen Gartengrüßen\nDer Vorstand\n" + a.st.d.Settings.VereinName
+	text := a.st.platzhalterLocked(rs.Text, nil) + "\n\nMit freundlichen Gartengrüßen\nDer Vorstand\n" + a.st.d.Settings.VereinName
 	pakete, mitText := mailPakete(rs.Betreff, text, adressen)
 	if n > len(pakete) {
 		writeErr(w, bad("Dieses Paket gibt es nicht"))
@@ -361,4 +361,29 @@ func (s *Store) rundschreibenFuerLocked(id string) []string {
 		}
 	}
 	return out
+}
+
+// Platzhalter in Rundschreiben: {Name}, {Garten}, {Mitgliedsnr}, {Offen} (offene Rechnungen in €). In Briefen werden sie
+// je Pächter eingesetzt; im Aushang und in der Sammel-E-Mail (kein einzelner Empfänger) bleiben neutrale Wörter. Der Aufrufer hält s.mu.
+func (s *Store) platzhalterLocked(text string, p *Paechter) string {
+	if !strings.Contains(text, "{") {
+		return text
+	}
+	name, garten, nr, offen := "Gartenfreundin / Gartenfreund", "dein Garten", "", "den offenen Betrag"
+	if p != nil {
+		name, garten, nr = p.Name, "Garten "+p.Gartennr, p.Mitgliedsnr
+		if p.Gartennr == "" {
+			garten = "dein Garten"
+		}
+		sum := 0.0
+		for _, x := range s.d.Rechnungen {
+			if x.PaechterID == p.ID && x.Status == statusGueltig && !x.Bereinigt && x.Result.Gesamt > 0 {
+				if o := openAmount(x); o > 0.005 {
+					sum += o
+				}
+			}
+		}
+		offen = fmtEUR(round2(sum))
+	}
+	return strings.NewReplacer("{Name}", name, "{Garten}", garten, "{Mitgliedsnr}", nr, "{Offen}", offen).Replace(text)
 }

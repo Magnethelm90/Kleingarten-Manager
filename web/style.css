@@ -1141,3 +1141,8 @@ ol.probier li{margin:0 0 10px}
 .wort{padding:9px 2px;border-bottom:1px solid var(--line)}
 .wort b{display:block;font-size:15px}
 @media (prefers-reduced-motion: reduce){.start-knopf{transition:none}}
+.vordrucke h4 { margin: 14px 0 4px; }
+.vordrucke h4:first-child { margin-top: 0; }
+.vordruck { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line, #e3e6df); }
+.vordruck .row { display: flex; gap: 6px; flex-shrink: 0; }
+@media (max-width: 600px) { .vordruck { flex-direction: column; align-items: flex-start; } }
