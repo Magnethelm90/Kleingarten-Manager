@@ -52,6 +52,8 @@ type Settings struct {
 	// Hochlade-Endpunkt gesetzt; abgeschlossene Jahre und ausgestellte Rechnungen behalten ihr Logo,
 	// weil jede neue Datei einen eigenen Namen bekommt und alte nicht gelöscht werden.
 	Logo string `json:"logo,omitempty"`
+	// Brieftexte: eigene Fassungen der festen Briefsätze (leer = Standard), nur über /api/admin/brieftexte änderbar
+	Brieftexte Brieftexte `json:"brieftexte"`
 }
 
 // GartenEintrag ist ein Abschnitt in der Belegungshistorie eines Gartens:

@@ -436,7 +436,7 @@ func buildMaengelschreiben(s Settings, p Paechter, ms []Mangel, frist, stufe str
 	case "zweit":
 		einleitung = "trotz unserer Aufforderung und Erinnerung sind die folgenden Mängel in Ihrem Garten nicht beseitigt:"
 	}
-	pdf.MultiCell(rightX-leftX, 5.2, "Liebe Gartenfreundin, lieber Gartenfreund,\n\n"+einleitung, "", "L", false)
+	pdf.MultiCell(rightX-leftX, 5.2, s.Brieftexte.text("anrede", nil)+"\n\n"+einleitung, "", "L", false)
 	y = pdf.GetY() + 3
 	for i, m := range ms {
 		if y > 262 {
@@ -479,19 +479,15 @@ func buildMaengelschreiben(s Settings, p Paechter, ms []Mangel, frist, stufe str
 	y += 2
 	pdf.SetFont("lib", "", 10)
 	pdf.SetXY(leftX, y)
-	text := fmt.Sprintf("Wir bitten Sie, diese Mängel bis zum %s zu beseitigen. Sind sie bereits behoben oder gibt es Gründe, warum das nicht möglich ist, melden Sie sich bitte beim Vorstand. "+
-		"Wir bitten um Verständnis, dass wir nach Fristablauf weitere Schritte nach Pachtvertrag und Satzung prüfen müssen.", germanDate(frist))
+	key := "maengelErst"
 	if stufe == "zweit" {
-		text = fmt.Sprintf("Wir fordern Sie auf, diese Mängel bis zum %s zu beseitigen. Das ist die letzte Frist. Danach wird der Vorstand über eine Abmahnung und weitere Schritte nach Pachtvertrag, Satzung und Bundeskleingartengesetz entscheiden. "+
-			"Melden Sie sich bitte vorher, wenn es Gründe gibt, warum die Beseitigung nicht möglich ist.", germanDate(frist))
+		key = "maengelZweit"
 	}
+	text := s.Brieftexte.text(key, map[string]string{"Frist": germanDate(frist)})
 	pdf.MultiCell(rightX-leftX, 5.2, text, "", "L", false)
 	y = pdf.GetY() + 8
 	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, 6, "Mit freundlichen Gartengrüßen", "", 0, "L", false, 0, "")
-	y += 6
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, 6, "Der Vorstand", "", 0, "L", false, 0, "")
+	grussUnterschrift(pdf, s, y)
 	return pdfBytes(pdf)
 }
 
@@ -566,4 +562,12 @@ func (a *App) maengelschreibenPDF(r *http.Request) ([]byte, string, error) {
 	}
 	pdf, err := buildMaengelschreiben(s, p, ms, frist, stufe)
 	return pdf, safeName("Maengel_Garten_"+nr, 80) + ".pdf", err
+}
+
+// grussUnterschrift setzt Grußformel und Unterschrift (eigene Brieftexte) ab Höhe y.
+func grussUnterschrift(pdf *fpdf.Fpdf, s Settings, y float64) {
+	pdf.SetXY(leftX, y)
+	pdf.CellFormat(rightX-leftX, 6, s.Brieftexte.text("gruss", nil), "", 0, "L", false, 0, "")
+	pdf.SetXY(leftX, y+6)
+	pdf.CellFormat(rightX-leftX, 6, s.Brieftexte.text("unterschrift", nil), "", 0, "L", false, 0, "")
 }

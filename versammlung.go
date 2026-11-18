@@ -143,10 +143,7 @@ func buildEinladung(s Settings, t Termin) ([]byte, error) {
 		pdf.AddPage()
 	}
 	pdf.SetFont("lib", "", 11)
-	pdf.SetXY(leftX, 266)
-	pdf.CellFormat(rightX-leftX, 6, "Mit freundlichen Gartengrüßen", "", 0, "L", false, 0, "")
-	pdf.SetXY(leftX, 272)
-	pdf.CellFormat(rightX-leftX, 6, "Der Vorstand", "", 0, "L", false, 0, "")
+	grussUnterschrift(pdf, s, 266)
 	pdf.SetFont("lib", "", 7.5)
 	pdf.SetTextColor(110, 110, 110)
 	pdf.SetXY(leftX, 287)

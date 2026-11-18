@@ -1114,7 +1114,8 @@ func cleanSettings(in, cur Settings) (Settings, error) {
 		}
 		in.ZweiteSicherung = z
 	}
-	in.Logo = cur.Logo // nur über /api/admin/logo änderbar
+	in.Logo = cur.Logo             // nur über /api/admin/logo änderbar
+	in.Brieftexte = cur.Brieftexte // nur über /api/admin/brieftexte änderbar
 	in.Farbe = strings.ToLower(strings.TrimSpace(in.Farbe))
 	if in.Farbe != "" && !farbeGueltig(in.Farbe) {
 		return in, bad("Die Vereinsfarbe muss ein Farbwert wie #2f6f3e sein")
@@ -1918,6 +1919,8 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/datenschutz/bereinigen", a.admin(a.handleBereinigen))
 	mux.HandleFunc("DELETE /api/admin/paechter/{id}/endgueltig", a.admin(a.handlePaechterEndgueltig))
 	mux.HandleFunc("PUT /api/admin/settings", a.admin(a.handleSettings))
+	mux.HandleFunc("GET /api/admin/brieftexte", a.admin(a.handleBrieftexte))
+	mux.HandleFunc("PUT /api/admin/brieftexte/{key}", a.admin(a.handleBrieftextSpeichern))
 	mux.HandleFunc("POST /api/admin/jahreswechsel", a.admin(a.handleNextYear))
 	mux.HandleFunc("POST /api/admin/import/preview", a.admin(a.handleImportPreview))
 	mux.HandleFunc("POST /api/admin/import/apply", a.admin(a.handleImportApply))

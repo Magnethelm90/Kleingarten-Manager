@@ -318,7 +318,7 @@ func (a *App) kuendigungBestaetigungPDF(r *http.Request) ([]byte, string, error)
 	heute := time.Now().Format("2006-01-02")
 	pdf := neuesPDF(s, "Bestätigung der Kündigung – Garten "+k.Gartennr, false)
 	y := briefAnfang(pdf, s, *p, heute)
-	text := "Liebe Gartenfreundin, lieber Gartenfreund,\n\n"
+	text := s.Brieftexte.text("anrede", nil) + "\n\n"
 	switch k.Von {
 	case "verein":
 		text += fmt.Sprintf("hiermit halten wir fest, dass der Verein das Pachtverhältnis über den Garten %s zum %s gekündigt hat.", k.Gartennr, germanDate(k.Zum))
@@ -327,14 +327,11 @@ func (a *App) kuendigungBestaetigungPDF(r *http.Request) ([]byte, string, error)
 	default:
 		text += fmt.Sprintf("wir bestätigen den Eingang Ihrer Kündigung vom %s. Das Pachtverhältnis über den Garten %s endet zum %s.", germanDate(k.Eingang), k.Gartennr, germanDate(k.Zum))
 	}
-	text += "\n\nBis zur Übergabe gilt Folgendes:\n" +
-		"•  Der Garten wird bis dahin weiter gepflegt; Pacht, Beiträge und Verbrauch werden bis zur Übergabe abgerechnet.\n" +
-		"•  Für Laube, Anpflanzungen und Einrichtungen findet eine Wertermittlung statt. Den Termin stimmen wir mit Ihnen ab.\n" +
-		"•  Bei der Übergabe lesen wir gemeinsam die Zähler ab; danach erhalten Sie die Schlussrechnung.\n"
+	rueckgabe := ""
 	if len(schluessel) > 0 {
-		text += "•  Bitte geben Sie bei der Übergabe zurück: " + strings.Join(schluessel, ", ") + ".\n"
+		rueckgabe = "\n•  Bitte geben Sie bei der Übergabe zurück: " + strings.Join(schluessel, ", ") + "."
 	}
-	text += "\nGern helfen wir dabei, eine Nachfolgerin oder einen Nachfolger für den Garten zu finden. Bei Fragen melden Sie sich bitte beim Vorstand."
+	text += "\n\n" + s.Brieftexte.text("kuendigung", map[string]string{"Garten": k.Gartennr, "Zum": germanDate(k.Zum), "Schluessel": rueckgabe})
 	briefText(pdf, s, y, "Bestätigung der Kündigung – Garten "+k.Gartennr, text)
 	out, err := pdfBytes(pdf)
 	if err != nil {

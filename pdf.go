@@ -483,7 +483,7 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 		next(rowH + 3)
 	}
 	font("", 10)
-	text(leftX, rightX-leftX, "Der Vorstand", "L")
+	text(leftX, rightX-leftX, s.Brieftexte.text("unterschrift", nil), "L")
 	next(rowH + 3)
 	font("", 8)
 	text(leftX, rightX-leftX, "Die Rechnung wird maschinell erstellt und ist ohne Unterschrift gültig.", "L")
@@ -580,11 +580,8 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung, stufe int, frist string
 	if len(rec.Ratenplan) > 0 {
 		body += fmt.Sprintf(" Wir hatten Ratenzahlung vereinbart; die fällige Rate war bis zum %s zu zahlen.", germanDate(faelligAm(rec)))
 	}
-	switch stufe {
-	case 2:
-		body += " Wir hatten Sie bereits an die Zahlung erinnert."
-	case 3:
-		body += " Trotz Erinnerung und Mahnung ist die Zahlung nicht eingegangen. Dies ist unsere letzte Mahnung; danach müssen wir weitere Schritte nach Pachtvertrag und Satzung prüfen."
+	if zusatz := strings.TrimSpace(s.Brieftexte.text(fmt.Sprintf("mahnung%d", stufe), nil)); zusatz != "" {
+		body += " " + zusatz
 	}
 	pdf.SetXY(leftX, y)
 	pdf.MultiCell(rightX-leftX, 5.2, tr(body), "", "L", false)
@@ -609,8 +606,8 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung, stufe int, frist string
 		bis = "bis zum " + germanDate(frist)
 	}
 	pay := fmt.Sprintf("Bitte den offenen Betrag von %s %s auf das Konto der %s, IBAN: %s; BIC: %s, Verwendungszweck: %s (*) überweisen. "+
-		"Sollte die Zahlung zwischenzeitlich bereits erfolgt sein, betrachten Sie dieses Schreiben als gegenstandslos.",
-		fmtEUR(offen), bis, s.BankName, s.IBAN, s.BIC, invoiceNumber(s, p))
+		"%s",
+		fmtEUR(offen), bis, s.BankName, s.IBAN, s.BIC, invoiceNumber(s, p), s.Brieftexte.text("mahnungSchluss", nil))
 	qrTop := y
 	font("", 10)
 	pdf.SetXY(leftX, y)
@@ -631,7 +628,7 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung, stufe int, frist string
 	text(leftX, rightX-leftX, "(*) Bei Zahlungsvorgängen bitte angeben!", "L")
 	next(rowH + 3)
 	font("", 10)
-	text(leftX, rightX-leftX, "Der Vorstand", "L")
+	text(leftX, rightX-leftX, s.Brieftexte.text("unterschrift", nil), "L")
 	next(rowH + 3)
 	font("", 8)
 	text(leftX, rightX-leftX, "Dieses Schreiben wird maschinell erstellt und ist ohne Unterschrift gültig.", "L")

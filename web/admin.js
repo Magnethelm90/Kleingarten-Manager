@@ -405,12 +405,13 @@ function adminSettings() {
   return h('div', null,
     h('div', { class: 'chips', role: 'navigation', 'aria-label': 'Springe zu' },
       h('span', { class: 'hint' }, 'Springe zu:'),
-      [['es-preise', 'Preise und Rechnung'], ['es-pacht', 'Pachtobergrenze'], ['es-bereiche', 'Bereiche ein- und ausblenden'], ['es-aussehen', 'Farbe und Logo']].map(([id, l]) => h('button', { class: 'btn small', onclick: sprung(id) }, l))),
+      [['es-preise', 'Preise und Rechnung'], ['es-pacht', 'Pachtobergrenze'], ['es-bereiche', 'Bereiche ein- und ausblenden'], ['es-briefe', 'Brieftexte'], ['es-aussehen', 'Farbe und Logo']].map(([id, l]) => h('button', { class: 'btn small', onclick: sprung(id) }, l))),
     h('p', { class: 'hint', id: 'es-preise' }, `Diese Werte gelten für das laufende Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
     h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'),
       h('button', { class: 'btn', title: 'Die letzten Änderungen ansehen und zurücknehmen', onclick: einstellungsVerlaufDialog }, 'Letzte Änderungen'))),
     h('div', { id: 'es-pacht' }, pachtgrenzeKarte()),
     h('div', { id: 'es-bereiche' }, bereicheKarte(st)),
+    h('div', { id: 'es-briefe' }, brieftexteKarte()),
     h('div', { id: 'es-aussehen' }, aussehenKarte(st)));
 }
 
@@ -422,7 +423,7 @@ async function einstellungsVerlaufDialog() {
   const zeichne = () => box.replaceChildren(l.length ? h('div', null, l.map((z) => h('div', { class: 'vordruck' },
     h('div', null, h('b', null, z.datum.replace(/^(\d{4})-(\d\d)-(\d\d)/, '$3.$2.$1')), h('ul', { style: 'margin:4px 0 0;padding-left:18px' }, z.aenderungen.map((t) => h('li', null, t)))),
     h('div', { class: 'row' }, h('button', { class: 'btn', onclick: async () => {
-      try { await api('POST', `/api/admin/einstellungen/verlauf/${z.index}/zurueck`); toast('Der alte Stand ist wieder da', 'ok'); box.closest('dialog').close(); await reload(); } catch (e) { handleErr(e); }
+      try { await api('POST', `/api/admin/einstellungen/verlauf/${z.index}/zurueck`); toast('Der alte Stand ist wieder da', 'ok'); box.closest('dialog').close(); S.brieftexte = null; await reload(); } catch (e) { handleErr(e); }
     } }, 'Zurücknehmen')))))
     : h('p', { class: 'hint' }, 'Noch keine Änderungen gespeichert. Sobald du Preise oder Einstellungen änderst, steht der alte Stand hier.'));
   zeichne();
@@ -616,6 +617,55 @@ function pachtgrenzeKarte() {
 // ---- Aussehen: Vereinsfarbe und Logo (Programm und Rechnung)
 
 const FARBVORSCHLAEGE = [['#2f6f3e', 'Gartengrün'], ['#1e5aa8', 'Blau'], ['#0f6e6e', 'Petrol'], ['#8c2f39', 'Weinrot'], ['#7a4b1f', 'Erdbraun'], ['#3d4752', 'Anthrazit']];
+
+// ---- Brieftexte: eigene Fassungen der festen Sätze in Briefen (leer = Standard des Programms)
+function brieftexteKarte() {
+  if (S.brieftexte == null) {
+    if (!S.brieftexteLaedt) {
+      S.brieftexteLaedt = true;
+      api('GET', '/api/admin/brieftexte').then((d) => { S.brieftexte = d; }).catch((e) => { handleErr(e); S.brieftexte = []; })
+        .finally(() => { S.brieftexteLaedt = false; render(); });
+    }
+    return null;
+  }
+  const gruppen = [...new Set(S.brieftexte.map((b) => b.gruppe))];
+  const kurz = (t) => { const x = (t || '').replace(/\s+/g, ' ').trim(); return x ? (x.length > 110 ? x.slice(0, 110) + ' …' : x) : '(kein Zusatz)'; };
+  return h('div', { class: 'card' },
+    h('h3', null, 'Brieftexte'),
+    h('p', { class: 'hint' }, 'Hier schreibst du die festen Sätze der Briefe so, wie euer Verein spricht. Namen, Daten und Beträge setzt das Programm selbst ein. Ein geänderter Text gilt ab sofort für alle neuen Briefe; schon ausgestellte Rechnungen bleiben, wie sie sind.'),
+    gruppen.map((g) => h('div', { class: 'brieftext-gruppe' },
+      h('h4', null, g),
+      S.brieftexte.filter((b) => b.gruppe === g).map((b) => h('div', { class: 'brieftext-zeile' },
+        h('div', null, h('b', null, b.titel), b.angepasst ? h('span', { class: 'badge ok', style: 'margin-left:8px' }, 'eigener Text') : null,
+          h('div', { class: 'hint' }, kurz(b.text))),
+        h('button', { class: 'btn small', onclick: () => brieftextDialog(b) }, 'Bearbeiten'))))));
+}
+
+async function brieftextDialog(b) {
+  const lang = b.max > 400;
+  const feld = h('textarea', { rows: lang ? 10 : 3, maxlength: b.max, style: 'width:100%' });
+  feld.value = b.text;
+  const zaehler = h('span', { class: 'hint' });
+  const zaehle = () => { zaehler.textContent = `${feld.value.length} von höchstens ${b.max} Zeichen`; };
+  feld.addEventListener('input', zaehle);
+  zaehle();
+  const einsetzen = (p) => {
+    const a = feld.selectionStart ?? feld.value.length, e = feld.selectionEnd ?? a;
+    feld.value = feld.value.slice(0, a) + `{${p}}` + feld.value.slice(e);
+    feld.focus(); feld.selectionStart = feld.selectionEnd = a + p.length + 2;
+    zaehle();
+  };
+  const ok = await modal(`Brieftext: ${b.titel}`, h('div', { class: 'form' },
+    b.hilfe ? h('p', { class: 'hint' }, b.hilfe) : null,
+    b.platzhalter.length ? h('div', { class: 'chips' }, h('span', { class: 'hint' }, 'Einsetzen:'),
+      b.platzhalter.map((p) => h('button', { class: 'btn small', type: 'button', title: 'Wird im Brief durch die passende Angabe ersetzt', onclick: () => einsetzen(p) }, `{${p}}`))) : null,
+    feld, zaehler,
+    h('div', null, h('button', { class: 'btn small', type: 'button', onclick: () => { feld.value = b.standard; zaehle(); feld.dispatchEvent(new Event('input')); } }, 'Standardtext einsetzen'))),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    try { await api('PUT', `/api/admin/brieftexte/${encodeURIComponent(b.key)}`, { text: feld.value }); } catch (e) { handleErr(e); return false; }
+  } }]);
+  if (ok) { S.brieftexte = null; toast(feld.value.trim() === '' || feld.value.trim() === b.standard.trim() ? 'Standardtext gilt wieder' : 'Brieftext gespeichert', 'ok'); render(); }
+}
 
 function aussehenKarte(st) {
   const aktuell = st.settings.farbe || '#2f6f3e';

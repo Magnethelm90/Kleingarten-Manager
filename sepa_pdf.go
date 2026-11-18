@@ -185,7 +185,7 @@ func buildVorabankuendigung(s Settings, sepa SepaEinstellungen, jahr int, l []vo
 		pdf.CellFormat(rightX-leftX, 7, fmt.Sprintf("Ankündigung Ihrer Lastschriften %d", jahr), "", 0, "L", false, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 		y += 10
-		y = mappeText(pdf, y, fmt.Sprintf("Liebe Gartenfreundin, lieber Gartenfreund,\n\nwie vereinbart ziehen wir die monatliche Vorauszahlung für Ihren Garten %s "+
+		y = mappeText(pdf, y, s.Brieftexte.text("anrede", nil)+"\n\n"+fmt.Sprintf("wie vereinbart ziehen wir die monatliche Vorauszahlung für Ihren Garten %s "+
 			"per SEPA-Lastschrift von Ihrem Konto ein. Die Vorauszahlungen werden mit der Jahresabrechnung verrechnet.", p.Gartennr), 10)
 		y = mappeTabelle(pdf, y, [][2]string{
 			{"Betrag je Monat", fmtEUR(m.Monatsbetrag)},
@@ -210,10 +210,7 @@ func buildVorabankuendigung(s Settings, sepa SepaEinstellungen, jahr int, l []vo
 			"Bitte sorgen Sie für ausreichende Deckung; eine zurückgegebene Lastschrift kostet Bankgebühren.", 9.5)
 		y += 4
 		pdf.SetFont("lib", "", 10)
-		pdf.SetXY(leftX, y)
-		pdf.CellFormat(rightX-leftX, 6, "Mit freundlichen Gartengrüßen", "", 0, "L", false, 0, "")
-		pdf.SetXY(leftX, y+6)
-		pdf.CellFormat(rightX-leftX, 6, "Der Vorstand", "", 0, "L", false, 0, "")
+		grussUnterschrift(pdf, s, y)
 		mappeFuss(pdf, s, s.VereinName+" · Vorabankündigung (Pre-Notification) der SEPA-Lastschriften "+strconv.Itoa(jahr))
 	}
 	return pdfBytes(pdf)

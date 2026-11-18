@@ -60,36 +60,32 @@ func buildWartelistenBrief(s Settings, b Bewerber, art, garten, datum string) ([
 	mr, mg, mb := markenfarbe(s.Farbe)
 	y := briefAnfang(pdf, s, p, datum)
 	titel, text := "", ""
-	gruss := "Liebe Gartenfreundin, lieber Gartenfreund"
+	gruss := s.Brieftexte.text("anrede", nil)
 	if b.Anrede != "" {
-		gruss = "Guten Tag"
+		gruss = "Guten Tag,"
 	}
 	switch art {
 	case "angebot":
 		titel = "Angebot eines Gartens"
-		wo := "ein Garten in unserer Anlage"
+		wo := "ein Garten"
 		if garten != "" {
-			wo = "der Garten " + garten + " in unserer Anlage"
+			wo = "der Garten " + garten
 		}
-		text = fmt.Sprintf("Sie stehen seit dem %s auf unserer Warteliste. Nun wird %s frei, und wir möchten ihn Ihnen anbieten.\n\n", germanDate(b.Seit), wo)
+		besichtigung := "Gern zeigen wir Ihnen den Garten bei einer Besichtigung. Bitte melden Sie sich beim Vorstand, dann vereinbaren wir einen Termin."
 		if b.BesichtigungAm != "" {
 			zeit := germanDate(b.BesichtigungAm)
 			if b.BesichtigungUm != "" {
 				zeit += " um " + b.BesichtigungUm + " Uhr"
 			}
-			text += fmt.Sprintf("Gern zeigen wir Ihnen den Garten bei einer Besichtigung am %s. ", zeit)
-		} else {
-			text += "Gern zeigen wir Ihnen den Garten bei einer Besichtigung. Bitte melden Sie sich beim Vorstand, dann vereinbaren wir einen Termin. "
+			besichtigung = fmt.Sprintf("Gern zeigen wir Ihnen den Garten bei einer Besichtigung am %s.", zeit)
 		}
-		text += "Dabei besprechen wir auch die Übernahmekosten, die Pachtbedingungen und die Gartenordnung.\n\nBitte teilen Sie uns innerhalb von 14 Tagen mit, ob Sie Interesse haben. Andernfalls bieten wir den Garten dem Nächsten auf der Liste an."
+		text = s.Brieftexte.text("wartelisteAngebot", map[string]string{"Seit": germanDate(b.Seit), "Garten": wo, "Besichtigung": besichtigung})
 	case "nachfrage":
 		titel = "Besteht Ihr Interesse an einem Garten noch?"
-		text = fmt.Sprintf("Sie stehen seit dem %s auf der Warteliste unseres Vereins. Damit die Liste aktuell bleibt und wir keine Angaben unnötig aufbewahren, fragen wir regelmäßig nach.\n\nBitte teilen Sie uns kurz mit, ob Sie weiterhin Interesse an einem Garten haben. Das geht formlos per Post, E-Mail oder im Gespräch mit dem Vorstand. "+
-			"Hören wir bis zum %s nichts von Ihnen, nehmen wir Sie von der Liste und löschen Ihre Angaben.", germanDate(b.Seit), germanDate(time.Now().AddDate(0, 0, 28).Format("2006-01-02")))
+		text = s.Brieftexte.text("wartelisteNachfrage", map[string]string{"Seit": germanDate(b.Seit), "Frist": germanDate(time.Now().AddDate(0, 0, 28).Format("2006-01-02"))})
 	default:
 		titel = "Bestätigung Ihrer Anmeldung"
-		text = fmt.Sprintf("wir bestätigen, dass wir Sie am %s auf die Warteliste für einen Kleingarten aufgenommen haben.\n\nSobald ein Garten frei wird, melden wir uns in der Reihenfolge der Anmeldung bei Ihnen. Wie lange das dauert, lässt sich nicht vorhersagen. Bitte teilen Sie uns Änderungen Ihrer Anschrift oder Ihres Wunsches mit. "+
-			"Ihre Angaben verwenden wir nur für die Vergabe der Gärten und löschen sie, wenn Sie kein Interesse mehr haben.", germanDate(b.Seit))
+		text = s.Brieftexte.text("wartelisteBestaetigung", map[string]string{"Seit": germanDate(b.Seit)})
 	}
 	pdf.SetFont("lib", "B", 13)
 	pdf.SetTextColor(mr, mg, mb)
@@ -99,12 +95,9 @@ func buildWartelistenBrief(s Settings, b Bewerber, art, garten, datum string) ([
 	y += 11
 	pdf.SetFont("lib", "", 10)
 	pdf.SetXY(leftX, y)
-	pdf.MultiCell(rightX-leftX, 5.2, gruss+",\n\n"+text, "", "L", false)
+	pdf.MultiCell(rightX-leftX, 5.2, gruss+"\n\n"+text, "", "L", false)
 	y = pdf.GetY() + 8
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, 6, "Mit freundlichen Gartengrüßen", "", 0, "L", false, 0, "")
-	pdf.SetXY(leftX, y+6)
-	pdf.CellFormat(rightX-leftX, 6, "Der Vorstand", "", 0, "L", false, 0, "")
+	grussUnterschrift(pdf, s, y)
 	return pdfBytes(pdf)
 }
 

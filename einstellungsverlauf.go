@@ -37,6 +37,15 @@ func einstellungsAenderungen(alt, neu Settings) []string {
 	t := va.Type()
 	for i := 0; i < t.NumField(); i++ {
 		name := t.Field(i).Name
+		if name == "Brieftexte" {
+			alt, neu := va.Field(i).Interface().(Brieftexte), vn.Field(i).Interface().(Brieftexte)
+			for _, v := range brieftextVorlagen {
+				if alt.text(v.Key, nil) != neu.text(v.Key, nil) {
+					out = append(out, "Brieftext »"+v.Titel+"« geändert")
+				}
+			}
+			continue
+		}
 		label, ok := einstellungsNamen[name]
 		if !ok || reflect.DeepEqual(va.Field(i).Interface(), vn.Field(i).Interface()) {
 			continue

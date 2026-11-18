@@ -371,7 +371,7 @@ func buildVzErinnerung(s Settings, p Paechter, z vzZeile, jahr int, heute time.T
 	if gedeckt > 0 {
 		monatText = fmt.Sprintf("die Raten bis einschließlich %s", monatsnamen[gedeckt-1])
 	}
-	y = mappeText(pdf, y, fmt.Sprintf("Liebe Gartenfreundin, lieber Gartenfreund,\n\nfür Ihren Garten %s ist eine monatliche Vorauszahlung von %s vereinbart. "+
+	y = mappeText(pdf, y, s.Brieftexte.text("anrede", nil)+"\n\n"+fmt.Sprintf("für Ihren Garten %s ist eine monatliche Vorauszahlung von %s vereinbart. "+
 		"Bis heute sind %s fällig, eingegangen sind %s – damit sind %s bezahlt. Es fehlen noch %s.",
 		p.Gartennr, fmtEUR(z.Soll), fmtEUR(z.Faellig), fmtEUR(z.Summe), monatText, fmtEUR(z.Rueckstand)), 10)
 	y = mappeTabelle(pdf, y, [][2]string{
@@ -382,10 +382,7 @@ func buildVzErinnerung(s Settings, p Paechter, z vzZeile, jahr int, heute time.T
 	y = mappeText(pdf, y, "Bitte überweisen Sie den fehlenden Betrag und prüfen Sie Ihren Dauerauftrag. Hat sich Ihre Zahlung mit diesem Schreiben überschnitten, "+
 		"betrachten Sie es bitte als gegenstandslos. Die Vorauszahlungen werden mit der Jahresabrechnung verrechnet.", 10)
 	pdf.SetFont("lib", "", 10)
-	pdf.SetXY(leftX, y+4)
-	pdf.CellFormat(rightX-leftX, 6, "Mit freundlichen Gartengrüßen", "", 0, "L", false, 0, "")
-	pdf.SetXY(leftX, y+10)
-	pdf.CellFormat(rightX-leftX, 6, "Der Vorstand", "", 0, "L", false, 0, "")
+	grussUnterschrift(pdf, s, y+4)
 	return pdfBytes(pdf)
 }
 

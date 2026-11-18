@@ -537,7 +537,10 @@ func (a *App) handleMahnung(w http.ResponseWriter, r *http.Request) {
 			if x.Result.Gesamt < 0 || openAmount(x) <= 0 {
 				continue // Guthaben oder schon vollständig bezahlt: keine Mahnung nötig
 			}
-			jobs = append(jobs, mahnJob{settings: x.Settings, p: x.Paechter, rec: x, stufe: x.naechsteMahnstufe()})
+			// Bankverbindung und Rechnungsdaten wie ausgestellt, die Brieftexte aber von heute (die Mahnung entsteht jetzt)
+			set := x.Settings
+			set.Brieftexte = a.st.d.Settings.Brieftexte
+			jobs = append(jobs, mahnJob{settings: set, p: x.Paechter, rec: x, stufe: x.naechsteMahnstufe()})
 		}
 	}
 	a.st.mu.Unlock()

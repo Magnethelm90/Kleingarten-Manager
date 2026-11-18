@@ -145,6 +145,11 @@
 - Datenschutz-Prüfung Nov 2026: datenschutz_voll_test.go (endgültig löschen → weder Name noch ID in Bestand/Dateien/
   Sicherungen), Auskunft + Ämter/Papierkorb/Bankabgleich, Warteliste-Auskunft (GET …/warteliste/{id}/auskunft),
   Garten-Historie verliert beim Löschen auch die PaechterID.
+- Eigene Brieftexte (brieftexte.go): Settings.Brieftexte (Struktur aus Strings, vergleichbar; leer = Standard), nur über
+  PUT /api/admin/brieftexte/{key} (Settings-PUT übernimmt sie nie). `s.Brieftexte.text(key, werte)` setzt {Platzhalter} ein;
+  `grussUnterschrift(pdf, s, y)` für Gruß + Unterschrift. Mahnung und Rechnungs-Mail nehmen die Rechnungs-Settings, aber die
+  AKTUELLEN Brieftexte. Grenzen: Anrede/Gruß/Unterschrift 120, Mahnungssätze 400/300 (Mahnung muss auf eine Seite passen).
+  Neue Briefe: festen Text als Vorlage in brieftextVorlagen + Feld in Brieftexte aufnehmen. Karte `brieftexteKarte` in Einstellungen.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

@@ -244,7 +244,7 @@ func buildGutschrift(s Settings, p Paechter, rec *Rechnung, idx int) ([]byte, er
 	pdf.SetXY(leftX, y)
 	pdf.MultiCell(rightX-leftX, 4.9, hinweis, "", "L", false)
 	y = pdf.GetY() + 6
-	feld(leftX, rightX-leftX, "Der Vorstand", "", 10, "L")
+	feld(leftX, rightX-leftX, s.Brieftexte.text("unterschrift", nil), "", 10, "L")
 	y += rowH + 3
 	feld(leftX, rightX-leftX, "Dieses Schreiben wird maschinell erstellt und ist ohne Unterschrift gültig.", "", 8, "L")
 	if y > 285 {

@@ -62,7 +62,8 @@ func rechnungsMail(r *Rechnung) (betreff, text string) {
 	if s.EinspruchTage > 0 {
 		fmt.Fprintf(&b, "Bei Fragen oder Unstimmigkeiten melden Sie sich bitte innerhalb von %d Tagen.\n\n", s.EinspruchTage)
 	}
-	b.WriteString("Mit freundlichen Grüßen\n")
+	b.WriteString(s.Brieftexte.text("gruss", nil) + "\n")
+	b.WriteString(s.Brieftexte.text("unterschrift", nil) + "\n")
 	b.WriteString(verein)
 	return betreff, strings.TrimRight(b.String(), "\n")
 }
@@ -129,6 +130,7 @@ func (a *App) handleRechnungEmail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	kopie := *rec
+	aktuelleTexte := a.st.d.Settings.Brieftexte // die Mail entsteht heute: aktuelle Brieftexte, Rechnung bleibt wie ausgestellt
 	a.st.mu.Unlock()
 
 	if !emailGueltig(email) {
@@ -140,7 +142,9 @@ func (a *App) handleRechnungEmail(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	betreff, text := rechnungsMail(&kopie)
+	mail := kopie
+	mail.Settings.Brieftexte = aktuelleTexte
+	betreff, text := rechnungsMail(&mail)
 	openMailFn("mailto:" + url.PathEscape(email) + "?subject=" + mailtoEscape(betreff) + "&body=" + mailtoEscape(text))
 	revealPathFn(full)
 

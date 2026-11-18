@@ -206,10 +206,7 @@ func briefText(pdf *fpdf.Fpdf, s Settings, y float64, betreff, text string) {
 		y = 20
 	}
 	y += 8
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, 6, "Mit freundlichen Gartengrüßen", "", 0, "L", false, 0, "")
-	pdf.SetXY(leftX, y+6)
-	pdf.CellFormat(rightX-leftX, 6, "Der Vorstand", "", 0, "L", false, 0, "")
+	grussUnterschrift(pdf, s, y)
 }
 
 // rundschreibenBriefePDF: Serienbrief für alle ohne E-Mail (mit ?alle=1 auch für die E-Mail-Empfänger).
@@ -323,7 +320,8 @@ func (a *App) handleRundschreibenMail(w http.ResponseWriter, r *http.Request) {
 	for i, p := range mail {
 		adressen[i] = p.Email
 	}
-	text := a.st.platzhalterLocked(rs.Text, nil) + "\n\nMit freundlichen Gartengrüßen\nDer Vorstand\n" + a.st.d.Settings.VereinName
+	bt := a.st.d.Settings.Brieftexte
+	text := a.st.platzhalterLocked(rs.Text, nil) + "\n\n" + bt.text("gruss", nil) + "\n" + bt.text("unterschrift", nil) + "\n" + a.st.d.Settings.VereinName
 	pakete, mitText := mailPakete(rs.Betreff, text, adressen)
 	if n > len(pakete) {
 		writeErr(w, bad("Dieses Paket gibt es nicht"))
