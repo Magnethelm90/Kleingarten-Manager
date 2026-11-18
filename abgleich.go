@@ -76,6 +76,45 @@ func ablesungLeer(a Ablesung) bool {
 		a.WasserWechsel == nil && a.StromWechsel == nil
 }
 
+// ablesungErgaenzen füllt in cur die Felder, die dort fehlen, mit den Werten vom anderen Rechner. Vorhandene
+// Werte werden nie überschrieben. Liefert true, wenn mindestens ein Feld dazukam. Nie übernommen werden der
+// Vermerk der Schlussrechnung (entsteht nur über den Pächterwechsel) und der Abschlag: Er kommt aus den
+// Vorauszahlungen, die nicht zum Abgleich gehören – sonst sänke die Rechnung ohne passende Einnahme in der Kasse.
+func ablesungErgaenzen(cur, in Ablesung) (Ablesung, bool) {
+	neu := false
+	zeiger := func(ziel **float64, quelle *float64) {
+		if *ziel == nil && quelle != nil {
+			v := *quelle
+			*ziel, neu = &v, true
+		}
+	}
+	betrag := func(ziel *float64, quelle float64) {
+		if *ziel == 0 && quelle != 0 {
+			*ziel, neu = quelle, true
+		}
+	}
+	zeiger(&cur.WasserVJ, in.WasserVJ)
+	zeiger(&cur.WasserAkt, in.WasserAkt)
+	zeiger(&cur.StromVJ, in.StromVJ)
+	zeiger(&cur.StromAkt, in.StromAkt)
+	zeiger(&cur.Stunden, in.Stunden)
+	betrag(&cur.Versicherung, in.Versicherung)
+	betrag(&cur.Grundsteuer, in.Grundsteuer)
+	betrag(&cur.Auslagen, in.Auslagen)
+	if strings.TrimSpace(cur.Hinweis) == "" && strings.TrimSpace(in.Hinweis) != "" {
+		cur.Hinweis, neu = in.Hinweis, true
+	}
+	if cur.WasserWechsel == nil && in.WasserWechsel != nil {
+		w := *in.WasserWechsel
+		cur.WasserWechsel, neu = &w, true
+	}
+	if cur.StromWechsel == nil && in.StromWechsel != nil {
+		w := *in.StromWechsel
+		cur.StromWechsel, neu = &w, true
+	}
+	return cur, neu
+}
+
 // abgleichLocked zählt (anwenden=false) oder übernimmt (anwenden=true) die neuen Einträge. Der Aufrufer hält s.mu.
 func (s *Store) abgleichLocked(in abgleichDatei, anwenden bool) abgleichErgebnis {
 	texteBereinigen(reflect.ValueOf(&in))
@@ -133,13 +172,15 @@ func (s *Store) abgleichLocked(in abgleichDatei, anwenden bool) abgleichErgebnis
 			if !aktivePaechterIDs[id] || ablesungLeer(a) {
 				continue
 			}
-			if cur, ok := mine.Ablesungen[id]; ok && !ablesungLeer(cur) {
+			// feldweise ergänzen: was hier fehlt, kommt vom anderen Rechner; was hier steht, bleibt
+			erg, neuDazu := ablesungErgaenzen(mine.Ablesungen[id], a)
+			if !neuDazu {
 				dAb++
 				continue
 			}
 			nAb++
 			if anwenden {
-				mine.Ablesungen[id] = a
+				mine.Ablesungen[id] = erg
 			}
 		}
 	}

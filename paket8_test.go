@@ -153,3 +153,29 @@ func TestAbgleichVorschauUndGeloeschtes(t *testing.T) {
 		t.Fatalf("Termine %+v, Spenden %d, Stunden %d", a.st.d.Termine, len(a.st.d.Spenden), len(a.st.d.Einsatzstunden))
 	}
 }
+
+// Zählerstände vom Zweitgerät kommen an, auch wenn hier schon der Vorjahresstand und eine Vorauszahlung stehen.
+// Was hier schon eingetragen ist, wird nie überschrieben.
+func TestAbgleichErgaenztZaehlerstaende(t *testing.T) {
+	a, h := newTestApp(t)
+	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Erika", "gartennr": "1", "gartengroesse": 300}))
+	q := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "2", "name": "Hans", "gartennr": "2", "gartengroesse": 300}))
+	a.st.mu.Lock()
+	jahr := yearKey(a.st.d.Settings.Jahr)
+	a.st.d.Jahre[jahr].Ablesungen[p.ID] = Ablesung{WasserVJ: fp(100), StromVJ: fp(1000), Abschlag: 50}
+	a.st.d.Jahre[jahr].Ablesungen[q.ID] = Ablesung{WasserVJ: fp(10), WasserAkt: fp(15)}
+	a.st.mu.Unlock()
+	d := decode[abgleichDatei](t, do(h, "GET", "/api/admin/abgleich", nil))
+	d.Jahre[jahr].Ablesungen[p.ID] = Ablesung{WasserVJ: fp(100), StromVJ: fp(1000), WasserAkt: fp(130), StromAkt: fp(1200), Stunden: fp(8)}
+	d.Jahre[jahr].Ablesungen[q.ID] = Ablesung{WasserVJ: fp(10), WasserAkt: fp(99), Stunden: fp(4)}
+	w := decode[abgleichErgebnis](t, do(h, "POST", "/api/admin/abgleich?anwenden=1", d))
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	x, y := a.st.d.Jahre[jahr].Ablesungen[p.ID], a.st.d.Jahre[jahr].Ablesungen[q.ID]
+	if x.WasserAkt == nil || *x.WasserAkt != 130 || x.StromAkt == nil || *x.StromAkt != 1200 || x.Stunden == nil || *x.Stunden != 8 || x.Abschlag != 50 {
+		t.Errorf("Erika nicht ergänzt (Ergebnis %+v): %+v", w, x)
+	}
+	if *y.WasserAkt != 15 || y.Stunden == nil || *y.Stunden != 4 {
+		t.Errorf("Hans: vorhandener Stand darf nicht überschrieben, fehlende Stunden müssen ergänzt werden: %+v", y)
+	}
+}
