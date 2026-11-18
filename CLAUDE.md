@@ -150,7 +150,19 @@
   `grussUnterschrift(pdf, s, y)` für Gruß + Unterschrift. Mahnung und Rechnungs-Mail nehmen die Rechnungs-Settings, aber die
   AKTUELLEN Brieftexte. Grenzen: Anrede/Gruß/Unterschrift 120, Mahnungssätze 400/300 (Mahnung muss auf eine Seite passen).
   Neue Briefe: festen Text als Vorlage in brieftextVorlagen + Feld in Brieftexte aufnehmen. Karte `brieftexteKarte` in Einstellungen.
-- Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
+- Paket Nov 2026 (4): Probebrief (POST /api/admin/brieftexte/{key}/probe, `brieftextProbePDF`), Zählerstand-Zettel (zaehlerzettel.go,
+  3 je A4, `?nur=offen`, Knopf in Zählerstände), Sammeländerung (paechter_sammel.go, POST /api/admin/paechter-sammel: Versandart/Umlage;
+  Emailsendung ohne Adresse wird übersprungen; Haken-Spalte + `paechterSammelDialog`), Satzungsfristen (satzungsfristen.go,
+  Data.Satzungsfristen.EinladungTage 1–90, Standard 14; Cockpit `versammlungAufgabe` ersetzt den alten 28-Tage-Hinweis: 14 Tage vor
+  Einladungsschluss warn, bis 3 Tage danach »abgelaufen«, letzte Woche »vorbereiten«; `kuendigungsfristAufgabeLocked` nur bei offenem
+  Mangel mit Zweitschreiben, 30 Tage vor KuendigungsRegel.Bis; Karte `fristenKarte` in Einstellungen schreibt auch die Kündigungsregel).
+- Test »Neuer Verein« (neuverein.go): `musterwerteLocked` (Vereinsname/IBAN/Absender aus defaultSettings, Rechnungsdatum > 30 Tage alt
+  ohne Rechnung im Jahr; leer bei Demo) → /api/state `musterwerte`, Cockpit-Warnung, Rückfrage in `issue()`. `startjahrAenderbarLocked` +
+  POST /api/admin/startjahr (nur solange nichts gebucht; setzt Rechnungsdatum (J+1)-01-10 bzw. heute+7, Ziel +36 Tage; Frontend danach
+  `S.year = null`). Assistent: Musterwerte NICHT vorbelegen, Absenderzeile + alle 14 Rechnungsbeträge (leer = 0), Jahr-Auswahl.
+  defaultSettings/newData NICHT ändern (Testbasis). Anrede-Vorgabe neuer Pächter = '' (keine). Garten ohne Strom: 0/0 eintragen
+  (zahlt Grundpreis) – ein Schalter »kein Stromanschluss« wäre eine Abrechnungsregel → nur nach Nutzer-Entscheidung.
+- Offen: Nutzer fragen: Gärten ohne Strom (Schalter ohne Grundpreis oder 0/0 mit Grundpreis).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)
 - `staticcheck -checks "all,-ST1005,-ST1000,-ST1003,-ST1021" ./...` (deutsche Fehlermeldungen sind gewollt)

@@ -221,7 +221,12 @@ const NEUERUNGEN = [
     'Über jeder Tabelle steht »Tabelle drucken«.',
     'Bei vielen Hinweisen ist das Cockpit nach Geld, Anlage und Verein sortiert.',
     'In den Einstellungen kannst du die »Letzten Änderungen« ansehen und zurücknehmen.',
-    'Nach einem Update prüft sich das Programm selbst (Ergebnis siehst du hier).'] }];
+    'Nach einem Update prüft sich das Programm selbst (Ergebnis siehst du hier).',
+    'Eigene Brieftexte in den Einstellungen – mit »Probebrief ansehen«.',
+    'Zählerstand-Zettel zum Einwerfen: drei Zettel je Seite mit Vorjahresstand.',
+    'Mehrere Pächter auf einmal ändern: Haken setzen, dann »Auswahl ändern« (Versandart, Umlage).',
+    'Fristen aus der Satzung in den Einstellungen: Das Cockpit sagt, bis wann die Einladung zur Versammlung raus muss.',
+    'Stehen noch Musterwerte in den Vereinsangaben, fragt das Programm vor dem Ausstellen der Rechnungen nach.'] }];
 function neuerungenPruefen() {
   const st = S.state;
   if (st.gesperrt || (st.hasPassword && !st.loggedIn)) return;
