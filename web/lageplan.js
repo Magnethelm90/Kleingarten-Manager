@@ -633,7 +633,7 @@ async function pdfDrucken({ url, oeffnenUrl, titel, meldung, body }) {
     if (inNativeWindow()) {
       const r = await api('POST', oeffnenUrl, body);
       toast(meldung(r), 'ok');
-      return;
+      return true;
     }
     const r = await fetch(url, body === undefined ? { headers: { 'X-GA-Request': '1' } }
       : { method: 'POST', headers: { 'X-GA-Request': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -646,14 +646,20 @@ async function pdfDrucken({ url, oeffnenUrl, titel, meldung, body }) {
     const blobUrl = URL.createObjectURL(await r.blob());
     openDocument(blobUrl, titel);
     setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-  } catch (e) { handleErr(e); }
+    return true;
+  } catch (e) { handleErr(e); return false; }
 }
 
 // Alle Rechnungen mit Postversand als eine PDF-Datei zum Ausdrucken (nach Mitgliedsnummer sortiert).
-const postRechnungenDrucken = (year) => pdfDrucken({
-  url: `/api/admin/rechnungen-druck?year=${year}`, oeffnenUrl: `/api/admin/rechnungen-druck/oeffnen?year=${year}`,
-  titel: 'Rechnungen Postversand', meldung: (r) => `${anz(r.anzahl, 'Rechnung', 'Rechnungen')} im PDF-Programm geöffnet – dort drucken.`,
-});
+// Danach als »verschickt« vermerken (für den Jahres-Fahrplan auf der Übersicht).
+async function postRechnungenDrucken(year) {
+  const ok = await pdfDrucken({
+    url: `/api/admin/rechnungen-druck?year=${year}`, oeffnenUrl: `/api/admin/rechnungen-druck/oeffnen?year=${year}`,
+    titel: 'Rechnungen Postversand', meldung: (r) => `${anz(r.anzahl, 'Rechnung', 'Rechnungen')} im PDF-Programm geöffnet – dort drucken.`,
+  });
+  if (!ok) return;
+  try { const r = await api('POST', `/api/admin/rechnungen-druck/vermerken?year=${year}`); if (r.vermerkt) await reload(); } catch (e) { /* nur für die Übersicht */ }
+}
 
 // Ablesebogen für den Rundgang: alle Gärten mit Zählernummern und Vorjahresständen, leere Felder zum Eintragen.
 const ablesebogenDrucken = (year) => pdfDrucken({

@@ -48,6 +48,8 @@ type Rechnung struct {
 	// EmailAm: wann die E-Mail zu dieser Rechnung zuletzt im E-Mail-Programm vorbereitet wurde (RFC3339).
 	// Ob sie wirklich abgeschickt wurde, weiß das Programm nicht.
 	EmailAm string `json:"emailAm,omitempty"`
+	// PostAm: wann die Rechnung mit dem Postversand-Stapel gedruckt wurde (RFC3339).
+	PostAm string `json:"postAm,omitempty"`
 
 	// Mahnungen: bisher erstellte Zahlungserinnerungen und Mahnungen (Stufe 1 bis 3) samt Zahlungsfrist
 	Mahnungen []Mahnung `json:"mahnungen,omitempty"`
@@ -103,6 +105,7 @@ type archiveEntry struct {
 	BezahltBetrag *float64     `json:"bezahltBetrag"`
 	Notiz         string       `json:"notiz"`
 	EmailAm       string       `json:"emailAm,omitempty"`
+	PostAm        string       `json:"postAm,omitempty"`
 	Mahnungen     []Mahnung    `json:"mahnungen,omitempty"`
 	Gutschriften  []Gutschrift `json:"gutschriften,omitempty"`
 	Ratenplan     []Rate       `json:"ratenplan,omitempty"`
@@ -113,7 +116,7 @@ func archiveEntryFrom(r *Rechnung) archiveEntry {
 		ID: r.ID, Jahr: r.Jahr, Mitgliedsnr: r.Paechter.Mitgliedsnr, Name: r.Paechter.Name, Nummer: r.Nummer,
 		Version: r.Version, Status: r.Status, Ausgestellt: r.Ausgestellt, Gesamt: r.Result.Gesamt, Datei: r.Datei,
 		Versand: r.Paechter.Versand, Faellig: faelligAm(r), BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz,
-		EmailAm: r.EmailAm, Mahnungen: r.Mahnungen, Gutschriften: r.Gutschriften, Ratenplan: r.Ratenplan,
+		EmailAm: r.EmailAm, PostAm: r.PostAm, Mahnungen: r.Mahnungen, Gutschriften: r.Gutschriften, Ratenplan: r.Ratenplan,
 	}
 }
 

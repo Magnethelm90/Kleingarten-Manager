@@ -619,12 +619,12 @@ function viewUebersicht() {
 
   return h('div', null,
     heroKarte(st),
+    st.paechter.length ? jahresFortschritt(st, istAdmin) : null,
     startKarte(st, istAdmin),
     beispieldatenKarte(st, istAdmin),
     jubilaeumBanner(st, istAdmin),
     st.demo ? null : zweiteSicherungBanner(st, istAdmin),
     anstehendKarte(st, istAdmin),
-    st.paechter.length ? jahresFortschritt(st, istAdmin) : null,
     h('div', { class: 'zwei-spalten' }, naechsteTermine(st), besichtigungenKarte(st, istAdmin)),
     h('div', { class: 'cards' }, cards));
 }
@@ -662,12 +662,16 @@ function jahresFortschritt(st, istAdmin) {
   const ausgestellt = st.paechter.filter((p) => (st.issued || {})[p.id]).length;
   const forderungen = (st.archive || []).filter((e) => e.status === 'gueltig' && e.gesamt > 0);
   const bezahlt = forderungen.filter((e) => !payIsOpen(e)).length;
+  const gueltig = (st.archive || []).filter((e) => e.status === 'gueltig' && e.jahr === st.currentYear);
+  const verschickt = gueltig.filter((e) => e.emailAm || e.postAm).length;
   const go = (tab, extra) => () => { S.tab = tab; Object.assign(S, extra || {}); render(); };
   const stationen = [
     // führt gleich zum ersten Pächter, bei dem noch etwas fehlt (Schnelleingabe)
     { titel: 'Zählerstände', wert: vollst, von: n, text: `${vollst} von ${n} vollständig`, los: 'Zählerstände eintragen',
       go: go('eingabe', { eingabeMode: 'schnell', quickId: ([...st.paechter].sort(cmpNr).find((p) => !(st.results[p.id] && st.results[p.id].vollstaendig)) || {}).id || S.quickId }) },
     { titel: 'Rechnungen', wert: ausgestellt, von: vollst || n, text: `${ausgestellt} von ${vollst} ausgestellt`, los: 'Rechnungen ausstellen', go: go('rechnungen', { invTab: 'pruefen' }) },
+    // per Post gedruckt oder E-Mail vorbereitet
+    { titel: 'Verschicken', wert: verschickt, von: gueltig.length, text: gueltig.length ? `${verschickt} von ${gueltig.length} verschickt` : 'noch keine Rechnung', los: 'Rechnungen verschicken', go: go('rechnungen', { invTab: 'pruefen' }) },
     // nur Guthaben ausgestellt: es gibt nichts einzusammeln, die Station gilt als erledigt
     forderungen.length || !ausgestellt
       ? { titel: 'Zahlungen', wert: bezahlt, von: forderungen.length, text: forderungen.length ? `${bezahlt} von ${forderungen.length} bezahlt` : 'noch keine Rechnung', los: 'Zahlungen abhaken', go: go('zahlungen') }
@@ -683,13 +687,14 @@ function jahresFortschritt(st, istAdmin) {
     h('div', { class: 'fs-kopf' },
       h('div', null, h('b', null, `Abrechnungsjahr ${st.currentYear}`), h('span', { class: 'hint' }, ' – wo stehen wir?')),
       naechste >= 0 ? h('button', { class: 'btn primary small', onclick: stationen[naechste].go }, `Weiter: ${stationen[naechste].los} →`) : null),
-    h('ol', { class: 'fs-stationen' }, stationen.map((x, i) => {
+    h('ol', { class: 'fs-stationen', 'aria-label': 'Schritte im Abrechnungsjahr' }, stationen.map((x, i) => {
       const anteil = x.von > 0 ? Math.min(1, x.wert / x.von) : 0;
       const cls = fertig(x) ? 'fertig' : i === naechste ? 'aktiv' : '';
       return h('li', { class: cls, onclick: x.nurAdmin && !istAdmin ? null : x.go, title: x.los },
         h('span', { class: 'fs-punkt' }, fertig(x) ? '✓' : String(i + 1)),
         h('span', { class: 'fs-text' }, h('b', null, x.titel), h('span', null, x.text)),
         h('span', { class: 'fs-balken' }, h('i', { style: `width:${Math.round(anteil * 100)}%` })));
-    })));
+    })),
+    naechste >= 0 ? h('p', { class: 'fs-handy hint' }, h('b', null, `Schritt ${naechste + 1} von ${stationen.length}: ${stationen[naechste].titel}`), ` – ${stationen[naechste].text}`) : null);
 }
 

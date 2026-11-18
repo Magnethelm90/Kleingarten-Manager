@@ -405,7 +405,7 @@ aside.sidebar {
 /* Fortschritt des Abrechnungsjahres */
 .card.fortschritt { margin-bottom: 14px; padding: 14px 18px 16px; }
 .fs-kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.fs-stationen { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 12px; }
+.fs-stationen { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 12px; }
 .fs-stationen li {
   display: grid; grid-template-columns: 30px 1fr; grid-template-rows: auto 6px; column-gap: 10px; row-gap: 8px; align-items: center;
   padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: #fbfcfa; cursor: pointer;
@@ -1182,3 +1182,11 @@ details.klapp > summary b { color: var(--green-dark); }
 details.klapp > .card { border: 0; box-shadow: none; margin: 0 !important; border-top: 1px solid var(--line); border-radius: 0 0 var(--radius) var(--radius); }
 details.klapp > .card > h3:first-child, details.klapp > .card > .section-title:first-child, details.klapp > .card > .fs-kopf > h3 { display: none; }
 details.klapp > .card > .fs-kopf { justify-content: flex-end; }
+/* Handy: Fahrplan als Punktreihe, darunter eine Zeile zum aktuellen Schritt */
+.fs-handy { display: none; }
+@media (max-width: 640px) {
+  .fs-stationen { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .fs-stationen li { grid-template-columns: 1fr; padding: 8px 4px; justify-items: center; }
+  .fs-stationen li .fs-text, .fs-stationen li .fs-balken { display: none; }
+  .fs-handy { display: block; margin: 10px 0 0; font-size: 13.5px; }
+}
