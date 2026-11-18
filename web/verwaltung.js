@@ -443,21 +443,14 @@ function adminKuendigungen() {
           if (!(await confirmBox(`Kündigung für Garten ${k.gartennr} löschen, z. B. weil sie zurückgezogen wurde?`, 'Löschen', true))) return;
           try { await api('DELETE', `/api/admin/kuendigungen/${k.id}`); S.kuend = null; render(); } catch (e) { handleErr(e); }
         } }])));
-  const zum = h('input', { type: 'text', value: d.regel.zum, maxlength: 5, style: 'width:5em', placeholder: 'MM-TT' });
-  const bis = h('input', { type: 'text', value: d.regel.bis, maxlength: 5, style: 'width:5em', placeholder: 'MM-TT' });
   return h('div', null,
     h('p', { class: 'hint' }, 'Eine Kündigung erfassen, die Frist prüfen und Schritt für Schritt bis zur Übergabe abhaken. Wertermittlung, Schlüsselrückgabe und Pächterwechsel erkennt das Programm selbst; das Cockpit erinnert an alles, was noch offen ist.'),
     h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: neu }, '+ Kündigung erfassen')),
     laufend.length ? h('div', { class: 'rs-liste' }, laufend.map(karte))
       : h('div', { class: 'card' }, leer('kuendigung', 'Keine laufenden Kündigungen', 'Kündigt jemand, erfasse es hier oder beim Pächter unter »Mehr«. Dann gibt es Bestätigungsbrief und Fahrplan bis zur Übergabe.', '+ Kündigung erfassen', neu)),
     fertig.length ? [h('h3', null, 'Abgeschlossen'), h('div', { class: 'rs-liste' }, fertig.map(karte))] : null,
-    h('h3', null, 'Kündigungsregel des Vereins'),
-    h('div', { class: 'card' }, h('div', { class: 'toolbar' },
-      h('span', null, 'Kündigung muss eingehen bis'), bis, h('span', null, 'zum Pachtende am'), zum, h('span', { class: 'hint' }, '(Monat-Tag, z. B. 08-31 und 11-30)'),
-      h('button', { class: 'btn small', onclick: async () => {
-        try { await api('PUT', '/api/admin/kuendigungen/regel', { zum: zum.value.trim(), bis: bis.value.trim() }); toast('Regel gespeichert', 'ok'); S.kuend = null; S.satzungsfristen = null; render(); } catch (e) { handleErr(e); }
-      } }, 'Speichern')),
-    h('p', { class: 'hint', style: 'margin:6px 0 0' }, 'Steht in eurem Pachtvertrag. Das Bundeskleingartengesetz sieht für Kündigungen durch den Verein den 30. November vor.')));
+    h('p', { class: 'hint', style: 'margin-top:16px' }, `Kündigungsfrist des Vereins: Eingang bis ${tagMonatAnzeige(d.regel.bis)}, Pachtende am ${tagMonatAnzeige(d.regel.zum)} `,
+      h('button', { class: 'btn small', onclick: () => zielOeffnen('admin:einstellungen:fristen') }, 'Ändern')));
 }
 
 // ------------------------------------------------------------------ Pachtvertrag

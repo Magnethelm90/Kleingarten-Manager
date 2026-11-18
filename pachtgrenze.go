@@ -62,6 +62,6 @@ func (s *Store) pachtgrenzeAufgabenLocked(_ time.Time, add func(stufe, titel, te
 	if g := s.pachtgrenzeLocked(); g.Ueber {
 		add("warn", "Pacht über der gesetzlichen Höchstgrenze",
 			fmt.Sprintf("Der Pachtsatz von %s €/m² liegt über dem Vierfachen der ortsüblichen Pacht (%s €/m², § 5 BKleingG).", fmtFlex(g.PachtJeQm), fmtFlex(*g.Hoechst)),
-			"admin:einstellungen", "Einstellungen")
+			"admin:einstellungen:pacht", "Pachtobergrenze")
 	}
 }

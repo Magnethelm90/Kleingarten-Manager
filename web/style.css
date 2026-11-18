@@ -1175,3 +1175,10 @@ ol.probier li{margin:0 0 10px}
 .brieftext-zeile .hint { margin-top: 2px; }
 @media (max-width: 700px) { .brieftext-zeile { flex-direction: column; } }
 th.auswahl, td.auswahl { width: 30px; padding-right: 0; }
+/* Einstellungen: seltene Teile als einklappbare Zeilen */
+details.klapp { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); margin-top: 8px; box-shadow: var(--shadow); }
+details.klapp > summary { cursor: pointer; padding: 13px 18px; display: flex; gap: 12px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
+details.klapp > summary b { color: var(--green-dark); }
+details.klapp > .card { border: 0; box-shadow: none; margin: 0 !important; border-top: 1px solid var(--line); border-radius: 0 0 var(--radius) var(--radius); }
+details.klapp > .card > h3:first-child, details.klapp > .card > .section-title:first-child, details.klapp > .card > .fs-kopf > h3 { display: none; }
+details.klapp > .card > .fs-kopf { justify-content: flex-end; }

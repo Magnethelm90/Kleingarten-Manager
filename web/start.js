@@ -23,8 +23,10 @@ function zielOeffnen(ziel) {
   if (wohin === 'verwaltung') S.verwSeite = unter || 'beschluesse';
   if (wohin === 'kassenbericht') S.kasseNurOhneBeleg = unter === 'ohnebeleg';
   if (wohin === 'maengel') S.maengelSeite = unter || 'maengel';
+  if (wohin === 'einstellungen' && unter) { S.esOffen = S.esOffen || new Set(); S.esOffen.add('es-' + unter); }
   render();
   window.scrollTo(0, 0);
+  if (wohin === 'einstellungen' && unter) { const el = document.getElementById('es-' + unter); if (el) el.scrollIntoView({ block: 'start' }); }
   if (unter === 'eichung') eichungDialog();
 }
 
@@ -226,7 +228,9 @@ const NEUERUNGEN = [
     'Zählerstand-Zettel zum Einwerfen: drei Zettel je Seite mit Vorjahresstand.',
     'Mehrere Pächter auf einmal ändern: Haken setzen, dann »Auswahl ändern« (Versandart, Umlage).',
     'Fristen aus der Satzung in den Einstellungen: Das Cockpit sagt, bis wann die Einladung zur Versammlung raus muss.',
-    'Stehen noch Musterwerte in den Vereinsangaben, fragt das Programm vor dem Ausstellen der Rechnungen nach.'] }];
+    'Stehen noch Musterwerte in den Vereinsangaben, fragt das Programm vor dem Ausstellen der Rechnungen nach.',
+    'Garten ohne Strom: Haken beim Pächter (unter »Weitere Angaben«) – dann steht kein Strom auf der Rechnung.',
+    'Einstellungen aufgeräumt: Preise oben, alles Seltene unter »Weitere Einstellungen« zum Aufklappen.'] }];
 function neuerungenPruefen() {
   const st = S.state;
   if (st.gesperrt || (st.hasPassword && !st.loggedIn)) return;

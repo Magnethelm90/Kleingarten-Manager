@@ -162,7 +162,14 @@
   `S.year = null`; Zählerstände wandern mit, Karte `startjahrKarte` in Einstellungen für alle, die den Assistenten übersprungen haben). Assistent: Musterwerte NICHT vorbelegen, Absenderzeile + alle 14 Rechnungsbeträge (leer = 0), Jahr-Auswahl.
   defaultSettings/newData NICHT ändern (Testbasis). Anrede-Vorgabe neuer Pächter = '' (keine). Garten ohne Strom: 0/0 eintragen
   (zahlt Grundpreis) – ein Schalter »kein Stromanschluss« wäre eine Abrechnungsregel → nur nach Nutzer-Entscheidung.
-- Offen: Nutzer fragen: Gärten ohne Strom (Schalter ohne Grundpreis oder 0/0 mit Grundpreis).
+- Garten ohne Strom (Nutzer-Entscheidung »a«): Paechter.OhneStrom → calc ignoriert Strom ganz (kein Grundpreis, Stromstände nicht nötig),
+  Rechnung »kein Stromanschluss«, Erinnerung/Zettel/Ablesebogen/Handy/Pächterwechsel berücksichtigen es; Nachfolger erbt den Schalter
+  (Wechsel + Vergabe). Formular: Haken unter der Stromzähler-Nr. (ohnestrom_test.go). Falle: `tr.append(...)` flacht keine Arrays ab (Spread nutzen).
+- Einstellungen vereinfacht (Nutzer: »einfach, nicht überladen, verbinde sinnvoll«): Preise-Karte offen (mit `startjahrZeile`), darunter
+  »Weitere Einstellungen« als `klappKarte(id, titel, kurz, inhalt)` (details.klapp, offen-Zustand in S.esOffen): Fristen, Brieftexte,
+  Pachtobergrenze, Bereiche, Farbe/Logo. Sprungleiste entfällt. Ziel `admin:einstellungen:<x>` öffnet `es-<x>` (pacht, fristen).
+  Kündigungsregel wird nur noch in »Fristen aus der Satzung« bearbeitet; die Kündigungen-Seite zeigt sie mit Knopf »Ändern«.
+- Offen: nichts Konkretes.
 
 ## Prüfwerkzeuge (bei größeren Änderungen)
 - `staticcheck -checks "all,-ST1005,-ST1000,-ST1003,-ST1021" ./...` (deutsche Fehlermeldungen sind gewollt)

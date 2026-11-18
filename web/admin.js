@@ -425,20 +425,31 @@ function adminSettings() {
     data.einspruchTage = Math.round(data.einspruchTage);
     try { await api('PUT', '/api/admin/settings', data); toast('Einstellungen gespeichert', 'ok'); await reload(); } catch (e) { handleErr(e); }
   };
-  const sprung = (id) => () => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  // Preise sind das Wichtigste und stehen offen da; alles Seltene ist eingeklappt (eine Zeile mit kurzer Zusammenfassung).
+  const fr = S.satzungsfristen, bt = S.brieftexte || [];
+  const zusatzAn = BEREICHE.filter(([k]) => modulAn(k)).length;
   return h('div', null,
-    h('div', { class: 'chips', role: 'navigation', 'aria-label': 'Springe zu' },
-      h('span', { class: 'hint' }, 'Springe zu:'),
-      [['es-preise', 'Preise und Rechnung'], ['es-pacht', 'Pachtobergrenze'], ['es-fristen', 'Fristen aus der Satzung'], ['es-bereiche', 'Bereiche ein- und ausblenden'], ['es-briefe', 'Brieftexte'], ['es-aussehen', 'Farbe und Logo']].map(([id, l]) => h('button', { class: 'btn small', onclick: sprung(id) }, l))),
-    startjahrKarte(st),
-    h('p', { class: 'hint', id: 'es-preise' }, `Diese Werte gelten für das laufende Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
-    h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'),
-      h('button', { class: 'btn', title: 'Die letzten Änderungen ansehen und zurücknehmen', onclick: einstellungsVerlaufDialog }, 'Letzte Änderungen'))),
-    h('div', { id: 'es-pacht' }, pachtgrenzeKarte()),
-    h('div', { id: 'es-fristen' }, fristenKarte()),
-    h('div', { id: 'es-bereiche' }, bereicheKarte(st)),
-    h('div', { id: 'es-briefe' }, brieftexteKarte()),
-    h('div', { id: 'es-aussehen' }, aussehenKarte(st)));
+    h('div', { class: 'card', id: 'es-preise' },
+      h('p', { class: 'hint', style: 'margin-top:0' }, `Diese Werte gelten für das Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
+      startjahrZeile(st),
+      form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'),
+        h('button', { class: 'btn', title: 'Die letzten Änderungen ansehen und zurücknehmen', onclick: einstellungsVerlaufDialog }, 'Letzte Änderungen'))),
+    h('h3', { style: 'margin:22px 0 8px' }, 'Weitere Einstellungen'),
+    klappKarte('es-fristen', 'Fristen aus der Satzung', fr ? `Einladung ${fr.einladungTage} Tage vorher · Kündigung bis ${tagMonatAnzeige(fr.kuendigung.bis)}` : '', fristenKarte()),
+    klappKarte('es-briefe', 'Brieftexte', bt.some((b) => b.angepasst) ? anz(bt.filter((b) => b.angepasst).length, 'eigener Text', 'eigene Texte') : 'Standardtexte', brieftexteKarte()),
+    klappKarte('es-pacht', 'Pachtobergrenze', '§ 5 Bundeskleingartengesetz', pachtgrenzeKarte()),
+    klappKarte('es-bereiche', 'Bereiche ein- und ausblenden', `${zusatzAn} von ${BEREICHE.length} Zusatzbereichen an`, bereicheKarte(st)),
+    klappKarte('es-aussehen', 'Farbe und Logo', st.settings.logo ? 'mit Logo' : 'ohne Logo', aussehenKarte(st)));
+}
+
+// Einklappbare Zeile in den Einstellungen; merkt sich, was offen ist (auch nach dem Neuzeichnen).
+function klappKarte(id, titel, kurz, inhalt) {
+  if (!inhalt) return null;
+  S.esOffen = S.esOffen || new Set();
+  const d = h('details', { class: 'klapp', id, open: S.esOffen.has(id) },
+    h('summary', null, h('b', null, titel), kurz ? h('span', { class: 'hint' }, kurz) : null), inhalt);
+  d.addEventListener('toggle', () => { if (d.open) S.esOffen.add(id); else S.esOffen.delete(id); });
+  return d;
 }
 
 // Änderungsverlauf: die letzten gespeicherten Stände der Preise, einzeln zurücknehmbar (Jahr und Sicherungsordner bleiben).
@@ -667,21 +678,19 @@ function pachtgrenzeKarte() {
 const FARBVORSCHLAEGE = [['#2f6f3e', 'Gartengrün'], ['#1e5aa8', 'Blau'], ['#0f6e6e', 'Petrol'], ['#8c2f39', 'Weinrot'], ['#7a4b1f', 'Erdbraun'], ['#3d4752', 'Anthrazit']];
 
 // Erstes Abrechnungsjahr wechseln – nur solange noch keine Rechnung und keine Kassenbuchung existiert.
-function startjahrKarte(st) {
+function startjahrZeile(st) {
   if (!st.startjahrAenderbar) return null;
   const jetzt = new Date().getFullYear();
   const jahre = [...new Set([jetzt - 1, jetzt, st.currentYear])].sort();
   const wahl = h('select', { style: 'width:auto' }, jahre.map((j) => h('option', { value: j, selected: j === st.currentYear }, String(j))));
-  return h('div', { class: 'card' },
-    h('h3', null, 'Erstes Abrechnungsjahr'),
-    h('p', { class: 'hint' }, 'Das Jahr, dessen Wasser- und Stromverbrauch auf euren ersten Rechnungen steht. Wechseln geht nur, solange noch keine Rechnung ausgestellt ist. Eingetragene Zählerstände wandern mit.'),
-    h('div', { class: 'toolbar', style: 'margin:0' }, wahl,
-      h('button', { class: 'btn', onclick: async () => {
-        try {
-          const r = await api('POST', '/api/admin/startjahr', { jahr: Number(wahl.value) });
-          S.year = null; toast(`Abrechnungsjahr ${r.jahr} – Rechnungsdatum ${r.rechnungsdatum.split('-').reverse().join('.')}`, 'ok'); await reload();
-        } catch (e) { handleErr(e); }
-      } }, 'Übernehmen')));
+  return h('div', { class: 'toolbar', style: 'margin:0 0 12px' },
+    h('span', null, 'Erstes Abrechnungsjahr', hilfe('Das Jahr, dessen Wasser- und Stromverbrauch auf euren ersten Rechnungen steht. Wechseln geht nur, solange noch keine Rechnung ausgestellt ist. Eingetragene Zählerstände wandern mit.')),
+    wahl, h('button', { class: 'btn small', onclick: async () => {
+      try {
+        const r = await api('POST', '/api/admin/startjahr', { jahr: Number(wahl.value) });
+        S.year = null; toast(`Abrechnungsjahr ${r.jahr} – Rechnungsdatum ${r.rechnungsdatum.split('-').reverse().join('.')}`, 'ok'); await reload();
+      } catch (e) { handleErr(e); }
+    } }, 'Übernehmen'));
 }
 
 // ---- Fristen aus der Satzung: Einladungsfrist (Cockpit rechnet den letzten Tag aus) und Kündigungsfrist
