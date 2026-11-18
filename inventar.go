@@ -322,7 +322,7 @@ func (g Geraet) naechsteWartung() string {
 	if err != nil {
 		return time.Now().Format("2006-01-02")
 	}
-	return t.AddDate(0, g.WartungMonate, 0).Format("2006-01-02")
+	return monateDazu(t, g.WartungMonate).Format("2006-01-02")
 }
 
 func (a *App) handleGeraeteListe(w http.ResponseWriter, r *http.Request) {

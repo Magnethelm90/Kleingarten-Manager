@@ -100,7 +100,7 @@ func (a *App) handleEinstellungenZurueck(w http.ResponseWriter, r *http.Request)
 		writeErr(w, notFound("Dieser Stand ist nicht mehr da"))
 		return
 	}
-	alt := a.st.d.EinstellungsVerlauf[i].Settings
+	alt, datum := a.st.d.EinstellungsVerlauf[i].Settings, a.st.d.EinstellungsVerlauf[i].Datum
 	akt := a.st.d.Settings
 	if alt.Jahr != akt.Jahr {
 		writeErr(w, bad("Dieser Stand gehört zu einem anderen Abrechnungsjahr."))
@@ -113,6 +113,6 @@ func (a *App) handleEinstellungenZurueck(w http.ResponseWriter, r *http.Request)
 	}
 	a.st.einstellungenMerkenLocked(akt)
 	a.st.d.Settings = alt
-	a.st.audit("Einstellungen auf den Stand vom %s zurückgesetzt", a.st.d.EinstellungsVerlauf[i+1].Datum)
+	a.st.audit("Einstellungen auf den Stand vom %s zurückgesetzt", datum)
 	a.speichernUndAntworten(w, alt)
 }

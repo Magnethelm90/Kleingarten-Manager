@@ -232,14 +232,14 @@ async function mahnVorschlag(ueberfaellig) {
     const letzte = m.length ? m[m.length - 1] : null;
     const wartet = letzte && letzte.frist && letzte.frist >= heute;
     return { e, stufe: Math.min(m.length + 1, 3), wartet, letzte, max: m.length >= 3 };
-  }).sort((a, b) => a.e.mitgliedsnr.localeCompare(b.e.mitgliedsnr, 'de', { numeric: true }));
+  }).sort((a, b) => String(a.e.mitgliedsnr || '').localeCompare(String(b.e.mitgliedsnr || ''), 'de', { numeric: true }));
   const dran = zeilen.filter((z) => !z.wartet);
-  const haken = new Map(dran.map((z) => [z.e.id, h('input', { type: 'checkbox', checked: true })]));
+  const haken = new Map(dran.map((z) => [z.e.id, h('input', { type: 'checkbox', checked: !z.max })]));
   const info = (z) => z.wartet ? `Frist läuft noch bis ${deDate(z.letzte.frist)} – noch warten`
     : z.max ? 'Schon dreimal gemahnt – nächster Schritt liegt beim Vorstand (z. B. Kündigung prüfen)'
       : `${MAHN_TITEL[z.stufe]} wäre dran${z.letzte ? ` (letzte Mahnung am ${deDate(z.letzte.datum)})` : ''}`;
   const ok = await modal('Mahn-Vorschlag', h('div', null,
-    h('p', { class: 'hint' }, 'So sieht es aus. Wer noch eine laufende Frist hat, wird nicht vorgeschlagen. Nimm weg, wen du nicht anschreiben willst.'),
+    h('p', { class: 'hint' }, 'So sieht es aus. Wer noch eine laufende Frist hat, wird nicht vorgeschlagen. Wer schon dreimal gemahnt wurde, ist nicht angehakt. Nimm weg, wen du nicht anschreiben willst.'),
     h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
       h('thead', null, h('tr', null, ['', 'Pächter', 'Offen', 'Fällig seit', 'Vorschlag'].map((t) => h('th', null, t)))),
       h('tbody', null, zeilen.map((z) => h('tr', null, h('td', null, haken.has(z.e.id) ? haken.get(z.e.id) : null),

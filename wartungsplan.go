@@ -123,7 +123,7 @@ func (a *App) handleWartungsaufgabeErledigt(w http.ResponseWriter, r *http.Reque
 		if x.ID == id {
 			d, _ := parseDate(in.Datum)
 			x.Letzte = in.Datum
-			x.Faellig = d.AddDate(0, x.Monate, 0).Format("2006-01-02")
+			x.Faellig = monateDazu(d, x.Monate).Format("2006-01-02")
 			a.st.audit("Pflegearbeit erledigt: %s", x.Titel)
 			a.speichernUndAntworten(w, *x)
 			return

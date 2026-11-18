@@ -2,6 +2,7 @@ package main
 
 import (
 	"io/fs"
+	"regexp"
 	"time"
 )
 
@@ -28,7 +29,7 @@ func (s *Store) selbsttestLocked(jetzt time.Time, web fs.FS) bool {
 	}
 	t := &Selbsttest{Version: appVersion, Datum: jetzt.Format("2006-01-02"), Ok: true}
 	fehlt := ""
-	for _, n := range []string{"index.html", "app.js", "style.css"} {
+	for _, n := range programmDateien(web) {
 		if _, err := fs.Stat(web, n); err != nil {
 			fehlt += n + " "
 		}
@@ -49,6 +50,21 @@ func (s *Store) selbsttestLocked(jetzt time.Time, web fs.FS) bool {
 	s.d.Probe = &Wiederherstellungsprobe{Datum: res.Datum, Ok: res.Ok}
 	s.audit("Selbsttest nach Update auf Version %s durchgeführt", appVersion)
 	return true
+}
+
+var eingebunden = regexp.MustCompile(`(?:src|href)="([a-z0-9_/-]+\.(?:js|css))"`)
+
+// programmDateien nennt index.html und jede Skript- und Stildatei, die sie einbindet.
+func programmDateien(web fs.FS) []string {
+	out := []string{"index.html"}
+	b, err := fs.ReadFile(web, "index.html")
+	if err != nil {
+		return out
+	}
+	for _, m := range eingebunden.FindAllStringSubmatch(string(b), -1) {
+		out = append(out, m[1])
+	}
+	return out
 }
 
 func (s *Store) selbsttestNachUpdate(web fs.FS) {

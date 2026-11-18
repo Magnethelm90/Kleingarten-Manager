@@ -68,7 +68,7 @@ func (s *Store) nutzungUebersichtLocked() []nutzungZeile {
 			letzte[n.Gartennr] = n
 		}
 	}
-	var out []nutzungZeile
+	out := []nutzungZeile{}
 	for nr, p := range s.belegteGaertenLocked() {
 		z := nutzungZeile{Gartennr: nr, Name: p.Name}
 		if l := letzte[nr]; l != nil {

@@ -219,8 +219,10 @@ func (v Vertrag) ansicht(heute time.Time) vertragAnsicht {
 		return a
 	}
 	h := time.Date(heute.Year(), heute.Month(), heute.Day(), 0, 0, 0, 0, time.UTC)
-	for i := 0; v.Verlaengert > 0 && v.Gekuendigt == "" && ende.Before(h) && i < 1200; i++ {
-		ende = ende.AddDate(0, v.Verlaengert, 0)
+	// immer vom ursprünglichen Ende aus rechnen, damit ein Monatsende (31.01.) nicht Schritt für Schritt wandert
+	start := ende
+	for i := 1; v.Verlaengert > 0 && v.Gekuendigt == "" && ende.Before(h) && i <= 1200; i++ {
+		ende = monateDazu(start, i*v.Verlaengert)
 	}
 	a.LaeuftBis = ende.Format("2006-01-02")
 	a.KuendigenBis = monateZurueck(ende, v.FristMonate).Format("2006-01-02")
@@ -228,8 +230,11 @@ func (v Vertrag) ansicht(heute time.Time) vertragAnsicht {
 }
 
 // monateZurueck geht n Monate zurück und bleibt am Monatsende (31.12. minus 3 Monate = 30.09., nicht 01.10.).
-func monateZurueck(t time.Time, n int) time.Time {
-	r := t.AddDate(0, -n, 0)
+func monateZurueck(t time.Time, n int) time.Time { return monateDazu(t, -n) }
+
+// monateDazu rechnet n Monate weiter (oder zurück) und bleibt am Monatsende: 31.01. plus 1 Monat = 28.02., nicht 03.03.
+func monateDazu(t time.Time, n int) time.Time {
+	r := t.AddDate(0, n, 0)
 	if r.Day() != t.Day() {
 		r = r.AddDate(0, 0, -r.Day())
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"strconv"
 	"testing"
@@ -170,4 +171,23 @@ func TestEinstellungsVerlaufUndSelbsttest(t *testing.T) {
 		t.Error("nur einmal je Version")
 	}
 	app.st.mu.Unlock()
+}
+
+// Der älteste Stand bei vollem Verlauf lässt sich zurücknehmen, ohne dass das Programm abstürzt.
+func TestEinstellungsVerlaufAeltesterStand(t *testing.T) {
+	app, h := newTestApp(t)
+	app.st.mu.Lock()
+	s := app.st.d.Settings
+	app.st.mu.Unlock()
+	for i := 1; i <= maxEinstellungsStaende+2; i++ {
+		neu := s
+		neu.WasserPreis = s.WasserPreis + float64(i)
+		if rec := do(h, "PUT", "/api/admin/settings", neu); rec.Code != 200 {
+			t.Fatalf("speichern %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	letzter := maxEinstellungsStaende - 1
+	if rec := do(h, "POST", fmt.Sprintf("/api/admin/einstellungen/verlauf/%d/zurueck", letzter), nil); rec.Code != 200 {
+		t.Fatalf("zurück %d %s", rec.Code, rec.Body.String())
+	}
 }
