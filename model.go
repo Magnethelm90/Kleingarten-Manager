@@ -396,6 +396,9 @@ func germanDate(s string) string {
 
 // fmtNum formatiert Zahlen deutsch (Komma als Dezimaltrenner, Punkt als Tausender).
 func fmtNum(x float64, decimals int) string {
+	if x == 0 {
+		x = 0 // Minus-Null (-0) wie 0 behandeln
+	}
 	neg := x < 0
 	if neg {
 		x = -x
@@ -416,7 +419,7 @@ func fmtNum(x float64, decimals int) string {
 	if decimals > 0 {
 		out += "," + frac
 	}
-	if neg {
+	if neg && strings.Trim(out, "0.,") != "" { // »-0,00« nur, wenn wirklich etwas übrig bleibt
 		out = "-" + out
 	}
 	return out

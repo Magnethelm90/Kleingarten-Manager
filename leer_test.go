@@ -2,6 +2,7 @@ package main
 
 import (
 	"io/fs"
+	"math"
 	"os"
 	"regexp"
 	"strconv"
@@ -84,5 +85,19 @@ func TestAusgabeOhneFremdeBelege(t *testing.T) {
 	y := decode[Ausgabe](t, do(h, "PUT", "/api/admin/ausgaben/"+x.ID+q, boese))
 	if len(y.Belege) != 0 || y.Beleg != "" || y.Geprueft {
 		t.Fatalf("Ändern übernimmt Belege/Prüfvermerk: %+v", y)
+	}
+}
+
+func TestKeineMinusNull(t *testing.T) {
+	for _, x := range []float64{-0.001, -0.004, math.Copysign(0, -1)} {
+		if got := fmtEUR(x); got != "0,00 €" {
+			t.Errorf("fmtEUR(%v) = %q", x, got)
+		}
+	}
+	if got := fmtEUR(-0.01); got != "-0,01 €" {
+		t.Errorf("fmtEUR(-0.01) = %q", got)
+	}
+	if got := fmtEUR(-1234.5); got != "-1.234,50 €" {
+		t.Errorf("fmtEUR(-1234.5) = %q", got)
 	}
 }

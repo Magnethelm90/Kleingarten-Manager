@@ -109,9 +109,11 @@ function barChart(data, opts) {
   return h('div', { class: 'chartwrap' }, svg);
 }
 
-const nf2 = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const nfFlex = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
-const nfIn = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 4, useGrouping: false });
+// Rundungsreste (z. B. -0,000001) und Minus-Null nie als »-0« oder »-0,00« zeigen
+const ohneMinusNull = (nf, grenze) => ({ format: (x) => nf.format(typeof x === 'number' && Math.abs(x) < grenze ? 0 : x) });
+const nf2 = ohneMinusNull(new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 0.005);
+const nfFlex = ohneMinusNull(new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 }), 0.005);
+const nfIn = ohneMinusNull(new Intl.NumberFormat('de-DE', { maximumFractionDigits: 4, useGrouping: false }), 0.00005);
 const eur = (x) => nf2.format(x) + ' €';
 const numIn = (v) => (v == null ? '' : nfIn.format(v));
 
