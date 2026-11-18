@@ -109,7 +109,7 @@
   in Berichte). Design-Prüfung: `.cards` ist jetzt ein Grid (gleich breite Kennzahlen), Berichte-Kacheln mit Knöpfen unten, Handy-Kopfzeile
   kompakter (2 Zeilen), Kennzahlen auf dem Handy zweispaltig. Kein Kautions-Feld im Programm (bewusst nicht ergänzt).
 - Ideen-Paket 7 (Nov 2026): aufnahmeantrag.go (Vordruck mit Einwilligungen, über `GET …/warteliste/{id}/brief?art=aufnahmeantrag`, Knopf im Dialog »Garten vergeben« und im Briefe-Menü der Warteliste), befragung.go (Data.Befragungen, Fragearten janein/skala/wahl/text, nur anonyme Strichlisten-Summen; PDFs fragebogen/erfassung/auswertung über `GET /api/admin/befragungen/{id}/pdf?art=`; Auswertung kommt ins Versammlungspaket; Dialog `befragungenDialog` als Kachel in Berichte). fpdf-Schrift »lib« hat KEINEN Kursivschnitt (nur "" und "B").
-- Verständlichkeit (Nov 2026): Berichte in 4 Gruppen mit Überschrift (neue Kachel in die passende Gruppe), Einstellungen mit Sprungleiste (Preise zuerst, Farbe/Logo zuletzt), Hinweisbalken »Rechnungen offen« nur bei Rechnungen/Zählerständen, Passwort-Hinweis nur in Einstellungen/Daten/Datenschutz + Cockpit-Aufgabe.
+- Verständlichkeit (Nov 2026): Berichte in 4 Gruppen mit Überschrift (neue Kachel in die passende Gruppe), Einstellungen: Preise offen, Rest einklappbar (siehe »Einstellungen vereinfacht«), Hinweisbalken »Rechnungen offen« nur bei Rechnungen/Zählerständen, Passwort-Hinweis nur in Einstellungen/Daten/Datenschutz + Cockpit-Aufgabe.
 - Gesamtdurchsicht (Nov 2026): Mehrzahl über `anz(n, eins, viele)` (app.js) bzw. `mehrzahl()` (Go) – nie »Rechnung(en)«; Termine: `terminAktionen` (eine Hauptaktion vor/nach dem Termin + Bearbeiten + Mehr-Menü); Handy-Karten: Zellen mit mehreren Teilen als Grid untereinander, `td.wrap`-Breitengrenze dort aufgehoben; Cockpit am Handy: Knöpfe unter dem Text; Menü auf Laptops dichter; Checkboxen in Dialogen nie volle Breite.
 - Versandart-Vorgabe: neue Pächter (Formular + Import) ohne E-Mail-Adresse → Postversand, mit E-Mail → Emailsendung (`versandNachEmail`); im Formular folgt die Auswahl der E-Mail, bis sie von Hand geändert wird.
 - Menü gestrafft (Nov 2026, 26 → 18 Einträge): NAV-Einträge bündeln Seiten über `reiter: [...]` (erster Reiter = Seite selbst):
@@ -169,6 +169,17 @@
   »Weitere Einstellungen« als `klappKarte(id, titel, kurz, inhalt)` (details.klapp, offen-Zustand in S.esOffen): Fristen, Brieftexte,
   Pachtobergrenze, Bereiche, Farbe/Logo. Sprungleiste entfällt. Ziel `admin:einstellungen:<x>` öffnet `es-<x>` (pacht, fristen).
   Kündigungsregel wird nur noch in »Fristen aus der Satzung« bearbeitet; die Kündigungen-Seite zeigt sie mit Knopf »Ändern«.
+- Paket Nov 2026 (5): »Garten abgeben …« (ein Mehr-Eintrag statt Wechsel-Assistent/Pächterwechsel/Kündigung; `wechselAssistent` startet
+  mit Wahl »Mit Kündigung« / »Sofort übergeben«). Jahres-Fahrplan `jahresFortschritt` steht ganz oben auf der Übersicht, 5 Stationen inkl.
+  »Verschicken« (archiveEntry.emailAm oder Rechnung.PostAm; PostAm setzt POST /api/admin/rechnungen-druck/vermerken nach
+  `postRechnungenDrucken`, NIE im GET), am Handy Punktreihe + `.fs-handy`. Cockpit: 5 wichtigste offen, Rest in details (S.cockpitMehr).
+  `kontoauszugEinlesen(danach)` auch auf Spenden/Vorauszahlungen (ordnete schon immer Rechnung/Spende/Vorauszahlung zu).
+  Berichte: Kachel »Jahreszahlen« → `jahreszahlenDialog(jahr, start)` mit Reitern (`statistikInhalt`, `kostenvergleichInhalt`,
+  `jahresmeldungInhalt`); Jahresmeldungs-Tabelle unten auf der Seite entfällt. `druckKnopf(opts, {label, speichern, primary, klein})`
+  in lageplan.js = einheitlicher Druck-Knopf (»Als PDF speichern« nur für GET-PDFs). `pdfDrucken` liefert true/false.
+  Ablesung.Datum (`ablesedatumSetzen`: beim ersten aktuellen Stand heute; Korrekturen ändern es nicht; Handy-Import, Wechsel = Übergabetag,
+  Abgleich ergänzt nur fehlendes), Feld »Abgelesen am« in Schnelleingabe + »Weitere«. CSS: `[hidden] { display:none !important }` ganz oben.
+  Handy-Durchlauf: scratchpad handy.js (alle NAV-Reiter + neue Dialoge in 390 px; desk.js = 1366 px).
 - Offen: nichts Konkretes.
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

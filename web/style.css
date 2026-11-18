@@ -1,3 +1,5 @@
+/* Ausgeblendete Elemente bleiben ausgeblendet, auch wenn eine Klasse »display« setzt */
+[hidden] { display: none !important; }
 :root {
   --green: #2f6f3e;
   --green-dark: #1f4f2b;
