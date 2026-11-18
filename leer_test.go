@@ -114,3 +114,34 @@ func TestBetragInWortenMillionen(t *testing.T) {
 		}
 	}
 }
+
+// Wird im abgeschlossenen Jahr nachgebucht, meldet das Cockpit den nicht mehr passenden Anfangsbestand.
+func TestKassenUebergangImCockpit(t *testing.T) {
+	a, h := newTestApp(t)
+	a.st.mu.Lock()
+	vorher := a.st.d.Settings.Jahr
+	a.st.mu.Unlock()
+	if rec := do(h, "POST", "/api/admin/jahreswechsel", map[string]any{}); rec.Code != 200 {
+		t.Fatalf("Jahreswechsel: %d %s", rec.Code, rec.Body.String())
+	}
+	hat := func() bool {
+		a.st.mu.Lock()
+		defer a.st.mu.Unlock()
+		for _, x := range a.st.aufgabenLocked(time.Now()) {
+			if x.Titel == "Anfangsbestand passt nicht zum Vorjahr" {
+				return true
+			}
+		}
+		return false
+	}
+	if hat() {
+		t.Fatal("direkt nach dem Jahreswechsel passt alles")
+	}
+	q := "?year=" + strconv.Itoa(vorher)
+	if rec := do(h, "POST", "/api/admin/ausgaben"+q, map[string]any{"datum": strconv.Itoa(vorher) + "-12-30", "beschreibung": "späte Rechnung", "betrag": 40}); rec.Code != 200 {
+		t.Fatalf("Ausgabe: %d %s", rec.Code, rec.Body.String())
+	}
+	if !hat() {
+		t.Fatal("Nachbuchung im alten Jahr muss gemeldet werden")
+	}
+}

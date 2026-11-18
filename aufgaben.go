@@ -265,6 +265,7 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	if s.modulAn("haushalt") {
 		s.haushaltAufgabenLocked(heute, add)
 	}
+	s.kassenUebergangAufgabeLocked(add)
 
 	// Warteliste
 	nachfragen := 0
@@ -344,4 +345,26 @@ func mahnFristText(n int) string {
 		return ""
 	}
 	return fmt.Sprintf(" Bei %s ist die Frist der letzten Mahnung verstrichen – nächste Stufe erzeugen.", mehrzahl(n, "Rechnung", "Rechnungen"))
+}
+
+// kassenUebergangAufgabeLocked meldet, wenn der Anfangsbestand des laufenden Jahres nicht mehr zum Endbestand des
+// Vorjahres passt – etwa weil im abgeschlossenen Jahr noch eine späte Zahlung oder Ausgabe gebucht wurde.
+func (s *Store) kassenUebergangAufgabeLocked(add func(stufe, titel, text, ziel, knopf string)) {
+	jahr := s.d.Settings.Jahr
+	j, vj := s.d.Jahre[yearKey(jahr)], s.d.Jahre[yearKey(jahr-1)]
+	if j == nil || vj == nil || j.Anfangsbestand == nil {
+		return
+	}
+	v, ok := s.viewLocked(jahr - 1)
+	if !ok {
+		return
+	}
+	ende := s.kassenberichtLocked(v).Kassenbestand
+	if absf(round2(ende-*j.Anfangsbestand)) < 0.01 {
+		return
+	}
+	add("warn", "Anfangsbestand passt nicht zum Vorjahr",
+		fmt.Sprintf("Die Kasse %d endet bei %s, %d beginnt aber mit %s. Wurde im alten Jahr noch etwas nachgebucht? Dann bitte den Anfangsbestand %d anpassen.",
+			jahr-1, fmtEUR(ende), jahr, fmtEUR(*j.Anfangsbestand), jahr),
+		"admin:kassenbericht", "Kassenbericht")
 }
