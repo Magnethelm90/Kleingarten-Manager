@@ -397,6 +397,7 @@ async function load() {
 
 async function reload() {
   S.aufgaben = null; // »Was steht an?« nach jeder Änderung neu bestimmen
+  S.schwundEingabe = null;
   try { await load(); render(); } catch (e) { handleErr(e); }
 }
 
@@ -1546,10 +1547,35 @@ function eingabeRow(p, ro) {
   return tr;
 }
 
+// Hinweis über den Zählerständen: Hauptzähler gegen die Summe der Gartenzähler (nur wenn ein Hauptzählerwert eingetragen ist).
+function schwundBanner() {
+  const st = S.state;
+  if (st.hasPassword && !st.loggedIn) return null;
+  if (!S.schwundEingabe || S.schwundEingabe.jahr !== st.year) {
+    if (!S.schwundEingabeLaedt) {
+      S.schwundEingabeLaedt = true;
+      api('GET', `/api/admin/schwund?year=${st.year}`).then((d) => { S.schwundEingabe = { jahr: st.year, daten: d }; })
+        .catch(() => { S.schwundEingabe = { jahr: st.year, daten: null }; })
+        .finally(() => { S.schwundEingabeLaedt = false; render(); });
+    }
+    return null;
+  }
+  const d = S.schwundEingabe.daten;
+  const j = d && d.jahre.find((x) => x.jahr === st.year);
+  if (!j || j.wasser.prozent == null) return null;
+  const w = j.wasser;
+  const stufe = w.prozent >= d.warnAb ? 'err' : w.prozent < 0 ? 'warn' : 'info';
+  const text = w.prozent < 0
+    ? `Die Gärten haben zusammen mehr Wasser gezählt (${nfFlex.format(w.gaerten)} m³) als der Hauptzähler (${nfFlex.format(w.haupt)} m³). Prüfe, ob ein Zählerstand falsch eingetippt wurde.`
+    : `Hauptzähler ${nfFlex.format(w.haupt)} m³, Gärten zusammen ${nfFlex.format(w.gaerten)} m³ – ${nfFlex.format(w.menge)} m³ (${nfFlex.format(w.prozent)} %) kommen in keinem Garten an.${w.prozent >= d.warnAb ? ' Das ist viel: undichte Leitung oder falsch abgelesener Zähler?' : ''}${j.unvollstaendig ? ` ${j.unvollstaendig === 1 ? 'Ein Garten fehlt' : j.unvollstaendig + ' Gärten fehlen'} noch – der Wert wird mit ihnen kleiner.` : ''}`;
+  return h('div', { class: 'banner ' + stufe, style: 'margin-bottom:10px' }, h('b', null, 'Wasser-Vergleich: '), text);
+}
+
 function viewEingabe() {
   const st = S.state;
   return h('div', null,
     h('h2', null, `Zählerstände ${st.year}`, ' ', seitenHilfe('eingabe')),
+    schwundBanner(),
     h('div', { class: 'toolbar' },
       h('div', { class: 'subtabs', style: 'margin:0' },
         h('button', { class: S.eingabeMode === 'schnell' ? 'active' : '', onclick: () => { S.eingabeMode = 'schnell'; render(); } }, 'Schnelleingabe (Nummer eintippen)'),
@@ -2826,6 +2852,35 @@ async function paymentDialog(e, start) {
 }
 
 const MAHN_TITEL = ['', 'Zahlungserinnerung', 'Mahnung', 'Letzte Mahnung'];
+
+// Mahn-Vorschlag: wer ist überfällig, welche Stufe wäre dran, und ist die letzte Frist schon abgelaufen?
+// Nichts passiert von selbst – der Vorstand wählt aus und erzeugt die Briefe.
+async function mahnVorschlag(ueberfaellig) {
+  const heute = todayIso();
+  const zeilen = ueberfaellig.map((e) => {
+    const m = e.mahnungen || [];
+    const letzte = m.length ? m[m.length - 1] : null;
+    const wartet = letzte && letzte.frist && letzte.frist >= heute;
+    return { e, stufe: Math.min(m.length + 1, 3), wartet, letzte, max: m.length >= 3 };
+  }).sort((a, b) => a.e.mitgliedsnr.localeCompare(b.e.mitgliedsnr, 'de', { numeric: true }));
+  const dran = zeilen.filter((z) => !z.wartet);
+  const haken = new Map(dran.map((z) => [z.e.id, h('input', { type: 'checkbox', checked: true })]));
+  const info = (z) => z.wartet ? `Frist läuft noch bis ${deDate(z.letzte.frist)} – noch warten`
+    : z.max ? 'Schon dreimal gemahnt – nächster Schritt liegt beim Vorstand (z. B. Kündigung prüfen)'
+      : `${MAHN_TITEL[z.stufe]} wäre dran${z.letzte ? ` (letzte Mahnung am ${deDate(z.letzte.datum)})` : ''}`;
+  const ok = await modal('Mahn-Vorschlag', h('div', null,
+    h('p', { class: 'hint' }, 'So sieht es aus. Wer noch eine laufende Frist hat, wird nicht vorgeschlagen. Nimm weg, wen du nicht anschreiben willst.'),
+    h('div', { class: 'tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['', 'Pächter', 'Offen', 'Fällig seit', 'Vorschlag'].map((t) => h('th', null, t)))),
+      h('tbody', null, zeilen.map((z) => h('tr', null, h('td', null, haken.has(z.e.id) ? haken.get(z.e.id) : null),
+        h('td', { class: 'wrap' }, `${z.e.mitgliedsnr} ${z.e.name}`), h('td', { class: 'r' }, eur(payOpen(z.e))),
+        h('td', null, deDate(z.e.faellig)), h('td', { class: 'wrap' }, info(z)))))))),
+  [{ label: 'Abbrechen', value: false }, { label: 'Weiter zu den Briefen', cls: 'primary', value: true }]);
+  if (!ok) return;
+  const ids = dran.filter((z) => haken.get(z.e.id).checked).map((z) => z.e.id);
+  if (!ids.length) { toast('Niemand ausgewählt.', 'err'); return; }
+  await mahnungErzeugen(ids);
+}
 async function mahnungErzeugen(ids) {
   if (!ids.length) { toast('Bitte mindestens eine offene Rechnung auswählen.', 'err'); return; }
   const archiv = new Map((S.state.archive || []).map((e) => [e.id, e]));
@@ -2882,6 +2937,8 @@ function viewZahlungen() {
       h('button', { class: 'btn', disabled: !ueberfaellig.length, title: 'Setzt den Haken bei allen Rechnungen, die über das Zahlungsziel hinaus offen sind',
         onclick: () => { for (const e of ueberfaellig) { if (alleGewaehlt) S.mahnSel.delete(e.id); else S.mahnSel.add(e.id); } draw(); } },
       alleGewaehlt ? 'Auswahl aufheben' : `Alle überfälligen auswählen${ueberfaellig.length ? ` (${ueberfaellig.length})` : ''}`),
+      h('button', { class: 'btn', disabled: !ueberfaellig.length, title: 'Das Programm schlägt vor, wen du jetzt erinnern oder mahnen solltest – du entscheidest',
+        onclick: () => mahnVorschlag(ueberfaellig) }, 'Mahn-Vorschlag'),
       h('span', { class: 'hint' }, 'Haken bei den gewünschten offenen Rechnungen setzen, dann »Mahnung erzeugen«. Es wird nie automatisch gemahnt.'));
 
     const nOpen = all.filter(payIsOpen).length;
@@ -3286,9 +3343,9 @@ async function loadInventar() {
   if (S.invLoading) return;
   S.invLoading = true;
   try {
-    const [k, g] = await Promise.all([api('GET', '/api/admin/schluessel'), api('GET', '/api/admin/geraete')]);
-    S.inventar = { schluessel: k.schluessel, arten: k.arten, geraete: g };
-  } catch (e) { handleErr(e); S.inventar = { schluessel: [], arten: [], geraete: [] }; }
+    const [k, g, w] = await Promise.all([api('GET', '/api/admin/schluessel'), api('GET', '/api/admin/geraete'), api('GET', '/api/admin/wartungsplan')]);
+    S.inventar = { schluessel: k.schluessel, arten: k.arten, geraete: g, wartung: w };
+  } catch (e) { handleErr(e); S.inventar = { schluessel: [], arten: [], geraete: [], wartung: [] }; }
   S.invLoading = false;
   render();
 }
@@ -3297,11 +3354,59 @@ const invNeuLaden = () => { S.inventar = null; render(); };
 
 function adminInventar() {
   if (S.inventar == null) { loadInventar(); return h('p', { class: 'hint' }, 'Wird geladen …'); }
-  const geraete = S.invSeite === 'geraete';
+  const seite = S.invSeite === 'geraete' || S.invSeite === 'wartung' ? S.invSeite : 'schluessel';
   const sub = reiterLeiste([
-    { label: `Schlüssel (${S.inventar.schluessel.length})`, aktiv: !geraete, geh: () => { S.invSeite = 'schluessel'; render(); } },
-    { label: `Geräte (${S.inventar.geraete.length})`, aktiv: geraete, geh: () => { S.invSeite = 'geraete'; render(); } }]);
-  return h('div', null, sub, geraete ? inventarGeraete() : inventarSchluessel());
+    { label: `Schlüssel (${S.inventar.schluessel.length})`, aktiv: seite === 'schluessel', geh: () => { S.invSeite = 'schluessel'; render(); } },
+    { label: `Geräte (${S.inventar.geraete.length})`, aktiv: seite === 'geraete', geh: () => { S.invSeite = 'geraete'; render(); } },
+    { label: `Pflegeplan (${(S.inventar.wartung || []).length})`, aktiv: seite === 'wartung', geh: () => { S.invSeite = 'wartung'; render(); } }]);
+  return h('div', null, sub, seite === 'geraete' ? inventarGeraete() : seite === 'wartung' ? inventarWartung() : inventarSchluessel());
+}
+
+// Pflegeplan für Gemeinschaftsflächen: Hecke, Wege, Spielplatz … kehrt in festen Abständen wieder.
+const PFLEGE_VORLAGEN = [['Hecke schneiden', 6], ['Wege kehren', 1], ['Spielplatz prüfen', 3], ['Zaun kontrollieren', 12], ['Bäume kontrollieren', 12],
+  ['Gemeinschaftshaus reinigen', 1], ['Müllplatz leeren', 1], ['Wasserleitungen winterfest machen', 12]];
+
+async function wartungDialog(w) {
+  const titel = h('input', { type: 'text', maxlength: 120, value: w ? w.titel : '', placeholder: 'z. B. Hecke schneiden' });
+  const ort = h('input', { type: 'text', maxlength: 120, value: w ? w.ort || '' : '', placeholder: 'z. B. Vereinsheim, Hauptweg' });
+  const monate = h('input', { type: 'number', min: 1, max: 60, value: w ? w.monate : 6, style: 'width:90px' });
+  const faellig = h('input', { type: 'date', value: w ? w.faellig : todayIso() });
+  const chips = w ? null : h('div', { class: 'chips' }, PFLEGE_VORLAGEN.map(([t, m]) => h('button', { type: 'button', class: 'chip', onclick: () => { titel.value = t; monate.value = m; titel.dispatchEvent(new Event('input')); } }, t)));
+  return modal(w ? 'Pflegearbeit bearbeiten' : 'Neue Pflegearbeit', h('div', { class: 'form' },
+    chips ? h('div', { class: 'field wide' }, h('label', null, 'Vorschläge'), chips) : null,
+    h('div', { class: 'field wide' }, h('label', null, 'Was ist zu tun?'), titel),
+    h('div', { class: 'field wide' }, h('label', null, 'Wo? (freiwillig)'), ort),
+    h('div', { class: 'field' }, h('label', null, 'Alle wie viele Monate?'), monate),
+    h('div', { class: 'field' }, h('label', null, 'Das nächste Mal am'), faellig)),
+  [{ label: 'Abbrechen', value: false }, { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+    if (!titel.value.trim()) { feldFehler(titel, 'Bitte sag, was zu tun ist.'); return false; }
+    try { await api('POST', '/api/admin/wartungsplan', { id: w ? w.id : '', letzte: w ? w.letzte || '' : '', titel: titel.value, ort: ort.value, monate: Number(monate.value), faellig: faellig.value }); }
+    catch (e) { handleErr(e); return false; }
+  } }]);
+}
+
+function inventarWartung() {
+  const l = S.inventar.wartung || [];
+  const heute = todayIso(), in14 = isoInTagen(14);
+  const nachher = async (p) => { if (await p) invNeuLaden(); };
+  return h('div', null,
+    h('p', { class: 'hint' }, 'Arbeiten an den Gemeinschaftsflächen, die immer wiederkommen. Das Programm merkt sich, wann sie dran sind, und erinnert im Cockpit zwei Wochen vorher. Mit »Erledigt« rechnet es den nächsten Termin selbst aus.'),
+    h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', onclick: () => nachher(wartungDialog(null)) }, '+ Pflegearbeit')),
+    l.length ? h('div', { class: 'card tablewrap' }, h('table', { class: 'data' },
+      h('thead', null, h('tr', null, ['Arbeit', 'Wo', 'Abstand', 'Nächstes Mal', 'Zuletzt', ''].map((t) => h('th', null, t)))),
+      h('tbody', null, l.map((w) => h('tr', null,
+        h('td', { class: 'wrap' }, h('b', null, w.titel)), h('td', null, w.ort || ''), h('td', null, w.monate === 1 ? 'jeden Monat' : `alle ${w.monate} Monate`),
+        h('td', null, deDate(w.faellig), ' ', w.faellig < heute ? h('span', { class: 'badge err' }, 'überfällig') : w.faellig <= in14 ? h('span', { class: 'badge warn' }, 'bald') : null),
+        h('td', null, w.letzte ? deDate(w.letzte) : h('span', { class: 'hint' }, '–')),
+        h('td', { class: 'aktionen' },
+          h('button', { class: 'btn small', onclick: () => nachher(datumDialog(`${w.titel} erledigt`, 'Wann wurde es gemacht? Der nächste Termin wird danach selbst ausgerechnet.', `/api/admin/wartungsplan/${w.id}/erledigt`)) }, 'Erledigt'), ' ',
+          mehrMenue([
+            { label: 'Bearbeiten', aktion: () => nachher(wartungDialog(w)) },
+            { label: 'Löschen', gefahr: true, aktion: async () => {
+              if (!(await confirmBox(`»${w.titel}« aus dem Pflegeplan löschen?`, 'Löschen', true))) return;
+              try { await api('DELETE', `/api/admin/wartungsplan/${w.id}`); invNeuLaden(); } catch (e) { handleErr(e); }
+            } }])))))))
+      : leer('Noch keine Pflegearbeiten', 'Lege an, was regelmäßig getan werden muss – zum Beispiel die Hecke schneiden. Das Cockpit erinnert dich dann rechtzeitig.'));
 }
 
 function inventarVerlaufDialog(titel, verlauf) {
@@ -3909,9 +4014,10 @@ function adminHaushalt() {
       if (abw != null) abwSumme += abw;
       const anteil = z.soll ? Math.min(150, Math.round(z.ist / z.soll * 100)) : null;
       const schlecht = abw != null && (art === 'ausgaben' ? abw > 0.004 : abw < -0.004);
+      const fast = art === 'ausgaben' && !schlecht && anteil != null && anteil >= 90;
       return h('tr', null, h('td', null, z.posten), h('td', { class: 'r' }, inp), h('td', { class: 'r' }, eur(z.ist)),
         h('td', { class: 'r' + (schlecht ? ' diffwarn' : '') }, abw == null ? '–' : eur(abw)),
-        h('td', null, anteil == null ? null : h('div', { class: 'hh-erreicht' }, h('div', { class: 'hh-balken' }, h('span', { class: schlecht ? 'zu-viel' : '', style: `width:${Math.min(100, anteil)}%` })), h('i', null, (anteil >= 150 ? '≥ ' : '') + anteil + ' %'))));
+        h('td', null, anteil == null ? null : h('div', { class: 'hh-erreicht' }, h('div', { class: 'hh-balken' }, h('span', { class: schlecht ? 'zu-viel' : fast ? 'fast' : '', style: `width:${Math.min(100, anteil)}%` })), h('i', null, (anteil >= 150 ? '≥ ' : '') + anteil + ' %'))));
     });
     return h('div', { class: 'card tablewrap', style: 'margin-bottom:14px' }, h('table', { class: 'data' },
       h('thead', null, h('tr', null, [titel, 'Plan', 'Ist', 'Abweichung', 'erreicht'].map((t) => h('th', null, t)))),
@@ -4287,7 +4393,8 @@ function kontoauszugVorschau(v) {
       if (!zahlungen.length) { toast('Es ist nichts angehakt.', 'err'); return false; }
       try {
         const r = await api('POST', '/api/admin/kontoauszug/buchen', { zahlungen });
-        toast(`${anz(r.gebucht, 'Zahlung', 'Zahlungen')} über ${eur(r.summe)} übernommen${r.vorauszahlungen ? ` – davon ${anz(r.vorauszahlungen, 'Vorauszahlung', 'Vorauszahlungen')}` : ''}${r.spenden ? ` – davon ${r.spenden} als Spende; Anschrift unter »Spenden« ergänzen` : ''}`, 'ok');
+        toast(`${anz(r.gebucht, 'Zahlung', 'Zahlungen')} über ${eur(r.summe)} übernommen${r.vorauszahlungen ? ` – davon ${anz(r.vorauszahlungen, 'Vorauszahlung', 'Vorauszahlungen')}` : ''}${r.spenden ? ` – davon ${r.spenden} als Spende; Anschrift unter »Spenden« ergänzen` : ''}`, 'ok',
+          r.spenden ? { label: 'Zu den Spenden', fn: () => zielOeffnen('admin:spenden') } : null);
       } catch (e) { handleErr(e); return false; }
     } }]);
 }
@@ -5945,10 +6052,24 @@ async function paechterMappe(p) {
     zeile('Ehrenamts-Nachweis', 'Bescheinigung über Stunden und Ämter.', 'PDF', () => ehrenamtDrucken(S.state.currentYear, p.id)),
     p.gartennr ? zeile('Gartenakte', 'Dokumente, Wertermittlungen, Übergaben und Verlauf.', 'Öffnen', () => gartenakteDialog(p.gartennr.trim())) : null,
     zeile('Auskunft nach DSGVO', 'Alle gespeicherten Daten dieser Person als Datei (Art. 15 DSGVO).', 'Herunterladen', () => { location.href = `/api/admin/paechter/${encodeURIComponent(p.id)}/auskunft`; }));
-  const zeichne = () => {
-    kopf.replaceChildren(reiterLeiste([['beitraege', 'Beiträge'], ['dokumente', 'Dokumente']].map(([key, label]) => ({ label, aktiv: key === aktiv, geh: () => { aktiv = key; zeichne(); } })), 'Pächter-Mappe'));
-    flaeche.replaceChildren(aktiv === 'beitraege' ? beitragskontoInhalt(k) : dokumente());
+  let geb = { datum: '', einwilligung: false };
+  const angaben = () => {
+    const datum = h('input', { type: 'date', value: geb.datum || '', max: todayIso() });
+    const ok = h('input', { type: 'checkbox', checked: !!geb.einwilligung });
+    return h('div', { class: 'form' },
+      h('p', { class: 'hint field wide' }, 'Freiwillige Angabe. Das Geburtsdatum wird nur gespeichert, wenn die Person damit einverstanden ist. Das Cockpit erinnert dann eine Woche vorher an die Glückwünsche. Ohne Haken wird nichts behalten.'),
+      h('div', { class: 'field' }, h('label', null, 'Geburtsdatum'), datum),
+      h('label', { class: 'inline field wide' }, ok, ' Die Person ist einverstanden, dass ihr Geburtstag gespeichert wird.'),
+      h('div', { class: 'field wide' }, h('button', { class: 'btn primary', onclick: async () => {
+        if (datum.value && !ok.checked) { toast('Bitte erst das Einverständnis anhaken – sonst wird nichts gespeichert.', 'err'); return; }
+        try { geb = await api('PUT', `/api/admin/paechter/${encodeURIComponent(p.id)}/geburtstag`, { datum: datum.value, einwilligung: ok.checked }); toast(geb.datum ? 'Geburtstag gespeichert' : 'Nichts gespeichert', 'ok'); zeichne(); } catch (e) { handleErr(e); }
+      } }, 'Speichern')));
   };
+  const zeichne = () => {
+    kopf.replaceChildren(reiterLeiste([['beitraege', 'Beiträge'], ['dokumente', 'Dokumente'], ...(modulAn('jubilaeen') ? [['angaben', 'Angaben']] : [])].map(([key, label]) => ({ label, aktiv: key === aktiv, geh: () => { aktiv = key; zeichne(); } })), 'Pächter-Mappe'));
+    flaeche.replaceChildren(aktiv === 'beitraege' ? beitragskontoInhalt(k) : aktiv === 'angaben' ? angaben() : dokumente());
+  };
+  try { geb = await api('GET', `/api/admin/paechter/${encodeURIComponent(p.id)}/geburtstag`) || geb; } catch (e) { handleErr(e); }
   zeichne();
   await modal(`Mappe – ${k.name}`, h('div', null, kopf, flaeche), [{ label: 'Schließen', cls: 'primary', value: true }]);
 }
@@ -7781,9 +7902,32 @@ function seiteWiederherstellen() {
   if (eintrag.admin) adminTabWaehlen(eintrag.admin); else S.tab = eintrag.tab;
 }
 
+// »Was hat sich geändert?«: einmal nach einem Update. Die letzte gesehene Version merkt sich der Browser.
+const NEUERUNGEN = [
+  { version: '1.5.1', punkte: [
+    'Ratenplan, Gutschrift und Zahlung stehen in einem gemeinsamen Dialog.',
+    'Mahn-Vorschlag auf der Seite »Zahlungen«: zeigt, wer jetzt eine Erinnerung oder Mahnung bekommen sollte.',
+    'Pflegeplan für Gemeinschaftsflächen unter »Anlage«: Hecke, Wege, Spielplatz – mit Erinnerung im Cockpit.',
+    'Haushaltsplan: Posten ab 90 % werden gelb, das Cockpit meldet sie.',
+    'Geburtstage (nur mit Einverständnis) in der Pächter-Mappe, Erinnerung im Cockpit.',
+    'Auf der Seite »Zählerstände« steht jetzt der Wasser-Vergleich mit dem Hauptzähler.',
+    'Die Wiederherstellungs-Probe läuft alle 30 Tage von selbst.'] }];
+function neuerungenPruefen() {
+  const st = S.state;
+  if (st.gesperrt || (st.hasPassword && !st.loggedIn)) return;
+  let alt = null;
+  try { alt = localStorage.getItem('km-version'); localStorage.setItem('km-version', st.version); } catch (e) { return; }
+  if (alt == null || alt === st.version || document.querySelector('dialog[open]')) return;
+  const neu = NEUERUNGEN.find((n) => n.version === st.version);
+  if (!neu) return;
+  modal(`Neu in Version ${st.version}`, h('div', null,
+    h('p', { class: 'hint' }, 'Das Programm wurde aktualisiert. Das ist neu:'),
+    h('ul', null, neu.punkte.map((t) => h('li', null, t)))), [{ label: 'Verstanden', cls: 'primary', value: true }]);
+}
+
 (async function start() {
   document.body.append(h('div', { id: 'toasts', role: 'status', 'aria-live': 'polite' }));
-  try { await load(); seiteWiederherstellen(); render(); } catch (e) {
+  try { await load(); seiteWiederherstellen(); render(); neuerungenPruefen(); } catch (e) {
     document.getElementById('app').replaceChildren(h('div', { class: 'center card' }, h('h2', null, 'Verbindung fehlgeschlagen'), h('p', null, e.message)));
   }
 })();

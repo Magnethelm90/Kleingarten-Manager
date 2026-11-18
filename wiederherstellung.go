@@ -157,3 +157,33 @@ func (s *Store) probeAufgabeLocked(heute time.Time, add func(stufe, titel, text,
 	}
 	add("info", "Wiederherstellungs-Probe machen", text, "admin:daten", "Probe")
 }
+
+// probeAutoTage: so alt darf die letzte Probe höchstens sein, bevor das Programm sie von selbst wiederholt.
+const probeAutoTage = 30
+
+// probeAutomatischLocked führt die Probe von selbst aus, wenn die letzte länger als probeAutoTage her ist
+// (oder nie lief) und es Daten gibt. Liefert true, wenn gespeichert werden muss. Der Aufrufer hält s.mu.
+func (s *Store) probeAutomatischLocked(jetzt time.Time) bool {
+	if len(s.d.Paechter) == 0 {
+		return false
+	}
+	if s.d.Probe != nil && -tageBis(jetzt, s.d.Probe.Datum) < probeAutoTage {
+		return false
+	}
+	res := s.probeLocked(jetzt)
+	s.d.Probe = &Wiederherstellungsprobe{Datum: res.Datum, Ok: res.Ok}
+	s.audit("Wiederherstellungs-Probe automatisch durchgeführt")
+	return true
+}
+
+// probeAutomatisch prüft beim Start und danach alle sechs Stunden.
+func (s *Store) probeAutomatisch() {
+	for {
+		s.mu.Lock()
+		if s.probeAutomatischLocked(time.Now()) {
+			_ = s.saveLocked()
+		}
+		s.mu.Unlock()
+		time.Sleep(6 * time.Hour)
+	}
+}

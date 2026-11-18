@@ -156,6 +156,9 @@ func (d *Data) entfernePerson(id string) bool {
 	if d.kuendigungPersonEntfernen(id) {
 		changed = true
 	}
+	if d.geburtstagPersonEntfernen(id) {
+		changed = true
+	}
 	einsatz := d.Einsatzstunden[:0]
 	for _, e := range d.Einsatzstunden {
 		if e.PaechterID == id {
@@ -360,6 +363,7 @@ type auskunft struct {
 	Rundschr    []string            `json:"rundschreibenAnDiePerson"`
 	Inventar    []auskunftInventar  `json:"schluesselUndGeraete"`
 	Kuendigung  []Kuendigung        `json:"kuendigungen"`
+	Geburtstag  *Geburtstag         `json:"geburtstag,omitempty"`
 	Aufbewahrng string              `json:"aufbewahrung"`
 }
 
@@ -470,6 +474,9 @@ func (s *Store) auskunftLocked(id string) (auskunft, bool) {
 	}
 	a.Rundschr = s.rundschreibenFuerLocked(id)
 	a.Inventar = s.inventarAuskunftLocked(id)
+	if g, ok := s.d.Geburtstage[id]; ok {
+		a.Geburtstag = &g
+	}
 	for _, k := range s.d.Kuendigungen {
 		if k.PaechterID == id {
 			a.Kuendigung = append(a.Kuendigung, k)

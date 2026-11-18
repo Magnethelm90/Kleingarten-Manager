@@ -16,7 +16,7 @@ import (
 // kein abgeschlossenes Jahr). Der Aufrufer hält s.mu.
 func (s *Store) datenbestandLeer() bool {
 	if len(s.d.Paechter) > 0 || len(s.d.Rechnungen) > 0 || len(s.d.Jahre) > 1 || len(s.d.Warteliste) > 0 || len(s.d.Termine) > 0 || len(s.d.Dokumente) > 0 || len(s.d.Wertermittlungen) > 0 || len(s.d.Maengel) > 0 || len(s.d.Einsatzstunden) > 0 || len(s.d.Spenden) > 0 || len(s.d.Vorauszahlungen) > 0 ||
-		len(s.d.Rundschreiben) > 0 || len(s.d.Schluessel) > 0 || len(s.d.Geraete) > 0 ||
+		len(s.d.Rundschreiben) > 0 || len(s.d.Schluessel) > 0 || len(s.d.Geraete) > 0 || len(s.d.Wartungsplan) > 0 ||
 		len(s.d.Kuendigungen) > 0 || len(s.d.Beschluesse) > 0 || len(s.d.Vertraege) > 0 || len(s.d.Befragungen) > 0 || len(s.d.Haushalt) > 0 || len(s.d.Aemter) > 0 || len(s.d.Bauwerke) > 0 || len(s.d.Sitzungen) > 0 || len(s.d.Kassenpruefungen) > 0 || s.d.Pachtgrenze.ErwerbsobstbauJeQm > 0 || s.d.LageKarte.Bild != "" || len(s.d.LageKarte.Objekte) > 0 {
 		return false
 	}
@@ -221,6 +221,10 @@ func (s *Store) ladeBeispieldaten() {
 		{ID: newID(), Name: "Gartenhäcksler", Inventarnr: "G-01", Standort: "Geräteschuppen", Angeschafft: vorTagen(-1500), Wert: 450, WartungMonate: 12, LetzteWartung: vorTagen(-380)},
 		{ID: newID(), Name: "Rasenmäher (Benzin)", Inventarnr: "G-02", Standort: "Geräteschuppen", Angeschafft: vorTagen(-900), Wert: 380, WartungMonate: 12, LetzteWartung: vorTagen(-120)},
 		{ID: newID(), Name: "Leiter 3 m", Inventarnr: "G-03", Standort: "Vereinsheim", Wert: 90},
+	}
+	s.d.Wartungsplan = []Wartungsaufgabe{
+		{ID: newID(), Titel: "Hecke am Hauptweg schneiden", Ort: "Hauptweg", Monate: 6, Faellig: vorTagen(10), Letzte: vorTagen(-170)},
+		{ID: newID(), Titel: "Spielplatz prüfen", Ort: "Vereinsheim", Monate: 3, Faellig: vorTagen(60), Letzte: vorTagen(-30)},
 	}
 	if p, ok := s.aktiverPaechterLocked("5"); ok {
 		g := &s.d.Geraete[1]

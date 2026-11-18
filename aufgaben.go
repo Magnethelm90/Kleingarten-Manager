@@ -256,6 +256,15 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	}
 
 	s.planerAufgabenLocked(heute, add)
+	if s.modulAn("inventar") {
+		s.wartungsplanAufgabenLocked(heute, add)
+	}
+	if s.modulAn("jubilaeen") {
+		s.geburtstagAufgabenLocked(heute, add)
+	}
+	if s.modulAn("haushalt") {
+		s.haushaltAufgabenLocked(heute, add)
+	}
 
 	// Warteliste
 	nachfragen := 0

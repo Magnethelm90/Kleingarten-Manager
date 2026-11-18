@@ -151,7 +151,7 @@ Benutzerkonto und keine Übertragung ins Internet.
   Fensterumschlag; dazu als Aushang und mit Vorlagen (Wasser an/ab, Arbeitseinsatz)
 - **Schlüssel und Geräte:** wer welchen Tor-, Vereinsheim- oder Schachtschlüssel hat (mit Pfand und Verlauf), und
   welche Vereinsgeräte verliehen sind oder zur Wartung müssen; das Cockpit erinnert an Schlüssel ausgeschiedener
-  Pächter, überfällige Rückgaben und fällige Wartungen
+  Pächter, überfällige Rückgaben und fällige Wartungen; ein **Pflegeplan** für Gemeinschaftsflächen (Hecke, Wege, Spielplatz) erinnert rechtzeitig
 - **Jubiläen** langjähriger Mitglieder für die Mitgliederversammlung
 
 ### Kasse und Berichte

@@ -535,3 +535,30 @@ func (a *App) haushaltPDF(r *http.Request) ([]byte, string, error) {
 	out, err := pdfBytes(pdf)
 	return out, fmt.Sprintf("Haushaltsplan_%d.pdf", jahr), err
 }
+
+// haushaltAufgabenLocked: Cockpit-Hinweis, wenn ein Ausgabenposten schon fast oder ganz aufgebraucht ist.
+func (s *Store) haushaltAufgabenLocked(_ time.Time, add func(stufe, titel, text, ziel, knopf string)) {
+	if len(s.d.Paechter) == 0 {
+		return
+	}
+	a := s.haushaltAnsichtLocked(s.d.Settings.Jahr)
+	var ueber, fast []string
+	for _, z := range a.Ausgaben {
+		if z.Soll == nil || *z.Soll <= 0 {
+			continue
+		}
+		p := z.Ist / *z.Soll * 100
+		switch {
+		case p > 100:
+			ueber = append(ueber, fmt.Sprintf("%s (%s von %s)", z.Posten, fmtEUR(z.Ist), fmtEUR(*z.Soll)))
+		case p >= 90:
+			fast = append(fast, fmt.Sprintf("%s (%.0f %%)", z.Posten, p))
+		}
+	}
+	if len(ueber) > 0 {
+		add("warn", mehrzahl(len(ueber), "Posten im Haushaltsplan überschritten", "Posten im Haushaltsplan überschritten"), strings.Join(ueber, ", ")+".", "admin:haushalt", "Haushaltsplan")
+	}
+	if len(fast) > 0 {
+		add("info", mehrzahl(len(fast), "Posten im Haushaltsplan fast aufgebraucht", "Posten im Haushaltsplan fast aufgebraucht"), strings.Join(fast, ", ")+".", "admin:haushalt", "Haushaltsplan")
+	}
+}

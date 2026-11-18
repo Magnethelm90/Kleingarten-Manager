@@ -87,6 +87,12 @@ Empfängerlisten entfernt. E-Mails verschickt das eigene E-Mail-Programm, alle A
 Auskunft. Beim endgültigen Löschen der Person wird der Name überall durch „(gelöschte Person)“ ersetzt; ein noch
 ausgegebener Schlüssel bleibt so sichtbar, damit er nicht in Vergessenheit gerät.
 
+**Geburtstage:** Ein Geburtsdatum wird nur gespeichert, wenn die Person einverstanden ist (Haken in der
+Pächter-Mappe, Reiter „Angaben“). Ohne Haken bleibt nichts gespeichert; wer den Haken entfernt, dessen Datum
+verschwindet sofort. Das Datum steht in der Auskunft und wird beim endgültigen Löschen der Person entfernt. Es dient
+nur der Erinnerung im Cockpit und wird nirgends gedruckt oder weitergegeben. Der Pflegeplan für Gemeinschaftsflächen
+enthält keine Personendaten.
+
 **Kündigungen und Pachtverträge:** Eine erfasste Kündigung (Datum, Grund, erledigte Schritte) steht in der
 Auskunft und wird beim endgültigen Löschen der Person entfernt. Ein in die Gartenakte gelegter Pachtvertrag gehört
 zur Person und wird mit ihr gelöscht. Beschlussbuch, Vereinsverträge und Haushaltsplan enthalten keine Pächterdaten.

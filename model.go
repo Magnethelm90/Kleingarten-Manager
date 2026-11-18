@@ -234,6 +234,9 @@ type Data struct {
 	Rundschreiben []Rundschreiben `json:"rundschreiben,omitempty"`
 	Schluessel    []Schluessel    `json:"schluessel,omitempty"`
 	Geraete       []Geraet        `json:"geraete,omitempty"`
+	// Wartungsplan für Gemeinschaftsflächen (wartungsplan.go) und Geburtstage mit Einwilligung (geburtstag.go)
+	Wartungsplan []Wartungsaufgabe     `json:"wartungsplan,omitempty"`
+	Geburtstage  map[string]Geburtstag `json:"geburtstage,omitempty"`
 	// Vertragsbestimmungen für den Pachtvertrag (leer = Standardtext, siehe pachtvertrag.go)
 	Vertragsbestimmungen string `json:"vertragsbestimmungen,omitempty"`
 	// Beschlussbuch, Verträge des Vereins und Haushaltspläne je Jahr (siehe verwaltung.go)

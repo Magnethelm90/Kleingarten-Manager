@@ -142,6 +142,7 @@ func main() {
 		fail(err.Error())
 	}
 	go st.sperreAuffrischen()
+	go st.probeAutomatisch()
 
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
