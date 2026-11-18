@@ -66,7 +66,10 @@ async function saveRow(tr, p) {
     const cur = S.state.ablesungen[p.id] || {};
     const body = { ...cur, wasserVJ: vals.wasserVJ, wasserAkt: vals.wasserAkt, stromVJ: vals.stromVJ, stromAkt: vals.stromAkt,
       stunden: vals.stunden, abschlag: vals.abschlag ?? 0 };
+    if (f('datum')) body.datum = f('datum').value;
     const res = await api('PUT', `/api/ablesung/${p.id}?year=${S.year}`, body);
+    body.datum = res.datum || '';
+    if (f('datum') && f('datum').value !== body.datum) f('datum').value = body.datum;
     S.state.ablesungen[p.id] = body;
     S.state.results[p.id] = res;
     S.state.hinweise = S.state.hinweise || {};
@@ -135,9 +138,11 @@ async function detailsDialog(tr, p) {
   const num = (val, id) => h('input', { type: 'text', inputmode: 'decimal', id, value: numIn(val || null), autocomplete: 'off' });
   const vers = num(cur.versicherung, 'd-vers'), grund = num(cur.grundsteuer, 'd-grund'), ausl = num(cur.auslagen, 'd-ausl');
   const hint = h('textarea', { rows: 3, maxlength: 300, style: 'width:100%', id: 'd-hint' }, cur.hinweis || '');
+  const datum = h('input', { type: 'date', id: 'd-datum', value: cur.datum || '' });
   const field = (label, input, unit, text) => h('div', { class: 'field' }, h('label', null, label, text ? hilfe(text) : null),
     unit ? h('div', { class: 'inputunit' }, input, h('span', null, unit)) : input);
   const body = h('div', { class: 'form' },
+    field('Abgelesen am', datum, null, 'Der Tag, an dem die Zähler abgelesen wurden. Das Programm trägt beim ersten neuen Stand den heutigen Tag ein; hier lässt er sich ändern.'),
     field('Versicherung', vers, '€', 'Anteil an einer Versicherung, die der Verein für den Garten bezahlt hat (z. B. Lauben- oder Glasversicherung) und weiterberechnet.'),
     field('Grundsteuer', grund, '€', 'Anteilige Grundsteuer, die der Verpächter dem Verein berechnet und die auf die Gärten umgelegt wird.'),
     field('Sonstige Auslagen', ausl, '€', 'Weitere Beträge nur für diesen Garten, z. B. ein vom Verein bezahlter Zählertausch. Am besten im Hinweis darunter erläutern.'),
@@ -147,9 +152,10 @@ async function detailsDialog(tr, p) {
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
       const vs = [vers, grund, ausl].map((i) => parseNum(i.value));
       if (vs.some((v) => Number.isNaN(v) || (v !== null && v < 0))) { toast('Bitte nur Beträge ab 0 eingeben.', 'err'); return false; }
-      const body2 = { ...cur, versicherung: vs[0] ?? 0, grundsteuer: vs[1] ?? 0, auslagen: vs[2] ?? 0, hinweis: hint.value.trim() };
+      const body2 = { ...cur, versicherung: vs[0] ?? 0, grundsteuer: vs[1] ?? 0, auslagen: vs[2] ?? 0, hinweis: hint.value.trim(), datum: datum.value };
       try {
         const res = await api('PUT', `/api/ablesung/${p.id}?year=${S.year}`, body2);
+        body2.datum = res.datum || '';
         S.state.ablesungen[p.id] = body2;
         S.state.results[p.id] = res;
         updateCalc(tr, res);
@@ -382,6 +388,8 @@ function viewSchnell() {
           fld('Stand Vorjahr', inp('stromVJ', a.stromVJ), 'kWh'), fld('Stand aktuell', inp('stromAkt', a.stromAkt), 'kWh'),
           h('div', { class: 'field' }, h('label', null, 'Verbrauch'), h('div', { class: 'calc c-sv qv' }))),
         h('fieldset', null, h('legend', null, 'Sonstiges'), fld('Arbeitsstunden', inp('stunden', a.stunden, 'small'), 'h'),
+          fld('Abgelesen am', h('input', { type: 'date', style: 'width:11em', 'data-f': 'datum', value: a.datum || '', disabled: ro, onchange: () => saveRow(card, p),
+            title: 'Trägt das Programm beim ersten neuen Stand selbst ein; hier lässt es sich ändern' })),
           fld('Abschlag', inp('abschlag', a.abschlag || null, 'small'), '€'),
           h('button', { class: 'btn small detailbtn' + (hasDetails(a) ? ' primary' : ''), disabled: ro, onclick: () => detailsDialog(card, p) }, 'Weitere Angaben'))),
       h('div', { class: 'qfoot' },

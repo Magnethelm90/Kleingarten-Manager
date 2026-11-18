@@ -112,6 +112,10 @@ func ablesungErgaenzen(cur, in Ablesung) (Ablesung, bool) {
 		w := *in.StromWechsel
 		cur.StromWechsel, neu = &w, true
 	}
+	// Ablesedatum: fehlt es hier, kommt es vom anderen Rechner mit (allein zählt es nicht als neue Angabe)
+	if cur.Datum == "" && in.Datum != "" {
+		cur.Datum = in.Datum
+	}
 	return cur, neu
 }
 

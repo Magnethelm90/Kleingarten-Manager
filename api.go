@@ -719,6 +719,11 @@ func cleanAblesung(in Ablesung) (Ablesung, error) {
 		}
 	}
 	in.Hinweis = trim(in.Hinweis, 300)
+	if in.Datum != "" {
+		if _, err := parseDate(in.Datum); err != nil {
+			return in, bad("Das Ablesedatum ist ungültig")
+		}
+	}
 	var err error
 	if in.WasserWechsel, err = cleanZaehlerWechsel(in.WasserWechsel); err != nil {
 		return in, err
@@ -787,6 +792,7 @@ func (a *App) handleAblesung(w http.ResponseWriter, r *http.Request) {
 	}
 	j := a.st.ensureYear(year)
 	in.Schluss = j.Ablesungen[id].Schluss // wird nur über den Pächterwechsel gesetzt
+	ablesedatumSetzen(&in, time.Now())
 	j.Ablesungen[id] = in
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
@@ -800,6 +806,14 @@ func (a *App) handleAblesung(w http.ResponseWriter, r *http.Request) {
 type ablesungResp struct {
 	Result
 	Hinweise []string `json:"hinweise"`
+	Datum    string   `json:"datum,omitempty"` // Ablesedatum, wie gespeichert
+}
+
+// ablesedatumSetzen: Sobald ein aktueller Stand da ist und noch kein Datum, gilt heute als Ablesetag.
+func ablesedatumSetzen(a *Ablesung, heute time.Time) {
+	if a.Datum == "" && (a.WasserAkt != nil || a.StromAkt != nil) {
+		a.Datum = heute.Format("2006-01-02")
+	}
 }
 
 func (s *Store) ablesungResultLocked(year int, id string) ablesungResp {
@@ -812,7 +826,7 @@ func (s *Store) ablesungResultLocked(year int, id string) ablesungResp {
 	if h == nil {
 		h = []string{}
 	}
-	return ablesungResp{Result: results[id], Hinweise: h}
+	return ablesungResp{Result: results[id], Hinweise: h, Datum: v.Ablesungen[id].Datum}
 }
 
 // handleZaehler ändert nur die Zählernummern eines Pächters (auch für den Vorstand ohne Admin-Rechte).

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Ablesung mit dem Handy: Das Programm läuft nur auf dem Vereinsrechner, nicht im Netz. Für den Rundgang gibt es
@@ -160,6 +161,7 @@ func (a *App) handleAblesungHandyImport(w http.ResponseWriter, r *http.Request) 
 			pruefe("Strom", x.Strom, ab.StromVJ, &ab.StromAkt, ab.StromAkt)
 		}
 		if geaendert {
+			ablesedatumSetzen(&ab, time.Now())
 			j.Ablesungen[x.ID] = ab
 			geaenderte = append(geaenderte, x.ID)
 			b.Uebernommen++

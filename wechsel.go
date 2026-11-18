@@ -206,6 +206,7 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ab.WasserAkt, ab.StromAkt, ab.Stunden, ab.Schluss = in.WasserStand, in.StromStand, in.Stunden, in.Datum
+	ab.Datum = in.Datum // abgelesen bei der Übergabe
 	if _, neg := verbrauch(ab.WasserVJ, ab.WasserAkt, ab.WasserWechsel); neg {
 		writeErr(w, bad("Der Wasserzählerstand bei der Übergabe ist kleiner als der Vorjahresstand"))
 		return

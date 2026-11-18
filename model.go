@@ -123,6 +123,9 @@ type Ablesung struct {
 	Auslagen     float64  `json:"auslagen"`
 	Abschlag     float64  `json:"abschlag"`
 	Hinweis      string   `json:"hinweis"`
+	// Datum: an diesem Tag wurde abgelesen (JJJJ-MM-TT). Setzt das Programm beim ersten aktuellen Stand selbst,
+	// lässt sich von Hand ändern; spätere Korrekturen der Stände ändern es nicht.
+	Datum string `json:"datum,omitempty"`
 
 	// Wurde der Zähler unterjährig getauscht, wird der Verbrauch aus dem Endstand
 	// des alten und dem Anfangsstand des neuen Zählers zusammengerechnet, statt
