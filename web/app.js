@@ -443,7 +443,9 @@ const NAV = [
       { admin: 'sepa', label: 'Lastschrift', nur: (st) => st.sepaAktiv }] }] },
   { gruppe: 'Verein', items: [
     { tab: 'lageplan', label: 'Lageplan', ic: 'karte' },
-    { tab: 'termine', label: 'Termine', ic: 'kalender' },
+    { tab: 'termine', label: 'Termine & Post', ic: 'kalender', reiter: [
+      { tab: 'termine', label: 'Termine' },
+      { admin: 'rundschreiben', modul: 'rundschreiben', label: 'Rundschreiben' }] },
     { admin: 'paechter', label: 'Pächter', ic: 'personen', tour: 'admin', reiter: [
       { admin: 'paechter', label: 'Alle Pächter' },
       { admin: 'warteliste', modul: 'warteliste', label: 'Warteliste' },
@@ -452,7 +454,6 @@ const NAV = [
     { admin: 'maengel', label: 'Anlage', ic: 'warnung', reiter: [
       { admin: 'maengel', label: 'Mängel & Lauben' },
       { admin: 'inventar', modul: 'inventar', label: 'Schlüssel & Geräte' }] },
-    { admin: 'rundschreiben', modul: 'rundschreiben', label: 'Rundschreiben', ic: 'brief' },
     { admin: 'verwaltung', label: 'Vereinsverwaltung', ic: 'akte' }] },
   { gruppe: 'Kasse & Berichte', items: [
     { admin: 'kassenbericht', label: 'Kasse', ic: 'kasse', reiter: [
@@ -465,9 +466,8 @@ const NAV = [
   { gruppe: 'Einstellungen', items: [
     { admin: 'einstellungen', label: 'Einstellungen', ic: 'regler', reiter: [
       { admin: 'einstellungen', label: 'Preise & Einstellungen' },
-      { admin: 'daten', label: 'Import, Export, Sicherung' }] },
-    { admin: 'sicherheit', label: 'Sicherheit & Datenschutz', ic: 'sicherung', reiter: [
-      { admin: 'sicherheit', label: 'Passwort' },
+      { admin: 'daten', label: 'Import, Export, Sicherung' },
+      { admin: 'sicherheit', label: 'Passwort & Sicherheit' },
       { admin: 'datenschutz', label: 'Datenschutz' },
       { admin: 'protokoll', label: 'Änderungsprotokoll' }] }] },
 ];

@@ -283,6 +283,7 @@ function viewTermine() {
   const naechster = imJahr.find((t) => t.datum >= heute);
   return h('div', null,
     h('h2', null, `Vereinstermine ${jahr}`, ' ', seitenHilfe('termine')),
+    reiterKopf(),
     h('p', { class: 'hint' }, 'Der Jahresplaner des Vereins: Arbeitseinsätze, Versammlungen, Ablesung, Feste. Als Aushang drucken oder als Kalenderdatei ins Handy übernehmen.'),
     h('div', { class: 'toolbar' },
       h('label', null, 'Jahr'), jahrSel,

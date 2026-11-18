@@ -4,7 +4,7 @@
 // Jede Anleitung: Titel, Stichworte für die Suche, Schritte, Sprungziel (wie bei den Cockpit-Zielen).
 const ANLEITUNGEN = [
   { titel: 'Zum ersten Mal starten', stichworte: 'anfang einrichten erste schritte neu verein', ziel: 'admin:einstellungen', knopf: 'Zu den Einstellungen',
-    schritte: ['Öffne »Einstellungen« und trage Vereinsname, Bank und Preise ein.', 'Unter »Bereiche« schaltest du ab, was dein Verein nicht braucht.', 'Lege dann deine Pächter an (Menü »Pächter«).', 'Setze ein Passwort unter »Sicherheit & Datenschutz«.'] },
+    schritte: ['Öffne »Einstellungen« und trage Vereinsname, Bank und Preise ein.', 'Unter »Bereiche« schaltest du ab, was dein Verein nicht braucht.', 'Lege dann deine Pächter an (Menü »Pächter«).', 'Setze ein Passwort unter »Einstellungen → Passwort & Sicherheit«.'] },
   { titel: 'Einen Pächter anlegen', stichworte: 'pächter neu anlegen mitglied garten hinzufügen', ziel: 'admin:paechter', knopf: 'Zu den Pächtern',
     schritte: ['Öffne »Pächter« und drücke »+ Pächter«.', 'Trage Mitgliedsnummer, Name, Gartennummer und Größe ein.', 'Hat der Pächter eine E-Mail-Adresse, steht der Versand automatisch auf E-Mail, sonst auf Post.', 'Drücke »Speichern«. Viele Pächter auf einmal geht über »Import«.'] },
   { titel: 'Zählerstände eintragen', stichworte: 'zähler wasser strom ablesen ablesung stand verbrauch', ziel: 'tab:eingabe', knopf: 'Zu den Zählerständen',
@@ -30,7 +30,7 @@ const ANLEITUNGEN = [
   { titel: 'Zwei Rechner im Verein benutzen', stichworte: 'zweiter rechner abgleich mehrplatz usb kassenwart vorsitzender', ziel: 'admin:daten', knopf: 'Zum Abgleich',
     schritte: ['Es darf immer nur ein Rechner mit dem Datenordner arbeiten.', 'Für den zweiten Rechner: »Abgleich-Datei« auf einem Stick erstellen.', 'Auf dem anderen Rechner liest du sie ein. Du siehst vorher, was neu dazukommt.', 'Es kommen nur neue Einträge dazu, nichts wird überschrieben.'] },
   { titel: 'Datenschutz: Auskunft und Löschen', stichworte: 'dsgvo datenschutz auskunft löschen person ausgeschieden einwilligung', ziel: 'admin:datenschutz', knopf: 'Zum Datenschutz',
-    schritte: ['Auskunft: Beim Pächter im Menü »Mehr« → »Mappe …« → »Auskunft nach DSGVO«.', 'Löschen: Unter »Sicherheit & Datenschutz → Datenschutz« siehst du, wer gelöscht werden darf.', 'Geburtstage werden nur mit Einverständnis gespeichert.', 'Was das Programm über Personen speichert, steht in der Datei DATENSCHUTZ.md.'] },
+    schritte: ['Auskunft: Beim Pächter im Menü »Mehr« → »Mappe …« → »Auskunft nach DSGVO«.', 'Löschen: Unter »Einstellungen → Datenschutz« siehst du, wer gelöscht werden darf.', 'Geburtstage werden nur mit Einverständnis gespeichert.', 'Was das Programm über Personen speichert, steht in der Datei DATENSCHUTZ.md.'] },
 ];
 
 async function anleitungDialog() {

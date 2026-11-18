@@ -22,7 +22,7 @@ const TOUR = [
     text: 'Setze den Haken, sobald eine Rechnung bezahlt ist (Teilzahlungen gehen über »Details«). Für überfällige Rechnungen erzeugst du hier die Mahnung, es wird nie automatisch gemahnt.',
     ziel: 'zahlungen', gehe: () => { S.tab = 'zahlungen'; } },
   { titel: '5. Jahresabschluss & Sicherheit',
-    text: 'Am Jahresende schließt »Jahreswechsel« das Jahr ab, mit Checkliste. Deine Daten werden automatisch gesichert; unter »Sicherheit & Datenschutz« schützt du die Verwaltung mit einem Passwort. Das Suchfeld oben findet jeden Pächter, und diese Einführung erreichst du jederzeit über den runden »?«-Knopf oben rechts.',
+    text: 'Am Jahresende schließt »Jahreswechsel« das Jahr ab, mit Checkliste. Deine Daten werden automatisch gesichert; unter »Einstellungen → Passwort & Sicherheit« schützt du die Verwaltung mit einem Passwort. Das Suchfeld oben findet jeden Pächter, und diese Einführung erreichst du jederzeit über den runden »?«-Knopf oben rechts.',
     ziel: 'hilfe', gehe: () => { adminTabWaehlen('jahreswechsel'); } },
 ];
 
