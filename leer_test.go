@@ -115,7 +115,8 @@ func TestBetragInWortenMillionen(t *testing.T) {
 	}
 }
 
-// Wird im abgeschlossenen Jahr nachgebucht, meldet das Cockpit den nicht mehr passenden Anfangsbestand.
+// Nachbuchung im abgeschlossenen Jahr: der automatisch übernommene Anfangsbestand folgt. Von Hand gesetzt bleibt er
+// stehen, dann meldet das Cockpit die Abweichung.
 func TestKassenUebergangImCockpit(t *testing.T) {
 	a, h := newTestApp(t)
 	a.st.mu.Lock()
@@ -134,14 +135,25 @@ func TestKassenUebergangImCockpit(t *testing.T) {
 		}
 		return false
 	}
-	if hat() {
-		t.Fatal("direkt nach dem Jahreswechsel passt alles")
+	anfang := func() float64 {
+		a.st.mu.Lock()
+		defer a.st.mu.Unlock()
+		return *a.st.d.Jahre[yearKey(vorher+1)].Anfangsbestand
 	}
+	start := anfang()
 	q := "?year=" + strconv.Itoa(vorher)
 	if rec := do(h, "POST", "/api/admin/ausgaben"+q, map[string]any{"datum": strconv.Itoa(vorher) + "-12-30", "beschreibung": "späte Rechnung", "betrag": 40}); rec.Code != 200 {
 		t.Fatalf("Ausgabe: %d %s", rec.Code, rec.Body.String())
 	}
-	if !hat() {
-		t.Fatal("Nachbuchung im alten Jahr muss gemeldet werden")
+	if got := anfang(); got != round2(start-40) || hat() {
+		t.Fatalf("Anfangsbestand muss automatisch folgen: %v → %v, Warnung %v", start, got, hat())
+	}
+	// von Hand gesetzt: bleibt stehen, Cockpit warnt bei der nächsten Nachbuchung
+	if rec := do(h, "PUT", "/api/admin/anfangsbestand?year="+strconv.Itoa(vorher+1), map[string]any{"betrag": 500}); rec.Code != 200 {
+		t.Fatalf("Anfangsbestand: %d %s", rec.Code, rec.Body.String())
+	}
+	do(h, "POST", "/api/admin/ausgaben"+q, map[string]any{"datum": strconv.Itoa(vorher) + "-12-31", "beschreibung": "noch eine", "betrag": 10})
+	if anfang() != 500 || !hat() {
+		t.Fatalf("von Hand gesetzter Anfangsbestand darf nicht überschrieben werden (%v), Cockpit muss warnen (%v)", anfang(), hat())
 	}
 }

@@ -155,6 +155,9 @@ type Jahr struct {
 	// Wird beim Jahreswechsel automatisch aus dem Kassenbestand des Vorjahres
 	// vorbelegt, kann aber jederzeit von Hand angepasst werden.
 	Anfangsbestand *float64 `json:"anfangsbestand,omitempty"`
+	// AnfangAutomatisch: der Anfangsbestand stammt aus dem Jahreswechsel und folgt dem Endbestand des Vorjahres,
+	// wenn dort nachgebucht wird. Von Hand geändert = false (dann warnt nur das Cockpit bei Abweichung).
+	AnfangAutomatisch bool `json:"anfangAutomatisch,omitempty"`
 	// Barkasse: Kassenbuch für Bargeld (siehe barkasse.go); BarAnfang leer = Endbestand des Vorjahres
 	Barkasse    []Barbuchung `json:"barkasse,omitempty"`
 	BarAnfang   *float64     `json:"barAnfang,omitempty"`

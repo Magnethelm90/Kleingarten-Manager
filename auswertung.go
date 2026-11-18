@@ -598,6 +598,8 @@ type kassenbericht struct {
 	// (z. B. weil eine Vorjahresrechnung erst nach dem Jahreswechsel bezahlt wurde), bietet der
 	// Kassenbericht an, den Anfangsbestand anzugleichen. Leer, wenn es kein Vorjahr gibt.
 	VorjahrEndbestand *float64 `json:"vorjahrEndbestand,omitempty"`
+	// AnfangAutomatisch: der Anfangsbestand folgt dem Endbestand des Vorjahres (siehe anfangNachfuehrenLocked)
+	AnfangAutomatisch bool `json:"anfangAutomatisch"`
 
 	// Wechsel: Pächter, die ausgeschieden sind und für die noch etwas offen ist (Schlussrechnung, Zahlung oder
 	// auszuzahlendes Guthaben). So geht beim Pächterwechsel nichts in der Kasse verloren.
@@ -668,6 +670,7 @@ func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
 		if j.Anfangsbestand != nil {
 			k.Anfangsbestand = *j.Anfangsbestand
 		}
+		k.AnfangAutomatisch = j.AnfangAutomatisch
 		k.Ausgaben = append(k.Ausgaben, j.Ausgaben...)
 	}
 	sort.SliceStable(k.Ausgaben, func(i, j int) bool { return k.Ausgaben[i].Datum < k.Ausgaben[j].Datum })
@@ -803,9 +806,33 @@ func (a *App) handleVersorger(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAnfangsbestand setzt den Kassenbestand zu Jahresbeginn von Hand.
+// anfangNachfuehrenLocked: Wird in einem abgeschlossenen Jahr nachgebucht (späte Zahlung, nachgereichte Ausgabe),
+// folgt der automatisch übernommene Anfangsbestand des Folgejahres dem neuen Endbestand. Läuft vor jedem Speichern.
+// Der Aufrufer hält s.mu.
+func (s *Store) anfangNachfuehrenLocked() {
+	ys := s.years()
+	sort.Ints(ys)
+	for _, y := range ys {
+		j, vj := s.d.Jahre[yearKey(y)], s.d.Jahre[yearKey(y-1)]
+		if j == nil || vj == nil || !vj.Abgeschlossen || !j.AnfangAutomatisch || j.Anfangsbestand == nil {
+			continue
+		}
+		v, ok := s.viewLocked(y - 1)
+		if !ok {
+			continue
+		}
+		ende := round2(s.kassenberichtLocked(v).Kassenbestand)
+		if alt := *j.Anfangsbestand; absf(ende-alt) >= 0.005 {
+			j.Anfangsbestand = &ende
+			s.audit("Anfangsbestand %d an den Endbestand %d angepasst: %s → %s (Nachbuchung im abgeschlossenen Jahr)", y, y-1, fmtEUR(alt), fmtEUR(ende))
+		}
+	}
+}
+
 func (a *App) handleAnfangsbestand(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Betrag *float64 `json:"betrag"`
+		Betrag      *float64 `json:"betrag"`
+		Automatisch bool     `json:"automatisch"` // Angleichen ans Vorjahr: danach wieder automatisch folgen
 	}
 	if err := readJSON(w, r, &in); err != nil {
 		writeErr(w, err)
@@ -824,6 +851,7 @@ func (a *App) handleAnfangsbestand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	j.Anfangsbestand = in.Betrag
+	j.AnfangAutomatisch = in.Automatisch // von Hand gesetzt: folgt dem Vorjahr nicht mehr automatisch
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return

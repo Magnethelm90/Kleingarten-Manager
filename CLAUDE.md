@@ -137,6 +137,14 @@
   Abgleich: Ablesungen feldweise ergänzen (`ablesungErgaenzen`, nie Abschlag/Schluss), Papierkorb-IDs nicht zurückholen
   (`papierkorbOriginalIDsLocked`), Vorschau zählt wie Übernahme. Zahlen: `fmtNum`/`nf2`/`nfFlex`/`nfIn` zeigen nie »-0«.
   Cockpit `kassenUebergangAufgabeLocked` (Anfangsbestand ≠ Vorjahres-Endbestand). Browser-Formulartest: scratchpad formular.js.
+- Abgeschlossene Jahre (Nutzer-Entscheidung »Absichern«): Verbrauch eines Jahres wird im Folgejahr bezahlt – Zahlungen
+  zählen im Rechnungsjahr, Nachbuchen in alten Jahren bleibt erlaubt. Jahr.AnfangAutomatisch (beim Jahreswechsel true,
+  von Hand gesetzt false; Knopf »Anfangsbestand auf … setzen« schickt `automatisch: true`): `anfangNachfuehrenLocked`
+  läuft in saveLocked und führt den Anfangsbestand dem Vorjahres-Endbestand nach. Alte Bestände ohne Flag = von Hand.
+  Oberfläche: `altesJahrFreigabe(jahr)` fragt einmal je Jahr vor Ausgaben/Barkasse im alten Jahr.
+- Datenschutz-Prüfung Nov 2026: datenschutz_voll_test.go (endgültig löschen → weder Name noch ID in Bestand/Dateien/
+  Sicherungen), Auskunft + Ämter/Papierkorb/Bankabgleich, Warteliste-Auskunft (GET …/warteliste/{id}/auskunft),
+  Garten-Historie verliert beim Löschen auch die PaechterID.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

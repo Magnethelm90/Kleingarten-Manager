@@ -168,6 +168,7 @@ func (s *Store) saveLocked() error {
 	if err := s.sperrePruefenLocked(); err != nil {
 		return err
 	}
+	s.anfangNachfuehrenLocked()
 	texteBereinigen(reflect.ValueOf(s.d))
 	raw, err := json.MarshalIndent(s.d, "", "  ")
 	if err != nil {

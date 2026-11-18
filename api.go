@@ -1235,7 +1235,7 @@ func (a *App) handleNextYear(w http.ResponseWriter, r *http.Request) {
 	closingView, _ := a.st.viewLocked(cur)
 	anfangsbestand := a.st.kassenberichtLocked(closingView).Kassenbestand
 
-	nj := &Jahr{Ablesungen: map[string]Ablesung{}, Anfangsbestand: &anfangsbestand}
+	nj := &Jahr{Ablesungen: map[string]Ablesung{}, Anfangsbestand: &anfangsbestand, AnfangAutomatisch: true}
 	// Wer seinen Garten im abgelaufenen Jahr übergeben hat, ist mit der Schlussrechnung fertig abgerechnet
 	// und kommt jetzt in den Papierkorb (wiederherstellbar, Rechnungen bleiben).
 	ausgeschieden := 0

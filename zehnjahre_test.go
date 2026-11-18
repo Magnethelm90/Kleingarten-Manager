@@ -104,7 +104,7 @@ func TestZehnJahreBetrieb(t *testing.T) {
 		do(h, "PUT", "/api/payment/"+st.Archive[0].ID, paymentReq{BezahltAm: fmt.Sprintf("%d-04-01", y+1)})
 	}
 
-	// alle Jahre lesbar, abgeschlossene schreibgeschützt, Anfangsbestand = Kassenbestand beim Wechsel
+	// alle Jahre lesbar, abgeschlossene schreibgeschützt, Anfangsbestand = Endbestand des Vorjahres
 	for y := start; y < start+jahre; y++ {
 		q := fmt.Sprintf("?year=%d", y)
 		st := decode[stateResp](t, do(h, "GET", "/api/state"+q, nil))
@@ -112,9 +112,14 @@ func TestZehnJahreBetrieb(t *testing.T) {
 			t.Errorf("%d: readOnly=%v, %d Rechnungen", y, st.ReadOnly, len(st.Archive))
 		}
 		if y > start {
+			// Der Anfangsbestand folgt dem Endbestand des Vorjahres – auch nach der verspäteten Zahlung
 			k := decode[kasse](t, do(h, "GET", "/api/admin/kassenbericht"+q, nil))
-			if math.Abs(k.Anfangsbestand-kassenbestandBeimWechsel[y-1]) > 0.005 {
-				t.Errorf("%d: Anfangsbestand %.2f, Kassenbestand Ende %d war %.2f", y, k.Anfangsbestand, y-1, kassenbestandBeimWechsel[y-1])
+			vk := decode[kasse](t, do(h, "GET", fmt.Sprintf("/api/admin/kassenbericht?year=%d", y-1), nil))
+			if math.Abs(k.Anfangsbestand-vk.Kassenbestand) > 0.005 {
+				t.Errorf("%d: Anfangsbestand %.2f, Kassenbestand Ende %d ist %.2f", y, k.Anfangsbestand, y-1, vk.Kassenbestand)
+			}
+			if vk.Kassenbestand <= kassenbestandBeimWechsel[y-1] {
+				t.Errorf("%d: die verspätete Zahlung fehlt im Endbestand (%.2f, beim Wechsel %.2f)", y-1, vk.Kassenbestand, kassenbestandBeimWechsel[y-1])
 			}
 		}
 	}
@@ -164,8 +169,8 @@ func TestZehnJahreBetrieb(t *testing.T) {
 	}
 }
 
-// Wird eine Vorjahresrechnung erst nach dem Jahreswechsel bezahlt, steigt der Kassenbestand des
-// Vorjahres, der Anfangsbestand des neuen Jahres aber nicht. Der Kassenbericht muss das zeigen.
+// Wird eine Vorjahresrechnung erst nach dem Jahreswechsel bezahlt, steigt der Kassenbestand des Vorjahres – und der
+// automatisch übernommene Anfangsbestand des neuen Jahres folgt. Von Hand gesetzt bleibt er stehen.
 func TestAnfangsbestandNachSpaeterZahlung(t *testing.T) {
 	_, h := newTestApp(t)
 	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Spät", "gartengroesse": 300}))
@@ -179,12 +184,15 @@ func TestAnfangsbestandNachSpaeterZahlung(t *testing.T) {
 	st := decode[stateResp](t, do(h, "GET", "/api/state?year=2025", nil))
 	do(h, "PUT", "/api/payment/"+st.Archive[0].ID, paymentReq{BezahltAm: "2026-03-01"})
 	k = decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2026", nil))
-	if k.VorjahrEndbestand == nil || math.Abs(*k.VorjahrEndbestand-k.Anfangsbestand-st.Archive[0].Gesamt) > 0.005 {
+	if k.VorjahrEndbestand == nil || math.Abs(*k.VorjahrEndbestand-k.Anfangsbestand) > 0.005 || k.Anfangsbestand < st.Archive[0].Gesamt-0.005 {
 		t.Fatalf("nach später Zahlung: Anfangsbestand %v, Vorjahr %v, Rechnung %v", k.Anfangsbestand, k.VorjahrEndbestand, st.Archive[0].Gesamt)
 	}
-	k = decode[kassenbericht](t, do(h, "PUT", "/api/admin/anfangsbestand?year=2026", map[string]any{"betrag": *k.VorjahrEndbestand}))
-	if *k.VorjahrEndbestand != k.Anfangsbestand {
-		t.Errorf("nach dem Angleichen: %v / %v", k.Anfangsbestand, *k.VorjahrEndbestand)
+	// von Hand gesetzt: bleibt, auch wenn sich das Vorjahr danach noch ändert
+	k = decode[kassenbericht](t, do(h, "PUT", "/api/admin/anfangsbestand?year=2026", map[string]any{"betrag": 1}))
+	do(h, "PUT", "/api/payment/"+st.Archive[0].ID, paymentReq{BezahltAm: ""})
+	k = decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2026", nil))
+	if k.Anfangsbestand != 1 || *k.VorjahrEndbestand == k.Anfangsbestand {
+		t.Errorf("von Hand gesetzt: %v / Vorjahr %v", k.Anfangsbestand, *k.VorjahrEndbestand)
 	}
 	if k := decode[kassenbericht](t, do(h, "GET", "/api/admin/kassenbericht?year=2025", nil)); k.VorjahrEndbestand != nil {
 		t.Error("erstes Jahr hat kein Vorjahr")

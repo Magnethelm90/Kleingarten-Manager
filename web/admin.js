@@ -726,7 +726,17 @@ async function loadKasseVerlauf() {
 const AUSGABEN_KATEGORIEN = ['Instandhaltung', 'Anschaffung', 'Verwaltung', 'Versicherung & Gebühren', 'Sonstiges'];
 
 // Neue Ausgaben nacheinander erfassen: »Speichern und nächste« öffnet den Dialog erneut, Datum und Kategorie bleiben stehen.
+// Nachbuchen in einem abgeschlossenen Jahr: einmal nachfragen (je Jahr bis zum Neuladen). Späte Zahlungen und
+// nachgereichte Rechnungen sind normal; der Anfangsbestand des Folgejahres passt sich automatisch an.
+async function altesJahrFreigabe(jahr) {
+  if (!S.state || jahr >= S.state.currentYear || S.altesJahrFrei === jahr) return true;
+  const ok = await confirmBox(`Das Jahr ${jahr} ist schon abgeschlossen. Trotzdem hier nachbuchen? Der Kassenbestand Ende ${jahr} ändert sich dadurch. Der Anfangsbestand ${jahr + 1} passt sich automatisch an, wenn ihn niemand von Hand geändert hat.`, 'Nachbuchen');
+  if (ok) S.altesJahrFrei = jahr;
+  return ok;
+}
+
 async function ausgabeDialog(a) {
+  if (!(await altesJahrFreigabe(S.kasseYear))) return false;
   let vorlage = null, r;
   if (!a) { try { ausgabeDialogEinmal.vorlagen = await api('GET', '/api/admin/kassenvorlagen'); } catch (e) { ausgabeDialogEinmal.vorlagen = []; } }
   do {
@@ -854,13 +864,14 @@ function anfangsbestandHinweis(k, pruefMode) {
   if (pruefMode || vj < 0) return h('div', { class: 'banner warn' }, text);
   return h('div', { class: 'banner warn' }, text, ' ',
     h('button', { class: 'btn small', onclick: async () => {
-      try { S.kasse = await api('PUT', `/api/admin/anfangsbestand?year=${k.jahr}`, { betrag: vj }); S.kasseVerlauf = null; S.dashKasse = null; toast(`Anfangsbestand auf ${eur(vj)} gesetzt`, 'ok'); render(); } catch (e) { handleErr(e); }
+      try { S.kasse = await api('PUT', `/api/admin/anfangsbestand?year=${k.jahr}`, { betrag: vj, automatisch: true }); S.kasseVerlauf = null; S.dashKasse = null; toast(`Anfangsbestand auf ${eur(vj)} gesetzt`, 'ok'); render(); } catch (e) { handleErr(e); }
     } }, `Anfangsbestand auf ${eur(vj)} setzen`));
 }
 
 // ---- Barkasse: Kassenbuch für Bargeld mit fortlaufenden Belegnummern
 
 async function barbuchungDialog(b) {
+  if (!(await altesJahrFreigabe(S.kasseYear))) return false;
   let vorlage = null, r, gespeichert = false;
   do {
     r = await barbuchungDialogEinmal(b, vorlage);
@@ -924,6 +935,7 @@ function barkasseKarte(pruefMode) {
     if (ok) nachher(Promise.resolve(true));
   };
   const loeschen = (b) => ({ label: 'Löschen', gefahr: true, aktion: async () => {
+    if (!(await altesJahrFreigabe(jahr))) return;
     if (!(await confirmBox(`Beleg ${b.belegNr} »${b.text}« löschen? Die Belegnummer wird nicht neu vergeben.`, 'Löschen', true))) return;
     try { S.barkasse = await api('DELETE', `/api/admin/barkasse/${b.id}?year=${jahr}`); nachher(Promise.resolve(true)); } catch (e) { handleErr(e); }
   } });
@@ -1139,7 +1151,7 @@ function adminKassenbericht(pruefMode) {
         h('label', null, 'Anfangsbestand der Kasse'),
         pruefMode ? h('b', null, eur(k.anfangsbestand)) : h('div', { class: 'inputunit' }, anfInput, h('span', null, '€')),
         pruefMode ? null : h('button', { class: 'btn small primary', onclick: saveAnfang }, 'Speichern'),
-        pruefMode ? null : h('span', { class: 'hint' }, 'wird beim Jahreswechsel automatisch aus dem Kassenbestand des Vorjahres übernommen, ist hier aber jederzeit änderbar'))),
+        pruefMode ? null : h('span', { class: 'hint' }, k.anfangAutomatisch ? 'kommt automatisch aus dem Kassenbestand Ende des Vorjahres und passt sich an, wenn dort noch etwas nachgebucht wird. Wer hier von Hand etwas einträgt, schaltet das ab.' : 'von Hand eingetragen – passt sich nicht mehr automatisch an das Vorjahr an'))),
     cards,
     pruefungKarte(),
     barkasseKarte(pruefMode),
