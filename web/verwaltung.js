@@ -922,7 +922,7 @@ function adminVorauszahlung() {
     h('p', { class: 'hint' }, 'Monatliche Vorauszahlungen, die Pächter selbst überweisen (z. B. per Dauerauftrag). Monatsbetrag je Pächter eintragen; eingegangene Zahlungen erkennt der Kontoauszug (Name und Betrag), sonst »+ Zahlung«. Alles wird als Abschlag auf die Jahresrechnung gebucht.'),
     d.vorgemerkt ? h('div', { class: 'banner info' }, `${anz(d.vorgemerkt, 'Zahlung', 'Zahlungen')} für ${jahr} ${d.vorgemerkt === 1 ? 'ist' : 'sind'} vorgemerkt – das Abrechnungsjahr ist im Programm noch nicht angelegt. Sie werden beim Jahreswechsel automatisch gebucht.`) : null,
     h('div', { class: 'toolbar' }, h('label', null, 'Jahr'), jahrSel,
-      h('button', { class: 'btn', onclick: () => { S.tab = 'zahlungen'; render(); }, title: 'Unter »Zahlungen« → »Kontoauszug einlesen«' }, 'Kontoauszug einlesen →'),
+      h('button', { class: 'btn', title: 'CSV-Datei aus dem Online-Banking: Rechnungen, Spenden und Vorauszahlungen werden selbst zugeordnet', onclick: () => kontoauszugEinlesen(() => { S.vz = null; }) }, 'Kontoauszug einlesen'),
       h('div', { class: 'spacer' }), h('span', { class: 'stat' }, `${mitSoll} mit Monatsbetrag · eingegangen ${eur(d.summe)}${d.rueckstand ? ' · Rückstand ' + eur(d.rueckstand) : ''}`)),
     h('div', { class: 'card tablewrap' }, h('table', { class: 'data vz-tab' },
       h('thead', null, h('tr', null, h('th', null, 'Garten'), h('th', null, 'Pächter'), h('th', null, 'je Monat'), ...MONATE.map((m) => h('th', { class: 'vz-zelle' }, m.slice(0, 3))),
@@ -1124,14 +1124,16 @@ const KONTO_STATUS = {
   vorauszahlung: ['ok', 'Vorauszahlung'], spende: ['neu', 'Spende?'], bezahlt: ['', 'schon bezahlt'], doppelt: ['', 'schon übernommen'], offen: ['', 'nicht zugeordnet'],
 };
 
-function kontoauszugEinlesen() {
+// Ein Einlesen für alles: ordnet jede Gutschrift selbst einer Rechnung, einer Spende oder einer Vorauszahlung zu.
+// danach: was die aufrufende Seite neu laden muss (z. B. Spenden- oder Vorauszahlungsliste).
+function kontoauszugEinlesen(danach) {
   const datei = h('input', { type: 'file', accept: '.csv,.txt,text/csv', style: 'display:none' });
   datei.addEventListener('change', async () => {
     if (!datei.files.length) return;
     const fd = new FormData(); fd.append('file', datei.files[0]);
     let v;
     try { v = await api('POST', '/api/admin/kontoauszug', fd, true); } catch (e) { handleErr(e); return; } finally { datei.remove(); }
-    if (await kontoauszugVorschau(v)) await reload();
+    if (await kontoauszugVorschau(v)) { if (typeof danach === 'function') danach(); await reload(); }
   });
   document.body.append(datei);
   datei.click();

@@ -384,7 +384,7 @@ function viewZahlungen() {
     summary,
     h('div', { class: 'toolbar' },
       h('input', { type: 'search', placeholder: 'Suchen (Nummer oder Name)', value: S.payQ, style: 'width:240px', oninput: (e) => { S.payQ = e.target.value; draw(); } }),
-      !st.hasPassword || st.loggedIn ? h('button', { class: 'btn primary', title: 'CSV-Datei aus dem Online-Banking: Eingänge werden den Rechnungen zugeordnet', onclick: kontoauszugEinlesen }, 'Kontoauszug einlesen') : null,
+      !st.hasPassword || st.loggedIn ? h('button', { class: 'btn primary', title: 'CSV-Datei aus dem Online-Banking: Rechnungen, Spenden und Vorauszahlungen werden selbst zugeordnet', onclick: () => kontoauszugEinlesen() }, 'Kontoauszug einlesen') : null,
       h('div', { class: 'spacer' }),
       mehrMenue([
         { label: 'Offene Posten als Excel', aktion: () => { location.href = `/api/export-payments?year=${st.year}&nur=offen`; } },
@@ -554,6 +554,7 @@ function adminSpenden() {
     gemeinnuetzigkeitKarte(d.gemeinnuetzigkeit || {}, !!d.hinweis),
     h('div', { class: 'toolbar', style: 'margin-top:14px' },
       h('button', { class: 'btn primary', onclick: neu }, '+ Spende erfassen'),
+      h('button', { class: 'btn', title: 'CSV-Datei aus dem Online-Banking: Rechnungen, Spenden und Vorauszahlungen werden selbst zugeordnet', onclick: () => kontoauszugEinlesen(() => { S.spenden = null; }) }, 'Kontoauszug einlesen'),
       h('label', null, 'Jahr'), jahrSel,
       h('button', { class: 'btn', disabled: !auswahl.length || !!d.hinweis, title: 'Eine Spende: Einzelbestätigung; mehrere desselben Spenders: Sammelbestätigung', onclick: () => bestaetigungAusstellen(auswahl) },
         auswahl.length > 1 ? `Sammelbestätigung (${auswahl.length})` : 'Bestätigung für Auswahl'),
