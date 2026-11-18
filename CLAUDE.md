@@ -129,6 +129,14 @@
 - Ideen-Paket 13 (Nov 2026): `web/app.js` aufgeteilt (klassische Skripte, ein gemeinsamer globaler Scope; Reihenfolge in index.html): app.js (Hilfsfunktionen, Laden, Grundgerüst), uebersicht, zaehlerstaende, lageplan, zahlungen, verwaltung, admin, paechter, termine, anleitung, start, tabellen. Neue Seiten in die passende Datei, neue Dateien in index.html eintragen. ESLint über die zusammengehängten Dateien laufen lassen. anleitung.js: `ANLEITUNGEN` (14 Schritt-für-Schritt-Texte, Suche über `sucheTrifft`, bei <= 2 Treffern automatisch offen), Zugang: Hilfe-»?« → »Anleitung«; neue häufige Aufgabe = neuer Eintrag. Lasttest `lasttest_test.go` (nur mit `KM_LAST=1`, ~3 min): 150 Pächter x 10 Jahre = 1500 Rechnungen, 4,9 MB Datei, alle Abfragen < 10 ms, Ablesung speichern ~120 ms, Probe ~180 ms. Falle: Jahre vor Settings.Jahr gibt es nicht; Testläufe starten im Startjahr.
 - Menü nochmals zusammengelegt (12 Einträge): »Termine & Post« = Termine | Rundschreiben; »Einstellungen« = Preise & Einstellungen | Import, Export, Sicherung | Passwort & Sicherheit | Datenschutz | Änderungsprotokoll (Eintrag »Sicherheit & Datenschutz« entfällt; adminTab-IDs unverändert). Kein toter Code (deadcode/ESLint sauber).
 - Fehlersuche Nov 2026: `monateDazu(t, n)` (verwaltung.go) für alle Monats-Rechnungen – bleibt am Monatsende, nie `AddDate(0, n, 0)` direkt; Verlängerungen immer vom Ursprungsdatum rechnen. Leere Listen als `[]` liefern, nie nil (leer_test.go prüft alle GET-Routen auf `null`). Selbsttest prüft alle Dateien aus index.html (`programmDateien`). Update-Weg geprüft: Daten aus v1.0 und main laden ohne Verlust/Fehler (Skript: alte Version per `git worktree` bauen, Daten erzeugen, neue Version drauf).
+- Intensive Fehlersuche Nov 2026: apifuzz_test.go (`KM_FUZZ=1 KM_FUZZ_N=60 KM_FUZZ_SEED=n go test -run TestApiZufall`): liest je
+  Handler den readJSON-Eingabetyp aus dem Quelltext, füllt Felder meist mit Werten aus den Beispieldaten (gleicher JSON-Name),
+  passende IDs je Liste; prüft 500/Absturz und Speichern/Laden ohne Verlust (/oeffnen, quit, password, check-update ausgenommen).
+  Fehlerklasse »Server-Felder aus der Eingabe«: beim Anlegen/Ändern NIE Belege, Foto, Stufen, Geprüft, Bereinigt, Geloescht,
+  AusgeschiedenAm, Verschickt, ZuletztGenutzt aus `in` übernehmen – immer leeren bzw. vom alten Eintrag holen.
+  Abgleich: Ablesungen feldweise ergänzen (`ablesungErgaenzen`, nie Abschlag/Schluss), Papierkorb-IDs nicht zurückholen
+  (`papierkorbOriginalIDsLocked`), Vorschau zählt wie Übernahme. Zahlen: `fmtNum`/`nf2`/`nfFlex`/`nfIn` zeigen nie »-0«.
+  Cockpit `kassenUebergangAufgabeLocked` (Anfangsbestand ≠ Vorjahres-Endbestand). Browser-Formulartest: scratchpad formular.js.
 - Offen: nichts Konkretes; auf Nutzer warten (weiterbauen oder testen/mergen).
 
 ## Prüfwerkzeuge (bei größeren Änderungen)
