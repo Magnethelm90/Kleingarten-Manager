@@ -1756,6 +1756,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/archive/{id}", a.handleArchivePDF)
 	mux.HandleFunc("GET /api/archiv-alle", a.handleArchivAlle)
 	mux.HandleFunc("PUT /api/payment/{id}", a.handlePayment)
+	mux.HandleFunc("PUT /api/admin/rechnungen/{id}/ratenplan", a.admin(a.handleRatenplan))
 	mux.HandleFunc("POST /api/admin/rechnungen/{id}/gutschrift", a.admin(a.handleGutschriftNeu))
 	mux.HandleFunc("DELETE /api/admin/rechnungen/{id}/gutschrift", a.admin(a.handleGutschriftLoeschen))
 	mux.HandleFunc("GET /api/admin/rechnungen/{id}/gutschrift", a.admin(a.pdfAnzeigen(a.gutschriftPDF)))

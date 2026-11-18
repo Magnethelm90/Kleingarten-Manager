@@ -83,6 +83,7 @@ func (a *App) handleGutschriftNeu(w http.ResponseWriter, r *http.Request) {
 		b := zuZahlen(x)
 		x.BezahltBetrag = &b
 	}
+	x.Ratenplan = nil // der Betrag ändert sich, der alte Plan passt nicht mehr
 	x.Gutschriften = append(x.Gutschriften, Gutschrift{
 		Nummer: "GS-" + x.Nummer + "-" + strconv.Itoa(len(x.Gutschriften)+1), Datum: in.Datum, Betrag: in.Betrag, Grund: in.Grund,
 	})

@@ -2622,6 +2622,7 @@ async function savePayment(e, patch) {
   Object.assign(e, { bezahltAm: body.bezahltAm, bezahltBetrag: body.bezahltAm ? body.bezahltBetrag : null, notiz: body.notiz });
   // volle Zahlung: Betrag nicht separat führen
   if (e.bezahltBetrag != null && Math.round(e.bezahltBetrag * 100) === Math.round(payTotal(e) * 100)) e.bezahltBetrag = null;
+  if (e.ratenplan && e.ratenplan.length) e.faellig = ratenFaellig(e);
   if (e.bezahltAm && payOpen(e) < -0.004) toast(`Hinweis: ${eur(-payOpen(e))} mehr als der Rechnungsbetrag eingetragen.`, 'ok');
   // war das die letzte offene Rechnung des Jahres?
   const st = S.state, forderungen = (st.archive || []).filter((x) => x.status === 'gueltig' && x.gesamt > 0);
@@ -2681,6 +2682,67 @@ async function gutschriftDialog(e) {
   ]);
 }
 
+// Ratenplan: gleiche Rechnung, aber in Teilbeträgen. Die Zahlungen laufen wie immer über »Zahlung vermerken«.
+function ratenFaellig(e) {
+  const rs = e.ratenplan || [];
+  if (!rs.length) return e.faellig;
+  const gezahlt = payPaid(e);
+  let summe = 0;
+  for (const r of rs) { summe += r.betrag; if (summe > gezahlt + 0.005) return r.faellig; }
+  return rs[rs.length - 1].faellig;
+}
+function monatPlus(iso, n) {
+  const [j, m, t] = iso.split('-').map(Number);
+  const d = new Date(j, m - 1 + n, 1);
+  const letzter = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(t, letzter));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+async function ratenDialog(e) {
+  const total = Math.round(payTotal(e) * 100) / 100;
+  let raten = (e.ratenplan || []).map((r) => ({ ...r }));
+  const anzahl = h('select', null, ...[2, 3, 4, 5, 6, 8, 10, 12].map((n) => h('option', { value: n, selected: n === (raten.length || 3) }, `${n} Raten`)));
+  const start = h('input', { type: 'date', value: raten.length ? raten[0].faellig : isoInTagen(30) });
+  const liste = h('div', { class: 'form' });
+  const summe = h('p', { class: 'hint' });
+  const pruefe = () => {
+    const s = Math.round(raten.reduce((a, r) => a + (Number.isFinite(r.betrag) ? r.betrag : 0), 0) * 100) / 100;
+    summe.textContent = Math.abs(s - total) < 0.005 ? `Zusammen ${eur(s)}. Das passt zur Rechnung.` : `Zusammen ${eur(s)}, die Rechnung lautet aber auf ${eur(total)}. Bitte anpassen.`;
+    summe.className = Math.abs(s - total) < 0.005 ? 'hint' : 'hint err';
+  };
+  const zeichne = () => {
+    liste.replaceChildren(...raten.map((r, i) => {
+      const d = h('input', { type: 'date', value: r.faellig, onchange: (ev) => { r.faellig = ev.target.value; } });
+      const b = h('input', { type: 'text', inputmode: 'decimal', value: numIn(r.betrag), style: 'width:110px', oninput: (ev) => { const v = parseNum(ev.target.value); r.betrag = v === null || Number.isNaN(v) ? NaN : v; pruefe(); } });
+      return h('div', { class: 'field' }, h('label', null, `Rate ${i + 1}`), h('div', { class: 'inputunit' }, d, b, h('span', null, '€')));
+    }));
+    pruefe();
+  };
+  const erzeuge = () => {
+    const n = Number(anzahl.value);
+    if (!start.value) { toast('Bitte das Datum der ersten Rate angeben.', 'err'); return; }
+    const cent = Math.round(total * 100), basis = Math.floor(cent / n);
+    raten = Array.from({ length: n }, (_, i) => ({ faellig: monatPlus(start.value, i), betrag: (i === n - 1 ? cent - basis * (n - 1) : basis) / 100 }));
+    zeichne();
+  };
+  anzahl.onchange = erzeuge; start.onchange = erzeuge;
+  if (raten.length) zeichne(); else erzeuge();
+  const body = h('div', { class: 'form' },
+    h('p', null, `${e.mitgliedsnr} – ${e.name}: Rechnungsbetrag ${eur(total)}. Die Raten sind je einen Monat auseinander. Du kannst jedes Datum und jeden Betrag ändern.`),
+    h('div', { class: 'field' }, h('label', null, 'Wie viele Raten?'), anzahl),
+    h('div', { class: 'field' }, h('label', null, 'Erste Rate am'), start),
+    liste, summe,
+    h('p', { class: 'hint' }, 'Gezahlt wird wie immer unter »Zahlung vermerken« (Betrag = alles bisher Gezahlte). Das Programm erinnert erst, wenn eine Rate fehlt.'));
+  return modal('Ratenplan', body, [
+    { label: 'Abbrechen', value: false },
+    (e.ratenplan || []).length ? { label: 'Plan löschen', cls: 'danger', value: 'del', action: async () => { try { await api('PUT', `/api/admin/rechnungen/${e.id}/ratenplan`, { raten: [] }); e.ratenplan = null; } catch (er) { handleErr(er); return false; } } } : null,
+    { label: 'Speichern', cls: 'primary', value: true, action: async () => {
+      if (raten.some((r) => !r.faellig || !Number.isFinite(r.betrag) || r.betrag <= 0)) { toast('Bitte bei jeder Rate Datum und Betrag angeben.', 'err'); return false; }
+      try { await api('PUT', `/api/admin/rechnungen/${e.id}/ratenplan`, { raten }); e.ratenplan = raten; e.faellig = ratenFaellig(e); } catch (er) { handleErr(er); return false; }
+    } },
+  ].filter(Boolean));
+}
+
 async function paymentDialog(e) {
   const date = h('input', { type: 'date', value: e.bezahltAm || todayIso() });
   const amt = h('input', { type: 'text', inputmode: 'decimal', value: numIn(e.bezahltAm ? payPaid(e) : payTotal(e)), style: 'width:120px' });
@@ -2688,11 +2750,13 @@ async function paymentDialog(e) {
   const body = h('div', { class: 'form' },
     h('p', null, `${e.mitgliedsnr} – ${e.name}: Rechnungsbetrag ${eur(payTotal(e))}${e.gesamt < 0 ? ' (Guthaben, wird an den Pächter ausgezahlt)' : ''}`),
     gutschriftListe(e),
+    (e.ratenplan || []).length ? h('p', { class: 'hint' }, `Ratenplan: ${e.ratenplan.map((r) => `${eur(r.betrag)} bis ${deDate(r.faellig)}`).join(', ')}. Als Betrag unten bitte alles bisher Gezahlte eintragen.`) : null,
     h('div', { class: 'field' }, h('label', null, 'Bezahlt am'), date),
     h('div', { class: 'field' }, h('label', null, 'Bezahlter Betrag (bei Teilzahlung anpassen)'), h('div', { class: 'inputunit' }, amt, h('span', null, '€'))),
     h('div', { class: 'field wide' }, h('label', null, 'Notiz (z. B. bar, Überweisung, Ratenzahlung)'), note));
   return modal('Zahlung vermerken', body, [
     { label: 'Abbrechen', value: false },
+    e.gesamt > 0 && e.status === 'gueltig' && payIsOpen(e) ? { label: e.ratenplan && e.ratenplan.length ? 'Ratenplan ändern' : 'Ratenplan', value: 'raten' } : null,
     e.gesamt > 0 && e.status === 'gueltig' ? { label: 'Gutschrift ausstellen', value: 'gutschrift' } : null,
     e.bezahltAm ? { label: 'Zahlung zurücknehmen', cls: 'danger', value: 'undo', action: async () => { try { await savePayment(e, { bezahltAm: '', bezahltBetrag: null }); } catch (er) { handleErr(er); return false; } } } : null,
     { label: 'Speichern', cls: 'primary', value: true, action: async () => {
@@ -2819,7 +2883,7 @@ function viewZahlungen() {
           open && e.mahnungen && e.mahnungen.length ? h('div', { class: 'hint', title: 'Letzte Mahnung' }, `${MAHN_TITEL[e.mahnungen[e.mahnungen.length - 1].stufe]} ${deDate(e.mahnungen[e.mahnungen.length - 1].datum)}, Frist ${deDate(e.mahnungen[e.mahnungen.length - 1].frist)}`) : null),
         h('td', { class: 'paycell' }, chk, date, teil),
         h('td', { class: 'note', title: e.notiz || '' }, e.notiz || ''),
-        h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await paymentDialog(e); if (r === 'gutschrift') await gutschriftDialog(e); else if (r !== false && r !== undefined) draw(); } }, 'Details'))));
+        h('td', null, h('button', { class: 'btn small', onclick: async () => { const r = await paymentDialog(e); if (r === 'gutschrift') await gutschriftDialog(e); else if (r === 'raten') { await ratenDialog(e); await reload(); } else if (r !== false && r !== undefined) draw(); } }, 'Details'))));
     }
     if (!shown.length) tbody.append(h('tr', null, h('td', { colspan: 10, class: 'empty' },
       !all.length ? leer('euro', 'Noch nichts zu kassieren', `Für ${st.year} wurde noch keine Rechnung ausgestellt. Sobald das passiert ist, hakst du hier die Zahlungen ab.`, 'Zu den Rechnungen', () => { S.tab = 'rechnungen'; render(); })
@@ -6540,6 +6604,38 @@ const einladungDrucken = (t) => pdfDrucken({
 });
 // Protokoll einer Versammlung: Tagesordnung aus der Einladung, je Punkt Text und optional eine Abstimmung,
 // die beim Speichern ins Beschlussbuch übernommen wird.
+// Textbausteine für Protokolle: fertige Tagesordnungspunkte und Beschlussformeln, per Klick eingefügt und danach angepasst.
+const PROTOKOLL_BAUSTEINE = {
+  Vorstand: [
+    { titel: 'Begrüßung und Beschlussfähigkeit', text: 'Die Sitzungsleitung begrüßt die Anwesenden und stellt die Beschlussfähigkeit fest.' },
+    { titel: 'Genehmigung des letzten Protokolls', text: 'Das Protokoll der letzten Sitzung wurde vorgelesen und genehmigt.', beschluss: 'Das Protokoll der letzten Sitzung wird genehmigt.' },
+    { titel: 'Bericht der Kassenführung', text: 'Kassenstand, Einnahmen und Ausgaben seit der letzten Sitzung.' },
+    { titel: 'Zustand der Anlage und Mängel', text: 'Ergebnisse der Begehung, offene Mängel und Fristen.' },
+    { titel: 'Pächterwechsel und Warteliste', text: 'Kündigungen, freie Gärten, Bewerber auf der Warteliste.' },
+    { titel: 'Anträge und Anfragen', text: '' },
+    { titel: 'Termine und Verschiedenes', text: 'Nächste Sitzung, Arbeitseinsätze, Sonstiges.' },
+  ],
+  Mitgliederversammlung: [
+    { titel: 'Begrüßung und Beschlussfähigkeit', text: 'Die Versammlungsleitung begrüßt die Mitglieder, stellt die ordnungsgemäße Einladung und die Beschlussfähigkeit fest.' },
+    { titel: 'Genehmigung der Tagesordnung', text: '', beschluss: 'Die Tagesordnung wird in der vorliegenden Fassung genehmigt.' },
+    { titel: 'Bericht des Vorstands', text: 'Rückblick auf das Vereinsjahr.' },
+    { titel: 'Kassenbericht', text: 'Einnahmen, Ausgaben und Kassenbestand zum Jahresende.' },
+    { titel: 'Bericht der Kassenprüfung', text: 'Die Kassenprüfung hat die Kasse geprüft und berichtet.' },
+    { titel: 'Entlastung des Vorstands', text: '', beschluss: 'Dem Vorstand wird für das abgelaufene Geschäftsjahr Entlastung erteilt.' },
+    { titel: 'Haushaltsplan', text: 'Vorstellung des Haushaltsplans für das neue Jahr.', beschluss: 'Der Haushaltsplan wird wie vorgelegt beschlossen.' },
+    { titel: 'Wahlen', text: '' },
+    { titel: 'Anträge', text: '' },
+    { titel: 'Verschiedenes', text: '' },
+  ],
+  Beschlussformeln: [
+    { titel: 'Preise festsetzen', text: '', beschluss: 'Der Preis beträgt ab dem neuen Abrechnungsjahr … € je …' },
+    { titel: 'Arbeitsstunden', text: '', beschluss: 'Je Garten sind … Arbeitsstunden im Jahr zu leisten. Für jede fehlende Stunde werden … € berechnet.' },
+    { titel: 'Anschaffung', text: '', beschluss: 'Die Anschaffung von … zu einem Preis von höchstens … € wird beschlossen.' },
+    { titel: 'Beitragsanpassung', text: '', beschluss: 'Der Vereinsbeitrag wird ab dem nächsten Jahr auf … € festgesetzt.' },
+    { titel: 'Vertrag', text: '', beschluss: 'Der Vorstand wird ermächtigt, den Vertrag mit … abzuschließen.' },
+  ],
+};
+
 async function sitzungDialog(t) {
   let d;
   try { d = await api('GET', `/api/admin/termine/${t.id}/protokoll`); } catch (e) { handleErr(e); return; }
@@ -6554,6 +6650,17 @@ async function sitzungDialog(t) {
   };
   const punkte = p.punkte.map((x) => ({ ...x }));
   const liste = h('div', { class: 'sitzung-punkte' });
+  const bausteinEinfuegen = (b) => {
+    punkte.push({ titel: b.titel, text: b.text || '', ...(b.beschluss ? { beschluss: { titel: b.beschluss, ja: 0, nein: 0, enthaltung: 0, ergebnis: 'angenommen' } } : {}) });
+    zeichne();
+  };
+  const baustein = h('select', { 'aria-label': 'Textbaustein einfügen', onchange: (e) => {
+    const [gruppe, i] = e.target.value.split(':');
+    if (gruppe) bausteinEinfuegen(PROTOKOLL_BAUSTEINE[gruppe][Number(i)]);
+    e.target.value = '';
+  } }, h('option', { value: '' }, 'Textbaustein einfügen …'),
+  ...Object.entries(PROTOKOLL_BAUSTEINE).map(([g, l]) => h('optgroup', { label: g === 'Beschlussformeln' ? 'Beschlussformeln' : g === 'Vorstand' ? 'Vorstandssitzung' : 'Mitgliederversammlung' },
+    l.map((b, i) => h('option', { value: `${g}:${i}` }, b.titel)))));
   const zeichne = () => {
     liste.replaceChildren(...punkte.map((x, i) => {
       const titel = h('input', { type: 'text', maxlength: 200, value: x.titel, oninput: (e) => { x.titel = e.target.value; } });
@@ -6575,7 +6682,10 @@ async function sitzungDialog(t) {
           h('button', { class: 'btn small', disabled: i === 0, title: 'nach oben', onclick: () => { [punkte[i - 1], punkte[i]] = [punkte[i], punkte[i - 1]]; zeichne(); } }, '↑'),
           h('button', { class: 'btn small', title: 'Punkt entfernen', onclick: () => { punkte.splice(i, 1); zeichne(); } }, '✕')),
         text, abst || h('button', { class: 'btn small', onclick: () => { x.beschluss = { titel: '', ja: 0, nein: 0, enthaltung: 0, ergebnis: 'angenommen' }; zeichne(); } }, '+ Abstimmung'));
-    }), h('button', { class: 'btn', onclick: () => { punkte.push({ titel: '', text: '' }); zeichne(); } }, '+ Tagesordnungspunkt'));
+    }), h('div', { class: 'toolbar' },
+      h('button', { class: 'btn', onclick: () => { punkte.push({ titel: '', text: '' }); zeichne(); } }, '+ Tagesordnungspunkt'),
+      !punkte.length ? h('button', { class: 'btn primary', onclick: () => { for (const b of PROTOKOLL_BAUSTEINE[p.gremium === 'Vorstand' ? 'Vorstand' : 'Mitgliederversammlung']) bausteinEinfuegen(b); } }, 'Standard-Tagesordnung einfügen') : null,
+      baustein));
   };
   zeichne();
   const speichern = async () => {

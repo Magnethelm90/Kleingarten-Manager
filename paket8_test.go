@@ -69,8 +69,7 @@ func TestAbgleich(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("Export: %d", rec.Code)
 	}
-	var d abgleichDatei
-	d = decode[abgleichDatei](t, rec)
+	d := decode[abgleichDatei](t, rec)
 	if d.Kennung != abgleichKennung || len(d.Termine) != 1 {
 		t.Fatalf("Export: %+v", d)
 	}

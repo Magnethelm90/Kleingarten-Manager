@@ -121,7 +121,7 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 		if r.Jahr == s.d.Settings.Jahr {
 			hatRechnung[r.PaechterID] = true
 		}
-		if r.Result.Gesamt > 0 && openAmount(r) > 0.005 && r.Settings.Zahlungsziel != "" && r.Settings.Zahlungsziel < heuteISO && !r.Bereinigt {
+		if r.Result.Gesamt > 0 && openAmount(r) > 0.005 && faelligAm(r) != "" && faelligAm(r) < heuteISO && !r.Bereinigt {
 			if n := len(r.Mahnungen); n > 0 && r.Mahnungen[n-1].Frist >= heuteISO {
 				continue // gemahnt, die Frist läuft noch
 			}
@@ -254,6 +254,8 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 	if s.modulAn("bauten") {
 		s.bautenAufgabenLocked(heute, add)
 	}
+
+	s.planerAufgabenLocked(heute, add)
 
 	// Warteliste
 	nachfragen := 0

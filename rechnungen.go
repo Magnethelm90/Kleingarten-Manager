@@ -55,6 +55,9 @@ type Rechnung struct {
 	// Gutschriften: nachträgliche Korrekturen der ausgestellten Rechnung (siehe gutschrift.go). Die Rechnung selbst
 	// bleibt unverändert; der zu zahlende Betrag sinkt um die Summe der Gutschriften.
 	Gutschriften []Gutschrift `json:"gutschriften,omitempty"`
+
+	// Ratenplan: vereinbarte Teilzahlungen (siehe ratenplan.go); leer = alles zum Zahlungsziel
+	Ratenplan []Rate `json:"ratenplan,omitempty"`
 }
 
 // Mahnung vermerkt, wann welche Stufe erstellt und bis wann Zahlung verlangt wurde.
@@ -102,14 +105,15 @@ type archiveEntry struct {
 	EmailAm       string       `json:"emailAm,omitempty"`
 	Mahnungen     []Mahnung    `json:"mahnungen,omitempty"`
 	Gutschriften  []Gutschrift `json:"gutschriften,omitempty"`
+	Ratenplan     []Rate       `json:"ratenplan,omitempty"`
 }
 
 func archiveEntryFrom(r *Rechnung) archiveEntry {
 	return archiveEntry{
 		ID: r.ID, Jahr: r.Jahr, Mitgliedsnr: r.Paechter.Mitgliedsnr, Name: r.Paechter.Name, Nummer: r.Nummer,
 		Version: r.Version, Status: r.Status, Ausgestellt: r.Ausgestellt, Gesamt: r.Result.Gesamt, Datei: r.Datei,
-		Versand: r.Paechter.Versand, Faellig: r.Settings.Zahlungsziel, BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz,
-		EmailAm: r.EmailAm, Mahnungen: r.Mahnungen, Gutschriften: r.Gutschriften,
+		Versand: r.Paechter.Versand, Faellig: faelligAm(r), BezahltAm: r.BezahltAm, BezahltBetrag: r.BezahltBetrag, Notiz: r.Notiz,
+		EmailAm: r.EmailAm, Mahnungen: r.Mahnungen, Gutschriften: r.Gutschriften, Ratenplan: r.Ratenplan,
 	}
 }
 
