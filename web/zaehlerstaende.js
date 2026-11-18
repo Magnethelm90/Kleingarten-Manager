@@ -487,7 +487,7 @@ async function issue(ids, replace) {
   // eine ausgestellte Rechnung lässt sich nur noch durch eine neue ersetzen.
   if ((st.musterwerte || []).length) {
     const wahl = await modal('Erst die Vereinsangaben prüfen?', h('div', null,
-      h('p', null, 'Diese Angaben stammen noch aus der Erstausstattung des Programms und würden so auf der Rechnung stehen:'),
+      h('p', null, 'Diese Angaben bitte prüfen. Sie stammen noch aus der Erstausstattung des Programms oder passen nicht und würden so auf der Rechnung stehen:'),
       h('ul', null, st.musterwerte.map((m) => h('li', null, m))),
       h('p', { class: 'hint' }, 'Unter »Einstellungen« trägst du die richtigen Angaben ein. Danach stellst du die Rechnungen aus.')),
     [{ label: 'Abbrechen', value: false }, { label: 'Trotzdem ausstellen', value: 'trotzdem' }, { label: 'Zu den Einstellungen', cls: 'primary', value: 'einstellungen' }]);

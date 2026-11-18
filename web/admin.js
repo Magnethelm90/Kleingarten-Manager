@@ -361,7 +361,7 @@ const HILFE = {
   rechnungsdatum: 'Steht auf allen Rechnungen dieses Jahres. Das Zahlungsziel ist der Tag, bis zu dem bezahlt sein soll – danach gilt eine Rechnung als überfällig.',
   einspruchTage: 'So viele Tage haben Pächter Zeit, sich bei Fragen oder Unstimmigkeiten zur Abrechnung zu melden. Der Satz steht auf Rechnung und E-Mail; 0 = kein Hinweis.',
   wasserGrundpreis: 'Fester Betrag je Garten und Jahr, unabhängig vom Verbrauch (z. B. für Zähler und Leitungsnetz). Dazu kommt der Verbrauch mal Preis je m³.',
-  energieGrundpreis: 'Fester Betrag je Garten und Jahr, unabhängig vom Verbrauch. Dazu kommt der Verbrauch mal Preis je kWh. Hat ein Garten keinen Strom, trage bei ihm als Stand Vorjahr und Stand aktuell jeweils 0 ein (dann zahlt er nur den Grundpreis) – oder setze den Grundpreis auf 0.',
+  energieGrundpreis: 'Fester Betrag je Garten und Jahr, unabhängig vom Verbrauch. Dazu kommt der Verbrauch mal Preis je kWh. Hat ein Garten keinen Strom, trage bei ihm als Stand Vorjahr und Stand aktuell jeweils 0 ein – dann zahlt er nur den Grundpreis.',
   pflichtstunden: 'So viele Gemeinschaftsstunden soll jeder Pächter im Jahr leisten. Für jede fehlende Stunde wird die Nachzahlung berechnet.',
   stundenObergrenze: 'Mehrstunden werden nur bis zu dieser Gesamtzahl vergütet. Beispiel: Pflicht 10, Grenze 15 – vergütet werden höchstens 5 Stunden.',
   pachtJeQm: 'Pacht je m² Gartenfläche, wie sie der Verpächter dem Verein berechnet. Die Gartengröße steht beim Pächter. Die Pacht darf nach § 5 BKleingG höchstens das Vierfache der ortsüblichen Pacht im Obst- und Gemüseanbau betragen.',
@@ -425,6 +425,7 @@ function adminSettings() {
     h('div', { class: 'chips', role: 'navigation', 'aria-label': 'Springe zu' },
       h('span', { class: 'hint' }, 'Springe zu:'),
       [['es-preise', 'Preise und Rechnung'], ['es-pacht', 'Pachtobergrenze'], ['es-fristen', 'Fristen aus der Satzung'], ['es-bereiche', 'Bereiche ein- und ausblenden'], ['es-briefe', 'Brieftexte'], ['es-aussehen', 'Farbe und Logo']].map(([id, l]) => h('button', { class: 'btn small', onclick: sprung(id) }, l))),
+    startjahrKarte(st),
     h('p', { class: 'hint', id: 'es-preise' }, `Diese Werte gelten für das laufende Abrechnungsjahr ${st.settings.jahr} und für alle Rechnungen. Nach einer Änderung rechnen alle Beträge automatisch neu.`),
     h('div', { class: 'card' }, form, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: save }, 'Speichern'),
       h('button', { class: 'btn', title: 'Die letzten Änderungen ansehen und zurücknehmen', onclick: einstellungsVerlaufDialog }, 'Letzte Änderungen'))),
@@ -659,6 +660,24 @@ function pachtgrenzeKarte() {
 // ---- Aussehen: Vereinsfarbe und Logo (Programm und Rechnung)
 
 const FARBVORSCHLAEGE = [['#2f6f3e', 'Gartengrün'], ['#1e5aa8', 'Blau'], ['#0f6e6e', 'Petrol'], ['#8c2f39', 'Weinrot'], ['#7a4b1f', 'Erdbraun'], ['#3d4752', 'Anthrazit']];
+
+// Erstes Abrechnungsjahr wechseln – nur solange noch keine Rechnung und keine Kassenbuchung existiert.
+function startjahrKarte(st) {
+  if (!st.startjahrAenderbar) return null;
+  const jetzt = new Date().getFullYear();
+  const jahre = [...new Set([jetzt - 1, jetzt, st.currentYear])].sort();
+  const wahl = h('select', { style: 'width:auto' }, jahre.map((j) => h('option', { value: j, selected: j === st.currentYear }, String(j))));
+  return h('div', { class: 'card' },
+    h('h3', null, 'Erstes Abrechnungsjahr'),
+    h('p', { class: 'hint' }, 'Das Jahr, dessen Wasser- und Stromverbrauch auf euren ersten Rechnungen steht. Wechseln geht nur, solange noch keine Rechnung ausgestellt ist. Eingetragene Zählerstände wandern mit.'),
+    h('div', { class: 'toolbar', style: 'margin:0' }, wahl,
+      h('button', { class: 'btn', onclick: async () => {
+        try {
+          const r = await api('POST', '/api/admin/startjahr', { jahr: Number(wahl.value) });
+          S.year = null; toast(`Abrechnungsjahr ${r.jahr} – Rechnungsdatum ${r.rechnungsdatum.split('-').reverse().join('.')}`, 'ok'); await reload();
+        } catch (e) { handleErr(e); }
+      } }, 'Übernehmen')));
+}
 
 // ---- Fristen aus der Satzung: Einladungsfrist (Cockpit rechnet den letzten Tag aus) und Kündigungsfrist
 // (dieselbe Regel wie auf der Seite Kündigungen). Tag.Monat wird als MM-TT gespeichert.

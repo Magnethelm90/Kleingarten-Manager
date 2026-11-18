@@ -76,7 +76,7 @@ func (s *Store) aufgabenLocked(heute time.Time) []aufgabe {
 
 	// Musterwerte aus der Erstausstattung würden auf jeder Rechnung stehen
 	if m := s.musterwerteLocked(heute); len(m) > 0 && len(s.d.Paechter) > 0 {
-		add("warn", "Vereinsangaben noch nicht vollständig", "Noch aus der Erstausstattung: "+strings.Join(m, ", ")+". Bitte vor den ersten Rechnungen eintragen.", "admin:einstellungen", "Einstellungen")
+		add("warn", "Vereinsangaben vor den Rechnungen prüfen", "Bitte prüfen: "+strings.Join(m, ", ")+". Das steht so auf jeder Rechnung.", "admin:einstellungen", "Einstellungen")
 	}
 
 	// Ohne Passwort kann jeder am Rechner Pächter und Preise ändern (der Hinweis steht nur noch hier und in den Einstellungen).

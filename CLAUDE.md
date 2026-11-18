@@ -159,7 +159,7 @@
 - Test »Neuer Verein« (neuverein.go): `musterwerteLocked` (Vereinsname/IBAN/Absender aus defaultSettings, Rechnungsdatum > 30 Tage alt
   ohne Rechnung im Jahr; leer bei Demo) → /api/state `musterwerte`, Cockpit-Warnung, Rückfrage in `issue()`. `startjahrAenderbarLocked` +
   POST /api/admin/startjahr (nur solange nichts gebucht; setzt Rechnungsdatum (J+1)-01-10 bzw. heute+7, Ziel +36 Tage; Frontend danach
-  `S.year = null`). Assistent: Musterwerte NICHT vorbelegen, Absenderzeile + alle 14 Rechnungsbeträge (leer = 0), Jahr-Auswahl.
+  `S.year = null`; Zählerstände wandern mit, Karte `startjahrKarte` in Einstellungen für alle, die den Assistenten übersprungen haben). Assistent: Musterwerte NICHT vorbelegen, Absenderzeile + alle 14 Rechnungsbeträge (leer = 0), Jahr-Auswahl.
   defaultSettings/newData NICHT ändern (Testbasis). Anrede-Vorgabe neuer Pächter = '' (keine). Garten ohne Strom: 0/0 eintragen
   (zahlt Grundpreis) – ein Schalter »kein Stromanschluss« wäre eine Abrechnungsregel → nur nach Nutzer-Entscheidung.
 - Offen: Nutzer fragen: Gärten ohne Strom (Schalter ohne Grundpreis oder 0/0 mit Grundpreis).

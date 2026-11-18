@@ -43,13 +43,14 @@ func (s *Store) musterwerteLocked(heute time.Time) []string {
 }
 
 // startjahrAenderbarLocked: Das erste Abrechnungsjahr darf gewechselt werden, solange es nur ein Jahr gibt und darin
-// nichts gebucht ist. Pächter dürfen schon angelegt sein (sie hängen an keinem Jahr).
+// nichts gebucht ist. Pächter und Zählerstände dürfen schon eingetragen sein; sie wandern mit ins neue Jahr.
 func (s *Store) startjahrAenderbarLocked() bool {
 	if len(s.d.Rechnungen) > 0 || len(s.d.Jahre) != 1 || len(s.d.Vorauszahlungen) > 0 || len(s.d.Spenden) > 0 || len(s.d.Haushalt) > 0 || len(s.d.Kassenpruefungen) > 0 {
 		return false
 	}
 	for _, j := range s.d.Jahre {
-		if j.Abgeschlossen || len(j.Ablesungen) > 0 || len(j.Ausgaben) > 0 || len(j.Barkasse) > 0 || j.Versorger != nil || j.Anfangsbestand != nil || j.BarAnfang != nil {
+		// Ablesungen tragen kein Datum und wandern mit dem Jahr mit
+		if j.Abgeschlossen || len(j.Ausgaben) > 0 || len(j.Barkasse) > 0 || j.Versorger != nil || j.Anfangsbestand != nil || j.BarAnfang != nil {
 			return false
 		}
 	}

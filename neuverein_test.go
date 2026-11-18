@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -51,10 +52,33 @@ func TestNeuerVereinMusterwerte(t *testing.T) {
 	if rec := do(h, "POST", "/api/admin/startjahr", map[string]int{"jahr": jahr + 5}); rec.Code != 400 {
 		t.Fatalf("Jahr +5: %d", rec.Code)
 	}
-	// nach der ersten Ablesung nicht mehr änderbar
+	// Zählerstände wandern beim Wechsel mit
 	p := decode[Paechter](t, do(h, "POST", "/api/admin/paechter", map[string]any{"mitgliedsnr": "1", "name": "Erika", "gartengroesse": 300}))
-	do(h, "PUT", "/api/ablesung/"+p.ID, map[string]any{"wasserVJ": 1})
-	if rec := do(h, "POST", "/api/admin/startjahr", map[string]int{"jahr": jahr - 1}); rec.Code != 400 || !strings.Contains(rec.Body.String(), "Jahreswechsel") {
-		t.Fatalf("nach Ablesung: %d %s", rec.Code, rec.Body.String())
+	do(h, "PUT", "/api/ablesung/"+p.ID, map[string]any{"wasserVJ": 1, "wasserAkt": 5, "stromVJ": 1, "stromAkt": 9, "stunden": 10})
+	if rec := do(h, "POST", "/api/admin/startjahr", map[string]int{"jahr": jahr - 1}); rec.Code != 200 {
+		t.Fatalf("mit Ablesung: %d %s", rec.Code, rec.Body.String())
 	}
+	st = decode[stateResp](t, do(h, "GET", "/api/state", nil))
+	if st.Year != jahr-1 || st.Ablesungen[p.ID].WasserAkt == nil || *st.Ablesungen[p.ID].WasserAkt != 5 {
+		t.Fatalf("Ablesung nicht mitgewandert: %d %+v", st.Year, st.Ablesungen[p.ID])
+	}
+	// nach der ersten Rechnung nicht mehr änderbar
+	if rec := do(h, "POST", "/api/invoices/issue?year="+fmt.Sprint(jahr-1), map[string]any{"ids": []string{p.ID}}); rec.Code != 200 {
+		t.Fatalf("ausstellen: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := do(h, "POST", "/api/admin/startjahr", map[string]int{"jahr": jahr}); rec.Code != 400 || !strings.Contains(rec.Body.String(), "Jahreswechsel") {
+		t.Fatalf("nach Rechnung: %d %s", rec.Code, rec.Body.String())
+	}
+	// Nach dem Jahreswechsel liegt das neue Rechnungsdatum in der Zukunft: keine Warnung im laufenden Betrieb
+	if rec := do(h, "POST", "/api/admin/jahreswechsel", nil); rec.Code != 200 {
+		t.Fatalf("Jahreswechsel: %d %s", rec.Code, rec.Body.String())
+	}
+	a.st.mu.Lock()
+	rd, _ := parseDate(a.st.d.Settings.Rechnungsdatum)
+	for _, tage := range []int{-200, -60, 0} {
+		if m := a.st.musterwerteLocked(rd.AddDate(0, 0, tage)); len(m) != 0 {
+			t.Errorf("nach Jahreswechsel, %d Tage: %v", tage, m)
+		}
+	}
+	a.st.mu.Unlock()
 }
