@@ -269,7 +269,7 @@ func (a *App) handleSpendeSpeichern(neu bool) http.HandlerFunc {
 				writeErr(w, bad("Für diese Spende wurde schon eine Bestätigung ausgestellt. Betrag, Datum und Spender lassen sich nicht mehr ändern"))
 				return
 			}
-			in.ID, in.BestaetigtAm = alt.ID, alt.BestaetigtAm
+			in.ID, in.BestaetigtAm, in.Bereinigt = alt.ID, alt.BestaetigtAm, false
 			a.st.d.Spenden[i] = in
 			a.st.audit("Spende geändert: %s am %s", fmtEUR(in.Betrag), germanDate(in.Datum))
 		}
