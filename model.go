@@ -90,6 +90,8 @@ type Paechter struct {
 	UmlageAbweichend *float64 `json:"umlageAbweichend"`
 	WasserzaehlerNr  string   `json:"wasserzaehlerNr"`
 	StromzaehlerNr   string   `json:"stromzaehlerNr"`
+	// OhneStrom: Garten hat keinen Stromanschluss – kein Strom auf der Rechnung, auch kein Grundpreis.
+	OhneStrom bool `json:"ohneStrom,omitempty"`
 	// Eichjahr der Zähler (0 = unbekannt), für die Eichfristen (siehe eichung.go). Wird nur über die
 	// Eichfristen-Liste oder automatisch beim Zählerwechsel gesetzt.
 	WasserEichjahr int `json:"wasserEichjahr,omitempty"`

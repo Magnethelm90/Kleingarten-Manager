@@ -318,8 +318,21 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 	}
 	block("1.1. Wasserverbrauch:", p.WasserzaehlerNr, a.WasserVJ, a.WasserAkt, r.WasserVerbrauch, "m³",
 		"Grundpreis:", "Preis je m³:", s.WasserGrundpreis, s.WasserPreis, r.KostenWasser, "Summe:")
-	block("1.2. Energieverbrauch:", p.StromzaehlerNr, a.StromVJ, a.StromAkt, r.EnergieVerbrauch, "kWh",
-		"Grundpreis:", "Preis je kWh:", s.EnergieGrundpreis, s.EnergiePreis, r.KostenEnergie, "Summe:")
+	if p.OhneStrom {
+		font("B", 10)
+		text(colX[0], colW[0], "1.2. Energieverbrauch:", "L")
+		font("", 10)
+		span(1, 4, "kein Stromanschluss", "L")
+		span(5, 5, "Summe:", "R")
+		font("B", 10)
+		span(6, 6, fmtEUR(0), "R")
+		next(rowH + 1.2)
+		hline(y-0.6, 0.2)
+		next(1.4)
+	} else {
+		block("1.2. Energieverbrauch:", p.StromzaehlerNr, a.StromVJ, a.StromAkt, r.EnergieVerbrauch, "kWh",
+			"Grundpreis:", "Preis je kWh:", s.EnergieGrundpreis, s.EnergiePreis, r.KostenEnergie, "Summe:")
+	}
 
 	// Arbeitsstunden
 	font("", 10)

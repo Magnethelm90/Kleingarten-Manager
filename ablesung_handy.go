@@ -45,8 +45,12 @@ func (s *Store) handyDateiLocked() (handyDatei, bool) {
 			continue
 		}
 		a := v.Ablesungen[p.ID]
-		d.Zeilen = append(d.Zeilen, handyZeile{ID: p.ID, Garten: p.Gartennr, Name: p.Name, WasserNr: p.WasserzaehlerNr, StromNr: p.StromzaehlerNr,
-			WasserVJ: a.WasserVJ, StromVJ: a.StromVJ, WasserAkt: a.WasserAkt, StromAkt: a.StromAkt})
+		z := handyZeile{ID: p.ID, Garten: p.Gartennr, Name: p.Name, WasserNr: p.WasserzaehlerNr, StromNr: p.StromzaehlerNr,
+			WasserVJ: a.WasserVJ, StromVJ: a.StromVJ, WasserAkt: a.WasserAkt, StromAkt: a.StromAkt}
+		if p.OhneStrom { // ohne Stromanschluss: auf dem Handy kein Stromfeld
+			z.StromNr, z.StromVJ, z.StromAkt = "", nil, nil
+		}
+		d.Zeilen = append(d.Zeilen, z)
 	}
 	sortiereNachGarten := func(i, j int) bool { return naturalLess(d.Zeilen[i].Garten, d.Zeilen[j].Garten) }
 	sort.SliceStable(d.Zeilen, sortiereNachGarten)
@@ -152,7 +156,9 @@ func (a *App) handleAblesungHandyImport(w http.ResponseWriter, r *http.Request) 
 			geaendert = true
 		}
 		pruefe("Wasser", x.Wasser, ab.WasserVJ, &ab.WasserAkt, ab.WasserAkt)
-		pruefe("Strom", x.Strom, ab.StromVJ, &ab.StromAkt, ab.StromAkt)
+		if !p.OhneStrom {
+			pruefe("Strom", x.Strom, ab.StromVJ, &ab.StromAkt, ab.StromAkt)
+		}
 		if geaendert {
 			j.Ablesungen[x.ID] = ab
 			geaenderte = append(geaenderte, x.ID)

@@ -41,7 +41,7 @@ func (s *Store) zaehlerFehlenLocked(year int) (erinnerungDaten, bool) {
 		}
 		a := v.Ablesungen[p.ID]
 		wasser := strings.TrimSpace(p.WasserzaehlerNr) != "" || a.WasserVJ != nil
-		strom := strings.TrimSpace(p.StromzaehlerNr) != "" || a.StromVJ != nil
+		strom := !p.OhneStrom && (strings.TrimSpace(p.StromzaehlerNr) != "" || a.StromVJ != nil)
 		if !wasser && !strom {
 			continue
 		}

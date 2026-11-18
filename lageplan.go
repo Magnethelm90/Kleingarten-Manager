@@ -98,6 +98,11 @@ func (a *App) handleGartenVergeben(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.st.eichjahrUebernehmenLocked(&p)
+	for _, q := range a.st.d.Paechter { // Garten ohne Stromanschluss bleibt es auch beim neuen Pächter
+		if q.OhneStrom && q.Gartennr != "" && strings.EqualFold(q.Gartennr, p.Gartennr) {
+			p.OhneStrom = true
+		}
+	}
 	if a.st.nrTaken(p.Mitgliedsnr, "") {
 		writeErr(w, bad("Die Mitgliedsnummer "+p.Mitgliedsnr+" gibt es schon"))
 		return

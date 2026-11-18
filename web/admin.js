@@ -83,6 +83,7 @@ function paechterDialog(p, vorlage) {
     gartengroesse: t(numIn(cur.gartengroesse || null)),
     umlage: t(numIn(cur.umlageAbweichend), `leer = Standard (${eur(S.state.settings.umlageStandard)})`),
     wz: t(cur.wasserzaehlerNr), sz: t(cur.stromzaehlerNr),
+    ohneStrom: h('input', { type: 'checkbox', checked: !!cur.ohneStrom }),
     notiz: h('textarea', { rows: 2, maxlength: 300, style: 'width:100%' }, cur.notiz || ''),
   };
   // Neuer Pächter: Versandart folgt der E-Mail-Adresse (ohne Adresse = Post), bis sie von Hand gewählt wird.
@@ -93,6 +94,8 @@ function paechterDialog(p, vorlage) {
     f.email.addEventListener('input', () => { if (!vonHand) f.versand.value = f.email.value.trim() ? 'Emailsendung' : 'Postversand'; });
   }
   f.gartengroesse.setAttribute('inputmode', 'decimal');
+  const stromSchalten = () => { f.sz.disabled = f.ohneStrom.checked; };
+  f.ohneStrom.addEventListener('change', stromSchalten); stromSchalten();
   f.umlage.setAttribute('inputmode', 'decimal');
   const fld = (label, input, hint, wide) => h('div', { class: 'field' + (wide ? ' wide' : '') }, h('label', null, label), input, hint ? h('span', { class: 'fhint' }, hint) : null);
   let weitere;
@@ -103,11 +106,13 @@ function paechterDialog(p, vorlage) {
     fld('E-Mail-Adresse', f.email, 'Empfänger beim Vorbereiten der Rechnungs-E-Mail'), fld('Telefon', f.telefon),
     fld('Gartengröße in m² *', f.gartengroesse),
     // selten gebrauchte Angaben eingeklappt; aufgeklappt, sobald dort schon etwas steht oder ein Fehler gemeldet wird
-    weitere = h('details', { class: 'weitere field wide', open: !!(cur.umlageAbweichend != null || cur.wasserzaehlerNr || cur.stromzaehlerNr || cur.notiz) },
+    weitere = h('details', { class: 'weitere field wide', open: !!(cur.umlageAbweichend != null || cur.wasserzaehlerNr || cur.stromzaehlerNr || cur.notiz || cur.ohneStrom) },
       h('summary', null, 'Weitere Angaben (Umlage, Zählernummern, Notiz)'),
       h('div', { class: 'form' },
         fld('Umlage abweichend in €', f.umlage, 'Nur ausfüllen, wenn dieser Pächter nicht die Standard-Umlage zahlt'),
-        fld('Wasserzähler-Nr.', f.wz), fld('Stromzähler-Nr.', f.sz),
+        fld('Wasserzähler-Nr.', f.wz),
+        h('div', { class: 'field' }, h('label', null, 'Stromzähler-Nr.'), f.sz,
+          h('label', { class: 'inline', style: 'font-weight:400' }, f.ohneStrom, ' Garten hat keinen Strom')),
         fld('Notiz (nur intern, steht nicht auf der Rechnung – bitte keine Gesundheitsdaten oder sonstige sensible Angaben)', f.notiz, null, true))));
   return modal(isNew ? 'Pächter anlegen' : `Pächter bearbeiten – ${cur.name}`, body, [
     { label: 'Abbrechen', value: false },
@@ -119,7 +124,7 @@ function paechterDialog(p, vorlage) {
       if (Number.isNaN(um) || (um !== null && um < 0)) { weitere.open = true; return feldFehler(f.umlage, 'Die Umlage muss eine Zahl ab 0 sein, z. B. 25,00.'); }
       const data = { mitgliedsnr: f.mitgliedsnr.value, gartennr: f.gartennr.value, anrede: f.anrede.value, name: f.name.value,
         strasse: f.strasse.value, plzOrt: f.plzOrt.value, versand: f.versand.value, email: f.email.value.trim(), telefon: f.telefon.value, gartengroesse: gg ?? 0, umlageAbweichend: um,
-        wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.sz.value, notiz: f.notiz.value.trim() };
+        wasserzaehlerNr: f.wz.value, stromzaehlerNr: f.ohneStrom.checked ? '' : f.sz.value, ohneStrom: f.ohneStrom.checked, notiz: f.notiz.value.trim() };
       if (data.versand === 'Emailsendung' && !data.email && !(await confirmBox('Versandart ist »Emailsendung«, aber es ist keine E-Mail-Adresse eingetragen. Trotzdem speichern?', 'Trotzdem speichern'))) return false;
       const gnr = data.gartennr.trim().toLowerCase();
       const gleich = gnr ? S.state.paechter.find((q) => q.id !== cur.id && (q.gartennr || '').trim().toLowerCase() === gnr) : null;
@@ -166,7 +171,7 @@ function adminPaechter() {
         h('td', { class: 'num' }, nfFlex.format(p.gartengroesse) + ' m²'),
         mitUmlage ? h('td', { class: 'num' }, p.umlageAbweichend == null ? 'Standard' : eur(p.umlageAbweichend)) : null,
         h('td', { class: 'zaehler-zelle' }, p.wasserzaehlerNr ? h('div', null, h('span', { class: 'hint' }, 'W '), p.wasserzaehlerNr) : null,
-          p.stromzaehlerNr ? h('div', null, h('span', { class: 'hint' }, 'S '), p.stromzaehlerNr) : null),
+          p.ohneStrom ? h('div', { class: 'hint' }, 'kein Strom') : p.stromzaehlerNr ? h('div', null, h('span', { class: 'hint' }, 'S '), p.stromzaehlerNr) : null),
         h('td', { class: 'aktionen' },
           h('button', { class: 'btn small', onclick: async () => { if (await paechterDialog(p)) await reload(); } }, 'Bearbeiten'), ' ',
           p.gartennr ? [h('button', { class: 'btn small', title: `Gartenakte von Garten ${p.gartennr}: Dokumente, Wertermittlungen, Übergaben, Verlauf`, onclick: () => gartenakteDialog(p.gartennr.trim()) }, 'Akte'), ' '] : null,

@@ -110,8 +110,8 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if in.WasserStand == nil || in.StromStand == nil {
-		writeErr(w, bad("Bitte beide Zählerstände bei der Übergabe eintragen"))
+	if in.WasserStand == nil {
+		writeErr(w, bad("Bitte den Wasserzählerstand bei der Übergabe eintragen"))
 		return
 	}
 	if in.Stunden == nil {
@@ -140,6 +140,10 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, bad("Für "+alt.Name+" wurde der Garten schon am "+germanDate(alt.AusgeschiedenAm)+" übergeben"))
 		return
 	}
+	if !alt.OhneStrom && in.StromStand == nil {
+		writeErr(w, bad("Bitte auch den Stromzählerstand bei der Übergabe eintragen"))
+		return
+	}
 	jahr := d.Settings.Jahr
 	if a.st.validInvoiceLocked(jahr, alt.ID) != nil {
 		writeErr(w, bad(fmt.Sprintf("Für %s ist die Rechnung %d schon ausgestellt. Bitte zuerst den Jahreswechsel machen; "+
@@ -159,6 +163,7 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 		neu.StromzaehlerNr = alt.StromzaehlerNr
 	}
 	neu.Geloescht, neu.GeloeschtAm, neu.AusgeschiedenAm = false, "", ""
+	neu.OhneStrom = alt.OhneStrom // der Garten hat weiterhin (k)einen Stromanschluss
 	neu, err := cleanPaechter(neu)
 	if err != nil {
 		writeErr(w, err)
@@ -193,7 +198,10 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 	if ab.StromVJ == nil {
 		ab.StromVJ = in.StromVJ
 	}
-	if ab.WasserVJ == nil || ab.StromVJ == nil {
+	if alt.OhneStrom {
+		in.StromStand = nil
+	}
+	if ab.WasserVJ == nil || (!alt.OhneStrom && ab.StromVJ == nil) {
 		writeErr(w, bad("Für den bisherigen Pächter fehlt der Vorjahresstand. Bitte mit eintragen"))
 		return
 	}
@@ -214,8 +222,13 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 
 	neu.ID = newID()
 	d.Paechter = append(d.Paechter, neu)
-	wv, sv := *in.WasserStand, *in.StromStand
-	d.Jahre[yearKey(jahr)].Ablesungen[neu.ID] = Ablesung{WasserVJ: &wv, StromVJ: &sv}
+	wv := *in.WasserStand
+	neuAb := Ablesung{WasserVJ: &wv}
+	if in.StromStand != nil {
+		sv := *in.StromStand
+		neuAb.StromVJ = &sv
+	}
+	d.Jahre[yearKey(jahr)].Ablesungen[neu.ID] = neuAb
 	a.st.gartenVergeben(neu.ID, neu.Gartennr, neu.Mitgliedsnr, neu.Name, in.Datum)
 	if wi >= 0 {
 		d.Warteliste = append(d.Warteliste[:wi], d.Warteliste[wi+1:]...)

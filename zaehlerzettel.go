@@ -28,7 +28,7 @@ func (a *App) zaehlerzettelPDF(r *http.Request) ([]byte, string, error) {
 		offen := rows[:0:0]
 		for _, z := range rows {
 			ab := v.Ablesungen[ids[z.Mitgliedsnr]]
-			if ab.WasserAkt == nil || ab.StromAkt == nil {
+			if ab.WasserAkt == nil || (!z.OhneStrom && ab.StromAkt == nil) {
 				offen = append(offen, z)
 			}
 		}
@@ -112,7 +112,11 @@ func buildZaehlerzettel(s Settings, year int, frist string, rows []ablesezeile) 
 			x += sp.w
 		}
 		y += 7
-		for _, zeile := range [][4]string{{"Wasser (m³)", leer(z.WasserNr), zahl(z.WasserVJ), ""}, {"Strom (kWh)", leer(z.StromNr), zahl(z.StromVJ), ""}} {
+		zeilen := [][4]string{{"Wasser (m³)", leer(z.WasserNr), zahl(z.WasserVJ), ""}, {"Strom (kWh)", leer(z.StromNr), zahl(z.StromVJ), ""}}
+		if z.OhneStrom {
+			zeilen = zeilen[:1]
+		}
+		for _, zeile := range zeilen {
 			x = links
 			for k, sp := range spalten {
 				pdf.SetFont("lib", map[bool]string{true: "B", false: ""}[k == 0], 10)

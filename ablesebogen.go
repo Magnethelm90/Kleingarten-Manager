@@ -20,6 +20,7 @@ type ablesezeile struct {
 	StromNr     string
 	WasserVJ    *float64
 	StromVJ     *float64
+	OhneStrom   bool
 }
 
 // ablesezeilenLocked bildet die Zeilen für ein Jahr, sortiert nach Gartennummer (ersatzweise
@@ -37,7 +38,7 @@ func (s *Store) ablesezeilenLocked(year int) ([]ablesezeile, Settings, bool) {
 		a := v.Ablesungen[p.ID]
 		rows = append(rows, ablesezeile{
 			Gartennr: p.Gartennr, Mitgliedsnr: p.Mitgliedsnr, Name: p.Name,
-			WasserNr: p.WasserzaehlerNr, StromNr: p.StromzaehlerNr, WasserVJ: a.WasserVJ, StromVJ: a.StromVJ,
+			WasserNr: p.WasserzaehlerNr, StromNr: p.StromzaehlerNr, WasserVJ: a.WasserVJ, StromVJ: a.StromVJ, OhneStrom: p.OhneStrom,
 		})
 	}
 	key := func(r ablesezeile) string {
@@ -141,6 +142,9 @@ func buildAblesebogen(s Settings, year int, rows []ablesezeile) ([]byte, error) 
 		}{
 			{r.Gartennr, "B", 11, "C"}, {name, "", 9.5, "L"}, {r.WasserNr, "", 8, "L"}, {zahl(r.WasserVJ), "", 10, "R"}, {"", "", 10, "R"},
 			{r.StromNr, "", 8, "L"}, {zahl(r.StromVJ), "", 10, "R"}, {"", "", 10, "R"}, {"", "", 10, "R"},
+		}
+		if r.OhneStrom {
+			cells[5].txt, cells[6].txt = "kein Strom", ""
 		}
 		x := left
 		for i, c := range cells {

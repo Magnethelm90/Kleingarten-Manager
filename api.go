@@ -1420,6 +1420,7 @@ func (a *App) handleImportApply(w http.ResponseWriter, r *http.Request) {
 			if !has["Umlage abweichend"] && !has["Umlage"] {
 				p.UmlageAbweichend = old.UmlageAbweichend
 			}
+			p.OhneStrom = old.OhneStrom
 			p.Notiz = old.Notiz // gibt es in keiner Importdatei, darf beim Aktualisieren nicht verloren gehen
 			p.AusgeschiedenAm = old.AusgeschiedenAm
 			if p.WasserzaehlerNr == old.WasserzaehlerNr {
