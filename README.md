@@ -223,6 +223,8 @@ Benutzerkonto und keine Übertragung ins Internet.
 - **Pächterwechsel-Assistent**, **Kostenvergleich** über die Jahre mit Hinweis auf auffälligen Mehrverbrauch, **Mängel mit Foto**
   und ein **Papierkorb** (30 Tage) für Mängel, Termine, Beschlüsse und Verträge – mit »Rückgängig« direkt nach dem Löschen.
 - **Jahresabrechnung als Gesamt-PDF**, **Statistik** über die Jahre, **Daten aufräumen** (Dubletten und Lücken finden), **Kassenbuch-Vorlagen** für wiederkehrende Ausgaben, **Abgleich zwischen zwei Rechnern** per USB-Stick und ein **Wörterbuch** in einfachen Worten.
+- **Eigene Brieftexte:** Anrede, Grußformel, Unterschrift und die festen Sätze von Mahnung, Mängel-Aufforderung,
+  Wartelisten-Briefen und Kündigungsbestätigung lassen sich unter *Einstellungen → Brieftexte* anpassen.
 - **Beitragsübersicht** je Pächter, **Zählerwechsel-Protokoll**, **Fristen als Kalenderdatei**, **Wahlen-Assistent** (Stimmzettel,
   Auszählung, Beschlussbuch), **Saison-Liste** fürs Wasser an/ab, **Vorschlag aus der Warteliste** für freie Gärten,
   **Aushang** für den Schaukasten mit Vorlagen, **Übergabeprotokoll** mit den am Übergabetag offenen Mängeln.
@@ -267,10 +269,25 @@ Zum Umziehen auf einen anderen Rechner einfach den ganzen Ordner kopieren.
 
 ### macOS
 
-`Kleingarten-Manager.app` in den Programme-Ordner ziehen (läuft auf Apple Silicon und Intel). Beim allerersten
-Start meldet macOS „nicht verifizierter Entwickler“: mit Rechtsklick auf die App → **Öffnen** → nochmals
-**Öffnen**. Danach startet sie normal per Doppelklick. Die Daten liegen unter
-`~/Library/Application Support/Kleingarten-Manager/`.
+Die heruntergeladene ZIP-Datei öffnen (Doppelklick) und `Kleingarten-Manager.app` in den Programme-Ordner ziehen
+(läuft auf Apple Silicon und Intel). Die Daten liegen unter `~/Library/Application Support/Kleingarten-Manager/`.
+
+**Beim allerersten Start** hält macOS die App an, weil sie nicht über den App Store kommt
+(„… wurde nicht geöffnet“ bzw. „nicht verifizierter Entwickler“). Das ist einmalig:
+
+<p align="center"><img src="docs/bilder/mac-start.svg" alt="Erster Start auf dem Mac in drei Schritten" width="760"></p>
+
+1. App im Programme-Ordner doppelklicken. Die Meldung mit **Fertig** schließen.
+2. **Systemeinstellungen** öffnen → **Datenschutz & Sicherheit** → ganz nach unten scrollen →
+   bei „Kleingarten-Manager wurde blockiert“ auf **Dennoch öffnen** klicken.
+3. In der Rückfrage **Öffnen** wählen (ggf. mit dem Mac-Passwort bestätigen).
+
+Danach startet die App ganz normal per Doppelklick.
+Auf älteren Macs (bis macOS 14) geht es auch kürzer: Rechtsklick auf die App → **Öffnen** → nochmals **Öffnen**.
+
+Meldet macOS „… ist beschädigt und kann nicht geöffnet werden“, hat der Download eine Schutzmarkierung behalten.
+Dann einmal im Programm **Terminal** eingeben:
+`xattr -dr com.apple.quarantine /Applications/Kleingarten-Manager.app` – danach wie oben starten.
 
 ### Gut zu wissen
 
