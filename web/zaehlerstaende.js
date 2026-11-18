@@ -418,7 +418,9 @@ function viewSchnell() {
   drawCard(false);
 
   return h('div', null,
-    h('p', { class: 'hint' }, 'Nummer eintippen, Enter drücken: Name, Adresse, Gartengröße, Umlage und Zählernummern kommen automatisch aus den Stammdaten, der Vorjahresstand ist schon eingetragen. Du gibst nur noch die neuen Stände ein. Mit Enter springst du zum nächsten Feld, nach dem letzten wieder zur Nummer. Alles wird sofort gespeichert.'),
+    h('p', { class: 'hint' }, (S.state.years || []).includes(S.state.year - 1)
+      ? 'Nummer eintippen, Enter drücken: Name, Adresse, Gartengröße, Umlage und Zählernummern kommen automatisch aus den Stammdaten, der Vorjahresstand ist schon eingetragen. Du gibst nur noch die neuen Stände ein. Mit Enter springst du zum nächsten Feld, nach dem letzten wieder zur Nummer. Alles wird sofort gespeichert.'
+      : 'Nummer eintippen, Enter drücken: Name, Adresse, Gartengröße, Umlage und Zählernummern kommen automatisch aus den Stammdaten. Im ersten Jahr mit dem Programm trägst du auch den Stand vom Vorjahr ein – das ist die letzte Ablesung vor diesem Jahr. Ab dem nächsten Jahr steht er dann schon da. Mit Enter springst du zum nächsten Feld. Alles wird sofort gespeichert.'),
     h('div', { class: 'toolbar' }, input, h('span', { class: 'stat' }, `${done} von ${list.length} vollständig`), h('span', { class: 'saveind' }, '✓ gespeichert')),
     sugg, box);
 }
@@ -481,6 +483,17 @@ function issueSummary(r) {
 
 async function issue(ids, replace) {
   const st = S.state;
+  // Stehen noch Angaben aus der Erstausstattung drin (»Mustername«, »DE00 …«), lieber vorher fragen:
+  // eine ausgestellte Rechnung lässt sich nur noch durch eine neue ersetzen.
+  if ((st.musterwerte || []).length) {
+    const wahl = await modal('Erst die Vereinsangaben prüfen?', h('div', null,
+      h('p', null, 'Diese Angaben stammen noch aus der Erstausstattung des Programms und würden so auf der Rechnung stehen:'),
+      h('ul', null, st.musterwerte.map((m) => h('li', null, m))),
+      h('p', { class: 'hint' }, 'Unter »Einstellungen« trägst du die richtigen Angaben ein. Danach stellst du die Rechnungen aus.')),
+    [{ label: 'Abbrechen', value: false }, { label: 'Trotzdem ausstellen', value: 'trotzdem' }, { label: 'Zu den Einstellungen', cls: 'primary', value: 'einstellungen' }]);
+    if (wahl === 'einstellungen') { adminTabWaehlen('einstellungen'); render(); }
+    if (wahl !== 'trotzdem') return;
+  }
   const r = await api('POST', `/api/invoices/issue?year=${st.year}`, { ids, replace: !!replace });
   await reload();
   // Nächste Schritte gleich im Abschluss anbieten: Briefe drucken, E-Mails vorbereiten

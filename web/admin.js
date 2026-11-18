@@ -70,12 +70,12 @@ function viewPruefShell() {
 
 function paechterDialog(p, vorlage) {
   const isNew = !p;
-  const cur = p || { mitgliedsnr: '', gartennr: '', anrede: 'Herr', name: '', strasse: '', plzOrt: S.state.settings.ort, versand: 'Postversand',
+  const cur = p || { mitgliedsnr: '', gartennr: '', anrede: '', name: '', strasse: '', plzOrt: /Musterstadt/.test(S.state.settings.ort) ? '' : S.state.settings.ort, versand: 'Postversand',
     email: '', telefon: '', gartengroesse: 0, umlageAbweichend: null, wasserzaehlerNr: '', stromzaehlerNr: '', notiz: '', ...(vorlage || {}) };
   const t = (val, ph) => h('input', { type: 'text', value: val || '', placeholder: ph || '', maxlength: 100, autocomplete: 'off' });
   const f = {
     mitgliedsnr: t(cur.mitgliedsnr, 'z. B. 35-95'), gartennr: t(cur.gartennr, 'z. B. 35'),
-    anrede: h('select', { value: cur.anrede }, ['Herr', 'Frau', 'Familie', 'Herr und Frau', ''].map((a) => h('option', { value: a }, a || '(keine)'))),
+    anrede: h('select', { value: cur.anrede }, ['', 'Herr', 'Frau', 'Familie', 'Herr und Frau'].map((a) => h('option', { value: a }, a || '(keine)'))),
     name: t(cur.name), strasse: t(cur.strasse), plzOrt: t(cur.plzOrt),
     versand: h('select', { value: cur.versand }, ['Emailsendung', 'Postversand'].map((a) => h('option', { value: a }, a))),
     email: h('input', { type: 'email', value: cur.email || '', placeholder: 'name@beispiel.de', maxlength: 100, autocomplete: 'off' }),
@@ -361,7 +361,7 @@ const HILFE = {
   rechnungsdatum: 'Steht auf allen Rechnungen dieses Jahres. Das Zahlungsziel ist der Tag, bis zu dem bezahlt sein soll – danach gilt eine Rechnung als überfällig.',
   einspruchTage: 'So viele Tage haben Pächter Zeit, sich bei Fragen oder Unstimmigkeiten zur Abrechnung zu melden. Der Satz steht auf Rechnung und E-Mail; 0 = kein Hinweis.',
   wasserGrundpreis: 'Fester Betrag je Garten und Jahr, unabhängig vom Verbrauch (z. B. für Zähler und Leitungsnetz). Dazu kommt der Verbrauch mal Preis je m³.',
-  energieGrundpreis: 'Fester Betrag je Garten und Jahr, unabhängig vom Verbrauch. Dazu kommt der Verbrauch mal Preis je kWh. Gärten ohne Stromzähler zahlen nichts.',
+  energieGrundpreis: 'Fester Betrag je Garten und Jahr, unabhängig vom Verbrauch. Dazu kommt der Verbrauch mal Preis je kWh. Hat ein Garten keinen Strom, trage bei ihm als Stand Vorjahr und Stand aktuell jeweils 0 ein (dann zahlt er nur den Grundpreis) – oder setze den Grundpreis auf 0.',
   pflichtstunden: 'So viele Gemeinschaftsstunden soll jeder Pächter im Jahr leisten. Für jede fehlende Stunde wird die Nachzahlung berechnet.',
   stundenObergrenze: 'Mehrstunden werden nur bis zu dieser Gesamtzahl vergütet. Beispiel: Pflicht 10, Grenze 15 – vergütet werden höchstens 5 Stunden.',
   pachtJeQm: 'Pacht je m² Gartenfläche, wie sie der Verpächter dem Verein berechnet. Die Gartengröße steht beim Pächter. Die Pacht darf nach § 5 BKleingG höchstens das Vierfache der ortsüblichen Pacht im Obst- und Gemüseanbau betragen.',
@@ -457,26 +457,46 @@ async function einstellungsVerlaufDialog() {
 async function einrichtungsAssistent() {
   if (document.querySelector('dialog.assistent')) return;
   const st = S.state, set = st.settings;
-  const text = (key, ph) => h('input', { type: 'text', value: set[key] || '', placeholder: ph || '', maxlength: 250, autocomplete: 'off' });
-  const zahl = (key) => h('input', { type: 'text', inputmode: 'decimal', value: numIn(set[key]), autocomplete: 'off' });
+  // Frische Installation: Die Musterwerte des Programms nicht vorschlagen – sonst landen sie unbemerkt auf der Rechnung.
+  const muster = !st.demo && (/Mustername/.test(set.vereinName || '') || (set.iban || '').replace(/\s/g, '') === 'DE00000000000000000000');
+  const text = (key, ph) => h('input', { type: 'text', value: muster ? '' : set[key] || '', placeholder: ph || '', maxlength: 250, autocomplete: 'off' });
+  const zahl = (key, ph) => h('input', { type: 'text', inputmode: 'decimal', value: muster ? '' : numIn(set[key]), placeholder: ph || '0', autocomplete: 'off' });
   const f = {
     vereinName: text('vereinName', 'z. B. KGV Sonnenschein e. V.'), ort: text('ort', 'z. B. 12345 Gartenstadt'),
+    absenderzeile: text('absenderzeile', 'z. B. KGV Sonnenschein e. V. · Gartenweg 1 · 12345 Gartenstadt'),
     bankName: text('bankName'), iban: text('iban', 'DE…'), bic: text('bic'),
-    wasserGrundpreis: zahl('wasserGrundpreis'), wasserPreis: zahl('wasserPreis'), energieGrundpreis: zahl('energieGrundpreis'), energiePreis: zahl('energiePreis'),
-    pachtJeQm: zahl('pachtJeQm'), vereinsbeitrag: zahl('vereinsbeitrag'), pflichtstunden: zahl('pflichtstunden'), nachzahlungJeStd: zahl('nachzahlungJeStd'),
+    wasserGrundpreis: zahl('wasserGrundpreis'), wasserPreis: zahl('wasserPreis', 'z. B. 2,50'), energieGrundpreis: zahl('energieGrundpreis'), energiePreis: zahl('energiePreis', 'z. B. 0,40'),
+    pachtJeQm: zahl('pachtJeQm', 'z. B. 0,10'), vereinsflaecheQm: zahl('vereinsflaecheQm'), freieGaertenQm: zahl('freieGaertenQm'),
+    vereinsbeitrag: zahl('vereinsbeitrag'), territorialverband: zahl('territorialverband'), umlageStandard: zahl('umlageStandard'),
+    pflichtstunden: zahl('pflichtstunden'), nachzahlungJeStd: zahl('nachzahlungJeStd'), verguetungJeStd: zahl('verguetungJeStd'), stundenObergrenze: zahl('stundenObergrenze'),
   };
+  const zahlFelder = ['wasserGrundpreis', 'wasserPreis', 'energieGrundpreis', 'energiePreis', 'pachtJeQm', 'vereinsflaecheQm', 'freieGaertenQm', 'vereinsbeitrag', 'territorialverband', 'umlageStandard', 'pflichtstunden', 'nachzahlungJeStd', 'verguetungJeStd', 'stundenObergrenze'];
+  // Absender folgt Name und Ort, bis er von Hand geändert wird
+  let absenderVonHand = !muster && !!set.absenderzeile;
+  const absenderVorschlag = () => { if (!absenderVonHand) f.absenderzeile.value = [f.vereinName.value.trim(), f.ort.value.trim()].filter(Boolean).join(' · '); };
+  f.absenderzeile.addEventListener('input', () => { absenderVonHand = true; });
+  f.vereinName.addEventListener('input', absenderVorschlag); f.ort.addEventListener('input', absenderVorschlag);
+  // Erstes Abrechnungsjahr: solange noch nichts gebucht ist
+  const jetzt = new Date().getFullYear();
+  const jahrWahl = st.startjahrAenderbar ? h('select', null, [jetzt - 1, jetzt].concat(set.jahr < jetzt - 1 || set.jahr > jetzt ? [set.jahr] : [])
+    .map((j) => h('option', { value: j, selected: j === set.jahr }, String(j)))) : null;
   const feld = (label, input, einheit, key, breit) => h('div', { class: 'field' + (breit ? ' wide' : '') }, h('label', null, label, key && HILFE[key] ? hilfe(HILFE[key]) : null),
     einheit ? h('div', { class: 'inputunit' }, input, h('span', null, einheit)) : input);
   const bereiche = BEREICHE.map(([k, name, t]) => ({ k, cb: h('input', { type: 'checkbox', checked: modulAn(k) }), name, t }));
   const sepaCb = h('input', { type: 'checkbox', checked: !!st.sepaAktiv });
   const schritte = [
-    { titel: 'Euer Verein', text: 'Name und Bankverbindung stehen auf jeder Rechnung.', inhalt: h('div', { class: 'form' },
-      feld('Vereinsname', f.vereinName, null, null, true), feld('PLZ und Ort', f.ort), feld('Bank', f.bankName), feld('IBAN', f.iban), feld('BIC', f.bic)) },
-    { titel: 'Preise und Beiträge', text: 'Die Werte aus eurer letzten Abrechnung oder dem Beschluss der Mitgliederversammlung. Weitere Einstellungen (Vereinsfläche, Umlage, Stundenvergütung …) folgen später unter »Preise & Einstellungen«.', inhalt: h('div', { class: 'form' },
+    { titel: 'Euer Verein', text: 'Name, Absender und Bankverbindung stehen auf jeder Rechnung.', inhalt: h('div', { class: 'form' },
+      feld('Vereinsname', f.vereinName, null, null, true), feld('PLZ und Ort', f.ort),
+      jahrWahl ? h('div', { class: 'field' }, h('label', null, 'Erstes Abrechnungsjahr', hilfe('Das Jahr, dessen Wasser- und Stromverbrauch auf den ersten Rechnungen steht. Die Rechnungen dafür schreibst du meist Anfang des nächsten Jahres.')), jahrWahl) : null,
+      feld('Absender (steht klein über der Anschrift)', f.absenderzeile, null, null, true), feld('Bank', f.bankName), feld('IBAN', f.iban), feld('BIC', f.bic)) },
+    { titel: 'Preise und Beiträge', text: 'Die Werte aus eurer letzten Abrechnung oder dem Beschluss der Mitgliederversammlung. Alles hier steht auf der Rechnung. Ein leeres Feld zählt als 0 – also: gibt es bei euch nicht.', inhalt: h('div', { class: 'form' },
       h('div', { class: 'section-title' }, 'Wasser'), feld('Grundpreis pro Jahr', f.wasserGrundpreis, '€', 'wasserGrundpreis'), feld('Preis je m³', f.wasserPreis, '€'),
       h('div', { class: 'section-title' }, 'Strom'), feld('Grundpreis pro Jahr', f.energieGrundpreis, '€', 'energieGrundpreis'), feld('Preis je kWh', f.energiePreis, '€'),
-      h('div', { class: 'section-title' }, 'Pacht, Beitrag, Stunden'), feld('Pacht je m²', f.pachtJeQm, '€', 'pachtJeQm'), feld('Vereinsbeitrag', f.vereinsbeitrag, '€'),
-      feld('Pflichtstunden', f.pflichtstunden, 'Stunden', 'pflichtstunden'), feld('Nachzahlung je fehlende Stunde', f.nachzahlungJeStd, '€')) },
+      h('div', { class: 'section-title' }, 'Pacht'), feld('Pacht je m²', f.pachtJeQm, '€', 'pachtJeQm'), feld('Anteil Vereinsfläche je Pächter', f.vereinsflaecheQm, 'm²', 'vereinsflaecheQm'),
+      feld('Pachtanteil freie Gärten je Pächter', f.freieGaertenQm, 'm²', 'freieGaertenQm'),
+      h('div', { class: 'section-title' }, 'Beiträge'), feld('Vereinsbeitrag', f.vereinsbeitrag, '€'), feld('Beitrag an den Verband', f.territorialverband, '€', 'territorialverband'), feld('Umlage für alle', f.umlageStandard, '€', 'umlageStandard'),
+      h('div', { class: 'section-title' }, 'Gemeinschaftsstunden'), feld('Pflichtstunden', f.pflichtstunden, 'Stunden', 'pflichtstunden'), feld('Nachzahlung je fehlende Stunde', f.nachzahlungJeStd, '€'),
+      feld('Vergütung je Mehrstunde', f.verguetungJeStd, '€', 'verguetungJeStd'), feld('Mehrstunden vergütet bis insgesamt', f.stundenObergrenze, 'Stunden', 'stundenObergrenze')) },
     { titel: 'Was braucht euer Verein?', text: 'Abrechnung, Pächter, Termine, Mängel und Kassenbericht sind immer dabei. Zusatzbereiche nur ankreuzen, wenn ihr sie nutzt – das lässt sich jederzeit ändern.', inhalt: h('div', { class: 'bereiche' },
       bereiche.map((b) => h('label', { class: 'bereich' }, b.cb, h('span', null, h('b', null, b.name), h('small', null, b.t)))),
       h('label', { class: 'bereich' }, sepaCb, h('span', null, h('b', null, 'Lastschrift'), h('small', null, 'SEPA-Mandate und Datei für das Online-Banking')))) },
@@ -502,16 +522,18 @@ async function einrichtungsAssistent() {
   };
   const speichern = async () => {
     const data = { ...set };
-    for (const k of ['vereinName', 'ort', 'bankName', 'iban', 'bic']) data[k] = f[k].value.trim();
-    for (const k of ['wasserGrundpreis', 'wasserPreis', 'energieGrundpreis', 'energiePreis', 'pachtJeQm', 'vereinsbeitrag', 'pflichtstunden', 'nachzahlungJeStd']) {
+    for (const k of ['vereinName', 'ort', 'absenderzeile', 'bankName', 'iban', 'bic']) data[k] = f[k].value.trim();
+    for (const k of zahlFelder) {
       const v = parseNum(f[k].value);
-      if (v === null || Number.isNaN(v) || v < 0) { i = 1; zeigen(); f[k].classList.add('err'); f[k].focus(); toast('Bitte in allen Preisfeldern eine Zahl ab 0 eintragen.', 'err'); return false; }
+      if (Number.isNaN(v) || (v !== null && v < 0)) { i = 1; zeigen(); f[k].classList.add('err'); f[k].focus(); toast('Bitte eine Zahl ab 0 eintragen, z. B. 2,50 – oder das Feld leer lassen.', 'err'); return false; }
       f[k].classList.remove('err');
-      data[k] = v;
+      data[k] = v ?? 0;
     }
     if (!data.vereinName) { i = 0; zeigen(); f.vereinName.classList.add('err'); toast('Bitte den Vereinsnamen eintragen.', 'err'); return false; }
     try {
       await api('PUT', '/api/admin/settings', data);
+      // nach den Einstellungen: setzt auch Rechnungsdatum und Zahlungsziel passend zum Jahr
+      if (jahrWahl) { await api('POST', '/api/admin/startjahr', { jahr: Number(jahrWahl.value) }); S.year = null; }
     } catch (e) { i = 0; zeigen(); handleErr(e); return false; }
     try {
       await api('PUT', '/api/admin/module', Object.fromEntries(bereiche.map((b) => [b.k, b.cb.checked])));

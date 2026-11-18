@@ -617,6 +617,10 @@ type stateResp struct {
 	Termine []Termin `json:"termine"`
 	// WartelisteAnzahl: wie viele Interessenten warten (nur die Zahl, ohne Namen).
 	WartelisteAnzahl int `json:"wartelisteAnzahl"`
+	// Musterwerte: Angaben, die noch aus der Erstausstattung stammen (Warnung vor dem Ausstellen); nur für die Verwaltung.
+	Musterwerte []string `json:"musterwerte"`
+	// StartjahrAenderbar: das erste Abrechnungsjahr kann noch gewechselt werden (Einrichtungs-Assistent).
+	StartjahrAenderbar bool `json:"startjahrAenderbar"`
 }
 
 func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
@@ -684,6 +688,11 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	res.OffeneVorjahre = a.st.offeneAndererJahreLocked(year)
 	res.Termine = append([]Termin{}, a.st.d.Termine...)
 	res.WartelisteAnzahl = len(a.st.d.Warteliste)
+	res.Musterwerte = []string{}
+	if !has || loggedIn {
+		res.Musterwerte = a.st.musterwerteLocked(time.Now())
+		res.StartjahrAenderbar = a.st.startjahrAenderbarLocked()
+	}
 	// JSON innerhalb der Sperre erzeugen, weil die Maps geteilt sind
 	raw, err := json.Marshal(res)
 	a.st.mu.Unlock()
@@ -1822,6 +1831,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("PUT /api/admin/kuendigungen/regel", a.admin(a.handleKuendigungsRegel))
 	mux.HandleFunc("GET /api/admin/satzungsfristen", a.admin(a.handleSatzungsfristen))
 	mux.HandleFunc("PUT /api/admin/satzungsfristen", a.admin(a.handleSatzungsfristenSpeichern))
+	mux.HandleFunc("POST /api/admin/startjahr", a.admin(a.handleStartjahr))
 	mux.HandleFunc("DELETE /api/admin/kuendigungen/{id}", a.admin(a.handleKuendigungLoeschen))
 	mux.HandleFunc("POST /api/admin/kuendigungen/{id}/schritt", a.admin(a.handleKuendigungSchritt))
 	mux.HandleFunc("GET /api/admin/kuendigungen/{id}/bestaetigung", a.admin(a.pdfAnzeigen(a.kuendigungBestaetigungPDF)))

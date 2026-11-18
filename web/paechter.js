@@ -150,7 +150,7 @@ async function paechterwechselDialog(alt, bewerber) {
     warte: h('select', null, h('option', { value: '' }, liste.length ? '– neuen Pächter von Hand eintragen –' : '(Warteliste ist leer)'),
       liste.map((b) => h('option', { value: b.id, selected: bewerber && bewerber.id === b.id }, `${b.platz}. ${b.name}${b.wunsch ? ' – ' + b.wunsch : ''}`))),
     mitgliedsnr: t(naechsteMitgliedsnr()),
-    anrede: h('select', null, ['Herr', 'Frau', 'Familie', 'Herr und Frau', ''].map((a) => h('option', { value: a }, a || '(keine)'))),
+    anrede: h('select', null, ['', 'Herr', 'Frau', 'Familie', 'Herr und Frau'].map((a) => h('option', { value: a }, a || '(keine)'))),
     name: t(''), strasse: t(''), plzOrt: t(st.settings.ort),
     versand: h('select', null, ['Emailsendung', 'Postversand'].map((a) => h('option', { value: a }, a))),
     email: t('', 'name@beispiel.de', 'email'), telefon: t('', '', 'tel'),
@@ -262,7 +262,7 @@ function bewerberDialog(b) {
   const t = (val, ph, typ) => h('input', { type: typ || 'text', value: val || '', placeholder: ph || '', maxlength: 100, autocomplete: 'off' });
   const f = {
     seit: t(cur.seit, '', 'date'), bestaetigt: t(cur.bestaetigtAm, '', 'date'),
-    anrede: h('select', { value: cur.anrede }, ['Herr', 'Frau', 'Familie', 'Herr und Frau', ''].map((a) => h('option', { value: a, selected: a === cur.anrede }, a || '(keine)'))),
+    anrede: h('select', { value: cur.anrede }, ['', 'Herr', 'Frau', 'Familie', 'Herr und Frau'].map((a) => h('option', { value: a, selected: a === cur.anrede }, a || '(keine)'))),
     name: t(cur.name), strasse: t(cur.strasse), plzOrt: t(cur.plzOrt),
     email: t(cur.email, 'name@beispiel.de', 'email'), telefon: t(cur.telefon, '', 'tel'),
     wunsch: t(cur.wunsch, 'z. B. klein, mit Laube'),
