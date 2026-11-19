@@ -2,6 +2,7 @@
 
 ## Arbeitsweise mit dem Nutzer
 - Sprache: Deutsch. Nutzer will knappe Antworten.
+- Programmtexte bleiben per »du« (Nutzer-Entscheidung, nicht auf »Sie« umstellen).
 - Branch: `claude/github-improvements-pi59o5`. Sammel-PR: Magnethelm90/Kleingarten-Manager#15 (MCP-Reponame `gartenabrechnung`).
 - Nächste Version: **1.5.1** (Versionen fortlaufend weiterzählen).
 - **Nicht mergen**, bis der Nutzer es sagt („wir bauen noch weiter und pullen nicht jede kleine Änderung“).
