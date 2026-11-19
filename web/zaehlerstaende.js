@@ -250,10 +250,11 @@ function schwundBanner() {
   const j = d && d.jahre.find((x) => x.jahr === st.year);
   if (!j || j.wasser.prozent == null) return null;
   const w = j.wasser;
-  const stufe = w.prozent >= d.warnAb ? 'err' : w.prozent < 0 ? 'warn' : 'info';
+  // Solange Gärten fehlen, ist der Wert vorläufig: höchstens gelb, rot erst wenn alle Stände da sind
+  const stufe = w.prozent >= d.warnAb ? (j.unvollstaendig ? 'warn' : 'err') : w.prozent < 0 ? 'warn' : 'info';
   const text = w.prozent < 0
     ? `Die Gärten haben zusammen mehr Wasser gezählt (${nfFlex.format(w.gaerten)} m³) als der Hauptzähler (${nfFlex.format(w.haupt)} m³). Prüfe, ob ein Zählerstand falsch eingetippt wurde.`
-    : `Hauptzähler ${nfFlex.format(w.haupt)} m³, Gärten zusammen ${nfFlex.format(w.gaerten)} m³ – ${nfFlex.format(w.menge)} m³ (${nfFlex.format(w.prozent)} %) kommen in keinem Garten an.${w.prozent >= d.warnAb ? ' Das ist viel: undichte Leitung oder falsch abgelesener Zähler?' : ''}${j.unvollstaendig ? ` ${j.unvollstaendig === 1 ? 'Ein Garten fehlt' : j.unvollstaendig + ' Gärten fehlen'} noch – der Wert wird mit ihnen kleiner.` : ''}`;
+    : `Hauptzähler ${nfFlex.format(w.haupt)} m³, Gärten zusammen ${nfFlex.format(w.gaerten)} m³ – ${nfFlex.format(w.menge)} m³ (${nfFlex.format(w.prozent)} %) kommen in keinem Garten an.${w.prozent >= d.warnAb ? ' Das ist viel: undichte Leitung oder falsch abgelesener Zähler?' : ''}${j.unvollstaendig ? ` ${j.unvollstaendig === 1 ? 'Ein Garten fehlt' : j.unvollstaendig + ' Gärten fehlen'} noch. Der Wert ist deshalb vorläufig.` : ''}`;
   return h('div', { class: 'banner ' + stufe, style: 'margin-bottom:10px' }, h('b', null, 'Wasser-Vergleich: '), text);
 }
 
@@ -428,8 +429,8 @@ function viewSchnell() {
 
   return h('div', null,
     h('p', { class: 'hint' }, (S.state.years || []).includes(S.state.year - 1)
-      ? 'Nummer eintippen, Enter drücken: Name, Adresse, Gartengröße, Umlage und Zählernummern kommen automatisch aus den Stammdaten, der Vorjahresstand ist schon eingetragen. Du gibst nur noch die neuen Stände ein. Mit Enter springst du zum nächsten Feld, nach dem letzten wieder zur Nummer. Alles wird sofort gespeichert.'
-      : 'Nummer eintippen, Enter drücken: Name, Adresse, Gartengröße, Umlage und Zählernummern kommen automatisch aus den Stammdaten. Im ersten Jahr mit dem Programm trägst du auch den Stand vom Vorjahr ein – das ist die letzte Ablesung vor diesem Jahr. Ab dem nächsten Jahr steht er dann schon da. Mit Enter springst du zum nächsten Feld. Alles wird sofort gespeichert.'),
+      ? 'Nummer eintippen, Enter drücken, neue Stände eingeben. Der Vorjahresstand ist schon da. Mit Enter geht es zum nächsten Feld. Alles wird sofort gespeichert.'
+      : 'Nummer eintippen, Enter drücken, Stände eingeben. Im ersten Jahr trägst du auch den Stand vom Vorjahr ein (die letzte Ablesung). Mit Enter geht es zum nächsten Feld. Alles wird sofort gespeichert.'),
     h('div', { class: 'toolbar' }, input, h('span', { class: 'stat' }, `${done} von ${list.length} vollständig`), h('span', { class: 'saveind' }, '✓ gespeichert')),
     sugg, box);
 }

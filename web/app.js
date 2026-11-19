@@ -42,6 +42,7 @@ function svgEl(tag, attrs, ...kids) {
 // auskommen. Jedes Symbol ist eine Liste von Pfaden.
 const ICONS = {
   blatt: ['M5 19c0-9 5-14 15-14 0 10-5 15-14 15z', 'M5 20l9-9'],
+  papierkorb: ['M4 7h16', 'M9 7V4h6v3', 'M6 7l1 13h10l1-13', 'M10 11v6', 'M14 11v6'],
   zaehler: ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M12 12l4-4', 'M7.5 15.5h9'],
   rechnung: ['M7 3h7l4 4v14H7z', 'M14 3v4h4', 'M9.5 12h6', 'M9.5 16h6'],
   euro: ['M17 6.5A6.5 6.5 0 1 0 17 17.5', 'M5 10.5h8', 'M5 13.5h8'],

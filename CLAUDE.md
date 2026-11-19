@@ -187,6 +187,7 @@
 - Zahlungen ohne Rechnung zeigen nur den Leer-Hinweis (früher leere Kennzahlen/Filter/Knöpfe); Tabellen mit `data-ohne-druck` bekommen keinen automatischen »Tabelle drucken«-Knopf (Pächter hat »Pächterliste drucken«).
 - Kassenbericht: Versorger-Vergleich, Schwund und Jahresverlauf sind `klappKarte`n (`kb-versorger/kb-schwund/kb-verlauf`), standardmäßig zu.
 - Design-Feinschliff (Nutzer: »für Vorstände«): Beispieldaten-Banner einzeilig (`.banner.demo`, Knöpfe rechts), Links in main/dialog in Vereinsgrün statt Browser-Blau, `.cards` minmax(190px) (5 Kennzahlen in einer Reihe), »Tabelle drucken« erst ab 6 Zeilen.
+- Wasser-Vergleich über den Zählerständen: rot erst, wenn alle Stände da sind (vorher gelb, »vorläufig«). Berichte-Kacheln »Sicherheit und Übergabe« mit eigenen Symbolen (Icon `papierkorb` neu in ICONS).
 - Offen: nichts Konkretes.
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

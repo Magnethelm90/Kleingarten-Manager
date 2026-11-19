@@ -961,15 +961,15 @@ function adminBerichte() {
     h('h3', { class: 'bericht-gruppe' }, 'Sicherheit und Übergabe'),
     h('p', { class: 'hint' }, 'Prüfen, zurückholen, an den nächsten Vorstand weitergeben.'),
     h('div', { class: 'bericht-raster' },
-      kachel('daten', 'Wartungs-Check', 'Ist alles in Ordnung? Datenordner, Sicherungen, zweiter Ordner, Passwort und Programmversion auf einen Blick.',
+      kachel('sicherung', 'Wartungs-Check', 'Ist alles in Ordnung? Datenordner, Sicherungen, zweiter Ordner, Passwort und Programmversion auf einen Blick.',
         h('div', { class: 'row' }, h('button', { class: 'btn', onclick: wartungsCheck }, 'Prüfen'), pdfKnopf('wartung', 'Wartungs-Check'))),
-      kachel('daten', 'Daten aufräumen', 'Findet doppelte Pächter, doppelte Nummern, fehlende Anschriften und ungültige IBAN – und führt mit einem Klick zur Stelle.',
+      kachel('werkzeug', 'Daten aufräumen', 'Findet doppelte Pächter, doppelte Nummern, fehlende Anschriften und ungültige IBAN – und führt mit einem Klick zur Stelle.',
         h('button', { class: 'btn', onclick: datencheckDialog }, 'Prüfen')),
       kachel('daten', 'Abgleich zwischen zwei Rechnern', 'Kassier und Schriftführer arbeiten getrennt? Per USB-Stick bringst du beide Stände zusammen – es kommen nur neue Einträge dazu.',
         h('button', { class: 'btn', onclick: abgleichDialog }, 'Öffnen')),
-      kachel('daten', 'Papierkorb', 'Gelöschte Mängel, Termine, Beschlüsse und Verträge 30 Tage lang zurückholen.',
+      kachel('papierkorb', 'Papierkorb', 'Gelöschte Mängel, Termine, Beschlüsse und Verträge 30 Tage lang zurückholen.',
         h('button', { class: 'btn', onclick: papierkorbDialog }, 'Öffnen')),
-      kachel('daten', 'Amtsübergabe', 'Vereinsakte für den neuen Vorstand: alle Daten und Dateien plus »Lies mich zuerst« mit Zahlen, Regeln und offenen Punkten.',
+      kachel('akte', 'Amtsübergabe', 'Vereinsakte für den neuen Vorstand: alle Daten und Dateien plus »Lies mich zuerst« mit Zahlen, Regeln und offenen Punkten.',
         h('button', { class: 'btn', onclick: vereinsakteErstellen }, 'Erstellen'))
     ));
 }

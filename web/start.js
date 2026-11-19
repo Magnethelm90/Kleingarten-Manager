@@ -233,7 +233,8 @@ const NEUERUNGEN = [
     'Übersicht aufgeräumt: Was doppelt da stand, ist weg. Der Fahrplan zeigt, was als Nächstes dran ist.',
     'Zahlungen: Gibt es noch keine Rechnung, siehst du nur den Hinweis – ohne leere Zahlen und Knöpfe.',
     'Kasse: Versorger-Vergleich, Schwund und Jahresverlauf sind eingeklappt – die Seite ist kürzer.',
-    'Ruhigeres Bild: kürzerer Beispieldaten-Hinweis, Links in Vereinsfarbe, »Tabelle drucken« nur bei längeren Tabellen.'] }];
+    'Ruhigeres Bild: kürzerer Beispieldaten-Hinweis, Links in Vereinsfarbe, »Tabelle drucken« nur bei längeren Tabellen.',
+    'Zählerstände: Der Wasser-Vergleich ist erst rot, wenn alle Stände da sind – vorher gelb.'] }];
 function neuerungenPruefen() {
   const st = S.state;
   if (st.gesperrt || (st.hasPassword && !st.loggedIn)) return;
