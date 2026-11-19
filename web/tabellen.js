@@ -54,7 +54,7 @@
     for (const r of g.zeilen) [...r.cells].forEach((z, i) => { if (!z.dataset.label && namen[i]) z.dataset.label = namen[i]; });
     // Knopf »Tabelle drucken« über jeder Tabelle mit mehreren Zeilen (Dialoge drucken sich selbst)
     const mitEingabe = rumpf.querySelector('input:not([type=checkbox]):not([type=hidden]), textarea, select');
-    if (g.zeilen.length >= 2 && !mitEingabe && !tab.closest('dialog') && !(tab._druck && tab._druck.isConnected)) {
+    if (g.zeilen.length >= 2 && !mitEingabe && !tab.closest('dialog') && !tab.dataset.ohneDruck && !(tab._druck && tab._druck.isConnected)) {
       const d = document.createElement('button');
       d.type = 'button'; d.className = 'btn small tab-druck'; d.textContent = 'Tabelle drucken';
       d.title = 'Diese Tabelle ohne Menü und Knöpfe ausdrucken oder als PDF speichern';

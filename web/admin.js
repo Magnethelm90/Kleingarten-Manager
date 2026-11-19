@@ -198,7 +198,7 @@ function adminPaechter() {
       sammelKnopf,
       h('div', { class: 'spacer' }),
       h('button', { class: 'btn', title: 'Liste aller Pächter mit Anschrift als PDF zum Ausdrucken', onclick: paechterlisteDrucken }, 'Pächterliste drucken')),
-    h('div', { class: 'tablewrap' }, h('table', null,
+    h('div', { class: 'tablewrap' }, h('table', { 'data-ohne-druck': '1' },
       h('thead', null, h('tr', null, h('th', { class: 'auswahl' }, alleKasten), ['Mitgl.-Nr.', 'Garten', 'Name', 'Anschrift', 'Kontakt', 'Größe', mitUmlage ? 'Umlage' : null, 'Zähler', ''].filter((x) => x !== null).map((x) => h('th', null, x)))), tbody)),
     uebergabenCard(),
     papierkorbCard());

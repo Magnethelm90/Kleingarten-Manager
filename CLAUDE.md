@@ -183,6 +183,7 @@
 - Übersicht so einfach wie möglich (Nutzer): Startkarte »Was möchtest du tun?« entfernt (doppelt zum Fahrplan; »Wörter erklärt« bleibt im »?«-Menü),
   Kennzahl »Unvollständige Pächter« und Termin-Fakt in der Begrüßung entfernt (doppelt), Begrüßung flacher. Reihenfolge: Begrüßung,
   Fahrplan, Banner, »Was steht an?«, Termine/Besichtigungen, Kennzahlen (Kasse, offene Rechnungen, Sicherung). Keine Funktion entfernt.
+- Zahlungen ohne Rechnung zeigen nur den Leer-Hinweis (früher leere Kennzahlen/Filter/Knöpfe); Tabellen mit `data-ohne-druck` bekommen keinen automatischen »Tabelle drucken«-Knopf (Pächter hat »Pächterliste drucken«).
 - Offen: nichts Konkretes.
 
 ## Prüfwerkzeuge (bei größeren Änderungen)

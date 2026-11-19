@@ -230,7 +230,8 @@ const NEUERUNGEN = [
     'Berichte: »Jahreszahlen« bündelt Jahresbericht, Jahresmeldung, Statistik und Kostenvergleich.',
     'Druck-Knöpfe einheitlich: »Drucken« und – wo sinnvoll – »Als PDF speichern«.',
     'Zählerstände: »Abgelesen am« – das Programm trägt den Tag selbst ein, du kannst ihn ändern.',
-    'Übersicht aufgeräumt: Was doppelt da stand, ist weg. Der Fahrplan zeigt, was als Nächstes dran ist.'] }];
+    'Übersicht aufgeräumt: Was doppelt da stand, ist weg. Der Fahrplan zeigt, was als Nächstes dran ist.',
+    'Zahlungen: Gibt es noch keine Rechnung, siehst du nur den Hinweis – ohne leere Zahlen und Knöpfe.'] }];
 function neuerungenPruefen() {
   const st = S.state;
   if (st.gesperrt || (st.hasPassword && !st.loggedIn)) return;

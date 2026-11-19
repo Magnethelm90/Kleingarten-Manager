@@ -375,10 +375,18 @@ function viewZahlungen() {
   draw();
 
   const notIssued = st.paechter.length - Object.keys(st.issued || {}).length;
+  // Noch keine Rechnung: nur der Hinweis, keine leeren Kennzahlen, Filter und Knöpfe
+  if (!all.length) {
+    return h('div', null,
+      h('h2', null, `Zahlungen ${st.year}`, ' ', seitenHilfe(S.tab === 'zahlungen' ? 'zahlungen' : S.adminTab)),
+      reiterKopf(),
+      h('div', { class: 'card' }, leer('euro', 'Noch nichts zu kassieren', `Für ${st.year} wurde noch keine Rechnung ausgestellt. Sobald das passiert ist, hakst du hier die Zahlungen ab.`, 'Zu den Rechnungen', () => { S.tab = 'rechnungen'; render(); })),
+      anderenJahrenOffen(st));
+  }
   return h('div', null,
     h('h2', null, `Zahlungen ${st.year}`, ' ', seitenHilfe(S.tab === 'zahlungen' ? 'zahlungen' : S.adminTab)),
     reiterKopf(),
-    h('p', { class: 'hint' }, 'Hier siehst du, welche Rechnungen bezahlt sind und welche noch offen. Haken setzen = bezahlt heute (das Datum kannst du ändern). Über »Details« trägst du Teilzahlungen oder eine Notiz ein. Rechnungen mit Guthaben erscheinen hier auch, damit du siehst, was noch an Pächter auszuzahlen ist.'),
+    h('p', { class: 'hint' }, 'Haken setzen = bezahlt heute (das Datum kannst du ändern). Teilbetrag: eintragen und Enter. Über »Details« kommen Notiz, Ratenplan und Gutschrift.'),
     notIssued > 0 ? h('div', { class: 'banner info' }, `${notIssued} Pächter ${notIssued === 1 ? 'hat' : 'haben'} in ${st.year} noch keine ausgestellte Rechnung und ${notIssued === 1 ? 'taucht' : 'tauchen'} deshalb hier noch nicht auf.`) : null,
     anderenJahrenOffen(st),
     summary,
