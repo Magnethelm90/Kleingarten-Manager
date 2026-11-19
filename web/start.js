@@ -212,7 +212,7 @@ const NEUERUNGEN = [
     'Auf der Seite »Zählerstände« steht jetzt der Wasser-Vergleich mit dem Hauptzähler.',
     'Die Wiederherstellungs-Probe läuft alle 30 Tage von selbst.',
     'Suche findet auch Wörter mit einem Tippfehler (Meyer = Meier).',
-    'Über jeder Tabelle steht »Tabelle drucken«.',
+    'Über längeren Tabellen steht »Tabelle drucken«.',
     'Bei vielen Hinweisen ist das Cockpit nach Geld, Anlage und Verein sortiert.',
     'In den Einstellungen kannst du die »Letzten Änderungen« ansehen und zurücknehmen.',
     'Nach einem Update prüft sich das Programm selbst (Ergebnis siehst du hier).',
@@ -232,7 +232,8 @@ const NEUERUNGEN = [
     'Zählerstände: »Abgelesen am« – das Programm trägt den Tag selbst ein, du kannst ihn ändern.',
     'Übersicht aufgeräumt: Was doppelt da stand, ist weg. Der Fahrplan zeigt, was als Nächstes dran ist.',
     'Zahlungen: Gibt es noch keine Rechnung, siehst du nur den Hinweis – ohne leere Zahlen und Knöpfe.',
-    'Kasse: Versorger-Vergleich, Schwund und Jahresverlauf sind eingeklappt – die Seite ist kürzer.'] }];
+    'Kasse: Versorger-Vergleich, Schwund und Jahresverlauf sind eingeklappt – die Seite ist kürzer.',
+    'Ruhigeres Bild: kürzerer Beispieldaten-Hinweis, Links in Vereinsfarbe, »Tabelle drucken« nur bei längeren Tabellen.'] }];
 function neuerungenPruefen() {
   const st = S.state;
   if (st.gesperrt || (st.hasPassword && !st.loggedIn)) return;

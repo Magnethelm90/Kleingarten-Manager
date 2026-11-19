@@ -368,10 +368,10 @@ function anz(n, eins, viele) { return `${n} ${n === 1 ? eins : viele}`; }
 function demoBanner(st) {
   if (!st.demo) return null;
   const istAdmin = !st.hasPassword || st.loggedIn;
-  return h('div', { class: 'banner info' },
-    'Du siehst Beispieldaten: ein erfundener Verein mit erfundenen Namen und Zahlen zum Ausprobieren.',
-    ' ', h('button', { class: 'btn small', onclick: probierDialog }, 'Probier es aus'),
-    istAdmin ? [' ', h('button', { class: 'btn small', onclick: beispieldatenEntfernen }, 'Beispieldaten entfernen und eigene Daten anlegen')] : null);
+  return h('div', { class: 'banner info demo' },
+    h('span', null, 'Du siehst Beispieldaten: ein erfundener Verein zum Ausprobieren.'),
+    h('button', { class: 'btn small', onclick: probierDialog }, 'Probier es aus'),
+    istAdmin ? h('button', { class: 'btn small', onclick: beispieldatenEntfernen }, 'Beispieldaten entfernen') : null);
 }
 
 // Drei kleine Aufgaben mit den Beispieldaten: jede führt direkt an die richtige Stelle.
