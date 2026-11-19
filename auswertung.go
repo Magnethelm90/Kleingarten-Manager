@@ -224,6 +224,8 @@ func (a *App) handleAusgabeCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.ID = newID()
+	// Belege und »geprüft« nur über die eigenen Endpunkte (Hochladen bzw. Kassenprüfung), nie aus der Eingabe
+	in.Belege, in.Beleg, in.Geprueft, in.GeprueftAm = nil, "", false, ""
 	j := a.st.ensureYear(year)
 	j.Ausgaben = append(j.Ausgaben, in)
 	if err := a.st.saveLocked(); err != nil {
@@ -256,7 +258,7 @@ func (a *App) handleAusgabeUpdate(w http.ResponseWriter, r *http.Request) {
 	for i := range j.Ausgaben {
 		if j.Ausgaben[i].ID == id {
 			in.ID = id
-			in.Belege = j.Ausgaben[i].Belege                                              // wird nur über die eigenen Beleg-Endpunkte geändert
+			in.Belege, in.Beleg = j.Ausgaben[i].Belege, j.Ausgaben[i].Beleg               // wird nur über die eigenen Beleg-Endpunkte geändert
 			in.Geprueft, in.GeprueftAm = j.Ausgaben[i].Geprueft, j.Ausgaben[i].GeprueftAm // nur über den eigenen Endpunkt
 			j.Ausgaben[i] = in
 			if err := a.st.saveLocked(); err != nil {
@@ -576,13 +578,15 @@ type kassenbericht struct {
 	// Tatsächlich geflossenes Geld (nach dem heutigen Zahlungsstand)
 	EinnahmenBezahlt   float64 `json:"einnahmenBezahlt"`   // von Pächtern eingegangen
 	GuthabenAusgezahlt float64 `json:"guthabenAusgezahlt"` // an Pächter ausgezahlte Guthaben
+	Spenden            float64 `json:"spenden"`            // Spenden an den Verein (siehe spenden.go)
+	Vorauszahlungen    float64 `json:"vorauszahlungen"`    // monatliche Vorauszahlungen per Lastschrift (siehe sepa.go)
 
 	// Sonstige Ausgaben der Vereinskasse (Kontoführung, Anschaffungen, Reparaturen, ...)
 	Ausgaben          []Ausgabe        `json:"ausgaben"`
 	AusgabenSumme     float64          `json:"ausgabenSumme"`
 	AusgabenKategorie []kategorieSumme `json:"ausgabenKategorie"`
 
-	// Saldo = EinnahmenBezahlt - GuthabenAusgezahlt - AusgabenSumme: die Kassenbewegung
+	// Saldo = EinnahmenBezahlt + Spenden - GuthabenAusgezahlt - AusgabenSumme: die Kassenbewegung
 	// dieses Jahres. Anfangsbestand ist der Kassenbestand zu Jahresbeginn (von Hand
 	// gepflegt bzw. beim Jahreswechsel aus dem Vorjahr übernommen), Kassenbestand ist
 	// Anfangsbestand + Saldo – der tatsächliche Kontostand am heutigen Tag.
@@ -594,6 +598,53 @@ type kassenbericht struct {
 	// (z. B. weil eine Vorjahresrechnung erst nach dem Jahreswechsel bezahlt wurde), bietet der
 	// Kassenbericht an, den Anfangsbestand anzugleichen. Leer, wenn es kein Vorjahr gibt.
 	VorjahrEndbestand *float64 `json:"vorjahrEndbestand,omitempty"`
+	// AnfangAutomatisch: der Anfangsbestand folgt dem Endbestand des Vorjahres (siehe anfangNachfuehrenLocked)
+	AnfangAutomatisch bool `json:"anfangAutomatisch"`
+
+	// Wechsel: Pächter, die ausgeschieden sind und für die noch etwas offen ist (Schlussrechnung, Zahlung oder
+	// auszuzahlendes Guthaben). So geht beim Pächterwechsel nichts in der Kasse verloren.
+	Wechsel []wechselPosten `json:"wechsel"`
+}
+
+type wechselPosten struct {
+	PaechterID    string  `json:"paechterId"`
+	Gartennr      string  `json:"gartennr"`
+	Name          string  `json:"name"`
+	Ausgeschieden string  `json:"ausgeschieden"`
+	OhneRechnung  bool    `json:"ohneRechnung"`       // für dieses Jahr gibt es noch keine ausgestellte Rechnung
+	Offen         float64 `json:"offen"`              // noch zu zahlen (alle Jahre)
+	Guthaben      float64 `json:"guthaben,omitempty"` // noch auszuzahlen (alle Jahre)
+}
+
+// wechselLocked sucht ausgeschiedene Pächter mit offenen Posten. Abgeschlossene Jahre bleiben unberührt.
+func (s *Store) wechselLocked(v yearView) []wechselPosten {
+	out := []wechselPosten{}
+	if v.ReadOnly {
+		return out
+	}
+	for _, p := range v.Paechter {
+		if p.AusgeschiedenAm == "" || p.Geloescht {
+			continue
+		}
+		w := wechselPosten{PaechterID: p.ID, Gartennr: p.Gartennr, Name: p.Name, Ausgeschieden: p.AusgeschiedenAm}
+		w.OhneRechnung = s.validInvoiceLocked(v.Jahr, p.ID) == nil
+		for _, r := range s.d.Rechnungen {
+			if r.PaechterID != p.ID || r.Status != statusGueltig || r.Bereinigt {
+				continue
+			}
+			if o := openAmount(r); r.Result.Gesamt > 0 && o > 0.004 {
+				w.Offen += o
+			} else if r.Result.Gesamt < 0 && o > 0.004 {
+				w.Guthaben += o
+			}
+		}
+		w.Offen, w.Guthaben = round2(w.Offen), round2(w.Guthaben)
+		if w.OhneRechnung || w.Offen > 0 || w.Guthaben > 0 {
+			out = append(out, w)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return natLess(out[i].Gartennr, out[j].Gartennr) })
+	return out
 }
 
 // kassenberichtMitVorjahrLocked ergänzt den Kassenbericht um den aktuellen Endbestand des Vorjahres.
@@ -611,7 +662,7 @@ func (s *Store) kassenberichtMitVorjahrLocked(v yearView) kassenbericht {
 // Pächter ist die gültige ausgestellte Rechnung, sonst die aktuelle Berechnung.
 // Der Aufrufer hält s.mu.
 func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
-	k := kassenbericht{Jahr: v.Jahr, Unvollstaendig: []string{}, Ausgaben: []Ausgabe{}, AusgabenKategorie: []kategorieSumme{}}
+	k := kassenbericht{Jahr: v.Jahr, Wechsel: []wechselPosten{}, Unvollstaendig: []string{}, Ausgaben: []Ausgabe{}, AusgabenKategorie: []kategorieSumme{}}
 	if j := s.d.Jahre[yearKey(v.Jahr)]; j != nil {
 		if j.Versorger != nil {
 			k.Versorger = *j.Versorger
@@ -619,6 +670,7 @@ func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
 		if j.Anfangsbestand != nil {
 			k.Anfangsbestand = *j.Anfangsbestand
 		}
+		k.AnfangAutomatisch = j.AnfangAutomatisch
 		k.Ausgaben = append(k.Ausgaben, j.Ausgaben...)
 	}
 	sort.SliceStable(k.Ausgaben, func(i, j int) bool { return k.Ausgaben[i].Datum < k.Ausgaben[j].Datum })
@@ -691,7 +743,10 @@ func (s *Store) kassenberichtLocked(v yearView) kassenbericht {
 		k.Berechnet++
 	}
 	k.Paechter = k.Ausgestellt + k.Berechnet + len(k.Unvollstaendig)
-	k.Saldo = k.EinnahmenBezahlt - k.GuthabenAusgezahlt - k.AusgabenSumme
+	k.Wechsel = s.wechselLocked(v)
+	k.Spenden = s.spendenSummeLocked(v.Jahr)
+	k.Vorauszahlungen = s.vorauszahlungenLocked(v.Jahr)
+	k.Saldo = k.EinnahmenBezahlt + k.Vorauszahlungen + k.Spenden - k.GuthabenAusgezahlt - k.AusgabenSumme
 	k.Kassenbestand = k.Anfangsbestand + k.Saldo
 	for _, x := range []*float64{&k.WasserVerbrauch, &k.StromVerbrauch, &k.Summen.KostenWasser, &k.Summen.KostenEnergie,
 		&k.Summen.NachzahlungStunden, &k.Summen.Zwischensumme1, &k.Summen.PachtGarten, &k.Summen.PachtVerein, &k.Summen.PachtFrei,
@@ -751,9 +806,33 @@ func (a *App) handleVersorger(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAnfangsbestand setzt den Kassenbestand zu Jahresbeginn von Hand.
+// anfangNachfuehrenLocked: Wird in einem abgeschlossenen Jahr nachgebucht (späte Zahlung, nachgereichte Ausgabe),
+// folgt der automatisch übernommene Anfangsbestand des Folgejahres dem neuen Endbestand. Läuft vor jedem Speichern.
+// Der Aufrufer hält s.mu.
+func (s *Store) anfangNachfuehrenLocked() {
+	ys := s.years()
+	sort.Ints(ys)
+	for _, y := range ys {
+		j, vj := s.d.Jahre[yearKey(y)], s.d.Jahre[yearKey(y-1)]
+		if j == nil || vj == nil || !vj.Abgeschlossen || !j.AnfangAutomatisch || j.Anfangsbestand == nil {
+			continue
+		}
+		v, ok := s.viewLocked(y - 1)
+		if !ok {
+			continue
+		}
+		ende := round2(s.kassenberichtLocked(v).Kassenbestand)
+		if alt := *j.Anfangsbestand; absf(ende-alt) >= 0.005 {
+			j.Anfangsbestand = &ende
+			s.audit("Anfangsbestand %d an den Endbestand %d angepasst: %s → %s (Nachbuchung im abgeschlossenen Jahr)", y, y-1, fmtEUR(alt), fmtEUR(ende))
+		}
+	}
+}
+
 func (a *App) handleAnfangsbestand(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Betrag *float64 `json:"betrag"`
+		Betrag      *float64 `json:"betrag"`
+		Automatisch bool     `json:"automatisch"` // Angleichen ans Vorjahr: danach wieder automatisch folgen
 	}
 	if err := readJSON(w, r, &in); err != nil {
 		writeErr(w, err)
@@ -772,6 +851,7 @@ func (a *App) handleAnfangsbestand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	j.Anfangsbestand = in.Betrag
+	j.AnfangAutomatisch = in.Automatisch // von Hand gesetzt: folgt dem Vorjahr nicht mehr automatisch
 	if err := a.st.saveLocked(); err != nil {
 		writeErr(w, err)
 		return
@@ -870,6 +950,8 @@ func kassenberichtRows(k kassenbericht, verein string) [][]xCell {
 		[]xCell{{"Kassenbestand", stHeader}, {"Betrag (€)", stHeader}},
 		[]xCell{{"Anfangsbestand", stNormal}, {k.Anfangsbestand, stEUR}},
 		[]xCell{{"+ Von Pächtern eingegangene Zahlungen", stNormal}, {k.EinnahmenBezahlt, stEUR}},
+		[]xCell{{"+ Vorauszahlungen der Pächter", stNormal}, {k.Vorauszahlungen, stEUR}},
+		[]xCell{{"+ Spenden", stNormal}, {k.Spenden, stEUR}},
 		[]xCell{{"− An Pächter ausgezahlte Guthaben", stNormal}, {-k.GuthabenAusgezahlt, stEUR}},
 		[]xCell{{"− Sonstige Ausgaben", stNormal}, {-k.AusgabenSumme, stEUR}},
 		[]xCell{{"Kassenbestand (Kontostand heute)", stBold}, {k.Kassenbestand, stEURb}},

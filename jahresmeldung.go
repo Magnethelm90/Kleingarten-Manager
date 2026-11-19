@@ -124,6 +124,8 @@ func (s *Store) jahresmeldungLocked(year int, jetzt time.Time) (jahresmeldung, b
 	// Kasse
 	add("Kasse", "Kassenbestand zu Jahresbeginn", k.Anfangsbestand, "€")
 	add("Kasse", "Einnahmen von Pächtern", k.EinnahmenBezahlt, "€")
+	add("Kasse", "Vorauszahlungen der Pächter", k.Vorauszahlungen, "€")
+	add("Kasse", "Spenden", k.Spenden, "€")
 	add("Kasse", "sonstige Ausgaben", k.AusgabenSumme, "€")
 	add("Kasse", "Kassenbestand heute", k.Kassenbestand, "€")
 	return m, true

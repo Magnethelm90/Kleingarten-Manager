@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -215,4 +217,51 @@ func (a *App) handleBewerberDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	sicherungen := a.st.bereinigeSicherungen(func(d *Data) bool { return d.entferneBewerber(id) })
 	writeJSON(w, 200, map[string]int{"sicherungenBereinigt": sicherungen})
+}
+
+// bewerberAuskunft: Auskunft nach Art. 15 DSGVO für Bewerber auf der Warteliste – alle gespeicherten Angaben als Datei.
+type bewerberAuskunft struct {
+	Erstellt    string   `json:"erstelltAm"`
+	Verantwort  string   `json:"verantwortlich"`
+	Hinweis     string   `json:"hinweis"`
+	Angaben     Bewerber `json:"angaben"`
+	Zweck       string   `json:"zweck"`
+	Aufbewahrng string   `json:"aufbewahrung"`
+}
+
+func (a *App) handleBewerberAuskunft(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	a.st.mu.Lock()
+	var b *Bewerber
+	for i := range a.st.d.Warteliste {
+		if a.st.d.Warteliste[i].ID == id {
+			b = &a.st.d.Warteliste[i]
+		}
+	}
+	if b == nil {
+		a.st.mu.Unlock()
+		writeErr(w, notFound("Eintrag nicht gefunden"))
+		return
+	}
+	res := bewerberAuskunft{
+		Erstellt:   time.Now().Format("2006-01-02 15:04"),
+		Verantwort: a.st.d.Settings.VereinName,
+		Hinweis:    "Auskunft nach Art. 15 DSGVO (zugleich Datenkopie nach Art. 20): alle Angaben, die der Verein zu Ihnen auf der Warteliste gespeichert hat.",
+		Angaben:    *b,
+		Zweck:      "Vergabe eines frei werdenden Gartens in der Reihenfolge der Anmeldung.",
+		Aufbewahrng: fmt.Sprintf("Die Angaben bleiben gespeichert, bis Sie einen Garten erhalten, Ihre Anmeldung zurückziehen oder nicht mehr erreichbar sind. "+
+			"Nach %d Jahren ohne Rückmeldung fragt der Verein nach, ob Sie noch Interesse haben.", wartelisteNachfragenJahre),
+	}
+	a.st.audit("Datenauskunft für einen Eintrag der Warteliste erstellt")
+	_ = a.st.saveLocked()
+	a.st.mu.Unlock()
+	raw, err := json.MarshalIndent(res, "", "  ")
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="Datenauskunft_Warteliste.json"`)
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(raw)
 }

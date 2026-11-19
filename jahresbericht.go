@@ -1,13 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"net/http"
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-pdf/fpdf"
@@ -34,6 +34,9 @@ type jahresberichtDaten struct {
 	Termine     []Termin
 	ErstelltAm  time.Time
 	VorjahrJahr int
+	// Vereinsleben: Mängel der Begehungen, Arbeitseinsätze und Beschlüsse des Jahres (ohne Namen)
+	Maengel, MaengelErledigt, Einsaetze int
+	Beschluesse                         []Beschluss
 }
 
 func (s *Store) jahresberichtLocked(year int, jetzt time.Time) (jahresberichtDaten, bool) {
@@ -82,6 +85,26 @@ func (s *Store) jahresberichtLocked(year int, jetzt time.Time) (jahresberichtDat
 	}
 	sort.SliceStable(d.Uebergaben, func(i, j int) bool { return d.Uebergaben[i].Datum < d.Uebergaben[j].Datum })
 	d.Warteliste = len(s.d.Warteliste)
+	jp := fmt.Sprintf("%d-", year)
+	for _, m := range s.d.Maengel {
+		if strings.HasPrefix(m.Datum, jp) {
+			d.Maengel++
+			if m.ErledigtAm != "" {
+				d.MaengelErledigt++
+			}
+		}
+	}
+	for _, t := range s.d.Termine {
+		if t.Art == "Arbeitseinsatz" && strings.HasPrefix(t.Datum, jp) {
+			d.Einsaetze++
+		}
+	}
+	for _, b := range s.d.Beschluesse {
+		if strings.HasPrefix(b.Datum, jp) {
+			d.Beschluesse = append(d.Beschluesse, b)
+		}
+	}
+	sort.SliceStable(d.Beschluesse, func(i, j int) bool { return d.Beschluesse[i].Datum < d.Beschluesse[j].Datum })
 	heute := jetzt.Format("2006-01-02")
 	for _, t := range s.d.Termine {
 		if t.Datum >= heute && len(d.Termine) < 8 {
@@ -245,6 +268,12 @@ func buildJahresbericht(d jahresberichtDaten) ([]byte, error) {
 	y += 6
 	zeile("Kassenbestand zu Jahresbeginn", fmtEUR(d.K.Anfangsbestand), vorEUR(func(k kassenbericht) float64 { return k.Anfangsbestand }), false)
 	zeile("+ Zahlungen der Pächter", fmtEUR(d.K.EinnahmenBezahlt), vorEUR(func(k kassenbericht) float64 { return k.EinnahmenBezahlt }), false)
+	if d.K.Vorauszahlungen != 0 || (vk != nil && vk.Vorauszahlungen != 0) {
+		zeile("+ Vorauszahlungen", fmtEUR(d.K.Vorauszahlungen), vorEUR(func(k kassenbericht) float64 { return k.Vorauszahlungen }), false)
+	}
+	if d.K.Spenden != 0 || (vk != nil && vk.Spenden != 0) {
+		zeile("+ Spenden", fmtEUR(d.K.Spenden), vorEUR(func(k kassenbericht) float64 { return k.Spenden }), false)
+	}
 	if d.K.GuthabenAusgezahlt != 0 || (vk != nil && vk.GuthabenAusgezahlt != 0) {
 		zeile("− ausgezahlte Guthaben", fmtEUR(d.K.GuthabenAusgezahlt), vorEUR(func(k kassenbericht) float64 { return k.GuthabenAusgezahlt }), false)
 	}
@@ -352,7 +381,7 @@ func buildJahresbericht(d jahresberichtDaten) ([]byte, error) {
 	case 0:
 		punkt("Kein Pächterwechsel in diesem Jahr.")
 	default:
-		txt := fmt.Sprintf("%d Gartenübergabe(n): ", n)
+		txt := mehrzahl(n, "Gartenübergabe", "Gartenübergaben") + ": "
 		for i, u := range d.Uebergaben {
 			if i > 0 {
 				txt += ", "
@@ -362,13 +391,29 @@ func buildJahresbericht(d jahresberichtDaten) ([]byte, error) {
 		punkt(txt)
 	}
 	if d.Warteliste > 0 {
-		punkt(fmt.Sprintf("%d Interessent(en) auf der Warteliste für einen Garten.", d.Warteliste))
+		punkt(mehrzahl(d.Warteliste, "Interessent", "Interessenten") + " auf der Warteliste für einen Garten.")
 	} else {
 		punkt("Die Warteliste ist leer.")
 	}
 	if d.MitStunden > 0 {
 		punkt(fmt.Sprintf("Pflichtstunden (%s h) erfüllt: %d von %d Gärten, zusammen %s Stunden Gemeinschaftsarbeit.",
 			fmtFlex(s.Pflichtstunden), d.PflichtOK, d.MitStunden, fmtFlex(d.Stunden)))
+	}
+	if d.Einsaetze > 0 {
+		punkt(fmt.Sprintf("%d Arbeitseinsätze in der Anlage.", d.Einsaetze))
+	}
+	if d.Maengel > 0 {
+		punkt(fmt.Sprintf("Bei den Begehungen wurden %d Mängel festgestellt, davon sind %d beseitigt.", d.Maengel, d.MaengelErledigt))
+	}
+	if n := len(d.Beschluesse); n > 0 {
+		punkt(fmt.Sprintf("%d Beschlüsse im Beschlussbuch:", n))
+		for i, b := range d.Beschluesse {
+			if i >= 8 {
+				punkt(fmt.Sprintf("… und %d weitere.", n-i))
+				break
+			}
+			punkt(germanDate(b.Datum) + ": " + b.Titel + " (" + b.Ergebnis + ")")
+		}
 	}
 	y += 5
 
@@ -403,11 +448,7 @@ func buildJahresbericht(d jahresberichtDaten) ([]byte, error) {
 		}
 	}
 
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 func (a *App) jahresberichtPDF(r *http.Request) ([]byte, string, error) {

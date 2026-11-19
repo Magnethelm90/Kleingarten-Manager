@@ -20,7 +20,7 @@
 
 | Recht | Wo im Programm |
 | --- | --- |
-| Auskunft (Art. 15) und Datenkopie (Art. 20) | Pächter → Mehr → **Auskunft** (auch im Papierkorb und unter »Datenschutz«): alle Daten einer Person als maschinenlesbare JSON-Datei |
+| Auskunft (Art. 15) und Datenkopie (Art. 20) | Pächter → Mehr → **Auskunft** (auch im Papierkorb und unter »Datenschutz«): alle Daten einer Person als maschinenlesbare JSON-Datei, einschließlich Vereinsämtern, Einträgen im Papierkorb und dem gelernten Bankabgleich. Für die Warteliste: Eintrag → Mehr → **Auskunft nach DSGVO** |
 | Berichtigung (Art. 16) | Pächter → Bearbeiten |
 | Löschung (Art. 17) | Pächter → Mehr → In den Papierkorb → Papierkorb → **Endgültig löschen** |
 | Einschränkung (Art. 18) | Pächter im Papierkorb lassen: er verschwindet aus allen Ansichten und Berechnungen, bleibt aber erhalten |
@@ -34,10 +34,11 @@ vorher prüfen.
 **Endgültig löschen** entfernt sofort:
 
 - Stammdaten (inkl. E-Mail und Telefon), interne Notiz, Zählernummern, offene (nicht abgeschlossene) Zählerstände,
-- den Namen und die Mitgliedsnummer in der Garten-Historie und im Änderungsprotokoll,
-- Hinweis- und Notizfelder in aufbewahrten Rechnungen und Jahresunterlagen,
+- den Namen, die Mitgliedsnummer und die interne Kennung in der Garten-Historie sowie den Namen im Änderungsprotokoll,
+- Hinweis- und Notizfelder in aufbewahrten Rechnungen und Jahresunterlagen (auch der Freitext »Grund« von Gutschriften; die Beträge bleiben für die Buchführung),
 - **alles Genannte auch in allen vorhandenen Sicherungen** (inkl. zweitem Sicherungsordner, sofern erreichbar).
   Dafür wird bewusst keine Sicherung „vor dem Löschen“ angelegt.
+- Abgleich-Dateien (»Abgleich zwischen zwei Rechnern«) werden nur auf Wunsch erzeugt und vom Programm nicht aufbewahrt; sie enthalten Namen und Beträge (Spenden, Zählerstände zu Pächter-Nummern) und gehören nur auf den USB-Stick – nach dem Einlesen löschen.
 - den Ordner `Druck/` (kurzlebige Druckdateien wie Sammel-PDF der Postrechnungen und Ablesebogen): er wird beim
   Programmstart und hierbei geleert.
 
@@ -69,9 +70,113 @@ entfernt; erledigte Mängel lassen sich jederzeit einzeln löschen. Sie sind nur
 weder im Jahresbericht noch in Aushängen auf. Der Aushang zu fehlenden Zählerständen nennt nur Gartennummern. Die
 Erinnerungs-E-Mail geht als Blindkopie (Bcc) raus, damit keine Adressen offengelegt werden.
 
+**Lastschrift (SEPA):** Für Mandate werden Kontoinhaber, IBAN, ggf. BIC, Mandatsreferenz und Unterschriftsdatum
+gespeichert (Rechtsgrundlage: Vertrag, Art. 6 Abs. 1 lit. b DSGVO). Mandate stehen in der Auskunft und werden beim
+endgültigen Löschen der Person entfernt. Die Lastschrift-Läufe sind Buchungsbelege: Sie bleiben bis zum Ende der
+Aufbewahrungsfrist und verlieren dann Namen und IBAN. Die Dateien für das Online-Banking liegen im Ordner
+»Lastschriften« des Datenordners und können nach dem Hochladen gelöscht werden.
+
+**Vorauszahlungen:** Monatsbetrag und eingegangene Zahlungen je Pächter stehen in der Auskunft. Beim endgültigen
+Löschen der Person wird der Monatsbetrag gelöscht; die Zahlungen bleiben als Kassenbelege ohne Verknüpfung zur Person.
+
+**Rundschreiben:** Gespeichert werden Betreff, Text und – bei einer Auswahl – die Empfänger. Die Auskunft nennt die
+Rundschreiben, für die eine Person ausdrücklich ausgewählt war; beim endgültigen Löschen wird sie aus den
+Empfängerlisten entfernt. E-Mails verschickt das eigene E-Mail-Programm, alle Adressen stehen im Bcc.
+
+**Schlüssel und Geräte:** Wer einen Schlüssel oder ein Gerät hat oder hatte, steht mit Datum im Verlauf und in der
+Auskunft. Beim endgültigen Löschen der Person wird der Name überall durch „(gelöschte Person)“ ersetzt; ein noch
+ausgegebener Schlüssel bleibt so sichtbar, damit er nicht in Vergessenheit gerät.
+
+**Geburtstage:** Ein Geburtsdatum wird nur gespeichert, wenn die Person einverstanden ist (Haken in der
+Pächter-Mappe, Reiter „Angaben“). Ohne Haken bleibt nichts gespeichert; wer den Haken entfernt, dessen Datum
+verschwindet sofort. Das Datum steht in der Auskunft und wird beim endgültigen Löschen der Person entfernt. Es dient
+nur der Erinnerung im Cockpit und wird nirgends gedruckt oder weitergegeben. Der Pflegeplan für Gemeinschaftsflächen
+enthält keine Personendaten.
+
+**Kündigungen und Pachtverträge:** Eine erfasste Kündigung (Datum, Grund, erledigte Schritte) steht in der
+Auskunft und wird beim endgültigen Löschen der Person entfernt. Ein in die Gartenakte gelegter Pachtvertrag gehört
+zur Person und wird mit ihr gelöscht. Vereinsverträge und Haushaltsplan enthalten keine Pächterdaten.
+
+**Ämter und Wahlen:** Die Ämterliste speichert, wer welches Amt seit wann innehat; nach einer Wahl steht das Ergebnis
+mit Namen im Beschlussbuch. Das sind Vereinsunterlagen (Nachweis, wer den Verein vertritt, z. B. gegenüber dem
+Vereinsregister). Ämter sind nur über den Namen mit einer Person verknüpft: Die Auskunft nennt sie, beim endgültigen
+Löschen eines Pächters werden sie aber nicht automatisch geschwärzt. Wer kein Amt mehr hat und gelöscht werden möchte,
+bei Bedarf von Hand anonymisieren (Ämter → Bearbeiten).
+
+**Kontoauszug:** Die CSV-Datei aus dem Online-Banking wird nur im Arbeitsspeicher gelesen und nicht gespeichert;
+sie enthält auch Buchungen Dritter. Übernommen werden nur die bestätigten Zahlungsvermerke an den Rechnungen. Damit
+derselbe Auszug nicht zweimal gebucht wird, bleibt von jeder übernommenen Buchung ein gekürzter Prüfwert (Hash) ohne
+lesbaren Inhalt.
+
+**Spenden:** Name und Anschrift von Spendern (auch Nicht-Mitgliedern) werden für die Zuwendungsbestätigung
+gespeichert. Für bestätigte Spenden muss der Verein ein Doppel aufbewahren; sie bleiben deshalb auch beim Löschen
+eines Pächters erhalten und verlieren ihren Personenbezug erst nach Ablauf der Aufbewahrungsfrist. Unbestätigte Spenden
+verlieren beim Löschen der Person Name und Anschrift, der Betrag bleibt für die Kasse.
+
+**Vereinsakte (Amtsübergabe):** Die ZIP-Datei ist eine vollständige Kopie des Datenordners mit allen
+Personendaten. Sie gehört nur in die Hände des neuen Vorstands und sollte nach der Übergabe gelöscht werden. Das
+Programm behält im Datenordner nur die neueste Akte und löscht alle, sobald eine Person endgültig gelöscht wird.
+
+**Ämter:** Namen und Amtszeiten der Amtsinhaber sind Vereinsunterlagen (wer wann gewählt war) und bleiben deshalb
+auch nach dem Ausscheiden in der Historie. Einträge lassen sich einzeln löschen, wenn sie nicht mehr gebraucht
+werden. Die Kassenprüfung speichert nur die Namen der Prüfer und ihre Feststellungen.
+
+**Protokolle und Laubenkataster:** Protokolle sind Vereinsunterlagen und enthalten nur, was ihr hineinschreibt –
+Namen von Mitgliedern dort sparsam verwenden. Das Laubenkataster gehört zum Garten, nicht zur Person, und enthält
+außer der Anzeige des aktuellen Pächters keine Personendaten.
+
+**Barkasse:** Das Kassenbuch enthält Datum, Betrag und einen frei eingegebenen Text. Namen dort nur eintragen, wenn
+der Beleg es verlangt; die Einträge sind Buchungsbelege und bleiben mit dem Jahr erhalten.
+
+**Sicherung ansehen:** Die Vorschau einer Sicherung zeigt Pächternamen des damaligen Stands. Endgültig gelöschte
+Personen sind auch aus den Sicherungen entfernt und erscheinen dort nicht mehr.
+
+**Verschlüsselte Sicherung:** Eine Datei mit dem ganzen Datenbestand, die sich nur mit dem gewählten Passwort
+öffnen lässt (AES-256-GCM, Schlüssel per PBKDF2 aus dem Passwort). Das Passwort wird nirgends gespeichert und lässt
+sich nicht zurücksetzen. Wird eine Person endgültig gelöscht, entfernt das Programm die verschlüsselten Dateien im
+Datenordner, weil es sie nicht bereinigen kann. **Kopien auf dem USB-Stick müsst ihr danach selbst durch eine neue
+ersetzen** – sonst enthalten sie die gelöschte Person weiter.
+
+**Ablesedatei fürs Handy:** Die HTML-Datei enthält Gartennummern, Namen und Zählernummern der aktiven Pächter und liegt
+nach dem Versand auf Handys und in Postfächern. Sie nur an Personen weitergeben, die den Rundgang machen, und danach
+löschen. Die Ergebnisdatei enthält keine Namen, nur interne Kennungen und Zählerstände. Im Programm bleibt nichts
+davon gespeichert, außer den übernommenen Zählerständen.
+
+**Versammlungspaket und Wartelisten-Briefe:** Das Paket (ZIP) enthält die Anwesenheitsliste mit Pächternamen und
+ist vertraulich zu behandeln; der Jahresbericht darin enthält keine Namen. Die Briefe an Bewerber werden nicht
+gespeichert, sie entstehen bei jedem Aufruf neu aus der Warteliste und verschwinden mit dem Eintrag.
+
+**Bankabgleich lernt:** Ordnet der Vorstand beim Kontoauszug eine Zahlung zu, merkt sich das Programm den Absendernamen laut Bank
+nur als Prüfsumme (kein Klartext) zusammen mit der Pächter-ID. Beim nächsten Auszug erscheint daraus ein Vorschlag, der immer
+geprüft werden muss. Beim endgültigen Löschen einer Person werden diese Merkzettel entfernt.
+
+**Mängelfotos und Papierkorb:** Zu einem Mangel kann ein Foto hinterlegt werden (Ordner `Maengelfotos/`). Beim Hochladen wird
+das Bild neu kodiert: Standort- und Kameradaten (EXIF) fallen weg, die Größe wird begrenzt. Das Foto soll nur den Mangel zeigen,
+keine Personen. Es erscheint im Schreiben an den Pächter. Gelöschte Mängel, Termine, Beschlüsse und Verträge liegen 30 Tage im
+Papierkorb (Bereich »Berichte & Meldungen«) und werden danach entfernt; ein Mangel behält dort sein Foto. Fotodateien ohne
+zugehörigen Mangel oder Papierkorbeintrag werden automatisch gelöscht. Beim endgültigen Löschen einer Person verschwinden
+ihre Mängel samt Foto auch aus dem Papierkorb. Die Fotos sind nicht in den JSON-Sicherungen enthalten, wohl aber in der
+Vereinsakte (Momentaufnahme des Datenordners). Die Warteliste hat bewusst keinen Papierkorb.
+
+**Aufnahmeantrag und Mitgliederbefragung:** Der Aufnahmeantrag wird bei jedem Aufruf aus dem Wartelisten-Eintrag erzeugt und nicht gespeichert. Die Mitgliederbefragung speichert nur Fragen und Strichlisten-Summen, keine Namen und keine Einzelbögen; es gibt daher nichts, was einer Person zuzuordnen wäre. Freitext-Anmerkungen soll der Vorstand ohne Namen zusammenfassen.
+
+**Wiederherstellungs-Probe, Mängel-Fahrplan, Arbeitsstunden:** Die Probe speichert nur Datum und Ergebnis. Der
+Mängel-Fahrplan speichert nur, an welchem Tag welches Schreiben verschickt wurde. Nachgetragene Stunden stehen bei
+der Ablesung des Pächters und im Änderungsprotokoll (mit Gartennummer, ohne Namen).
+
+**Begehungen:** Geschätzte Flächenanteile (Drittelregelung) gehören zum Pächter, der den Garten damals hatte; sie
+stehen in der Auskunft und werden mit der Person gelöscht.
+
+**Willkommensmappe und Exposé:** Die dort eingetragenen Ansprechpartner erscheinen auf Papieren, die weitergegeben
+werden – nur mit Einverständnis der genannten Personen. Das Exposé enthält keine Daten des bisherigen Pächters.
+
+**Arbeitseinsätze:** Wer bei welchem Einsatz wie viele Stunden geleistet hat, steht nur in der Verwaltung (nicht im
+öffentlichen Jahresplaner), ist Teil der Auskunft und wird beim endgültigen Löschen der Person entfernt.
+
 **Warteliste:** Einträge werden gelöscht, sobald kein Interesse mehr besteht (auch aus allen Sicherungen); wird ein
 Garten vergeben, gehen die Angaben in die Stammdaten des neuen Pächters über. Wer seit über 2 Jahren nicht
 nachgefragt wurde, wird markiert (unter »Warteliste« und »Datenschutz«): dann nachfragen oder löschen.
+Auch Interessenten haben ein Auskunftsrecht: Eintrag → Mehr → »Auskunft nach DSGVO« liefert alle Angaben als Datei.
 Rechtsgrundlage ist die Anbahnung eines Pachtvertrags (Art. 6 Abs. 1 lit. b DSGVO); Interessenten sollten bei der
 Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 
@@ -82,7 +187,9 @@ Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 - Server lauscht nur auf `127.0.0.1`, Schutz gegen fremde Webseiten (Host-/Origin-Prüfung, Pflicht-Header,
   Content-Security-Policy ohne Inline-Skripte)
 - Admin-Passwort optional, nur als PBKDF2-Hash gespeichert, Sperre nach Fehlversuchen
-- getrennter Kassenprüfer-Zugang mit Lesezugriff
+- Schalter »Alles nur mit Anmeldung«: ohne Anmeldung zeigt das Programm dann nur die Anmeldeseite, auch keine
+  Zählerstände und Rechnungen (für Rechner, die mehrere Personen nutzen)
+- getrennter Kassenprüfer-Zugang: Lesezugriff auf die Kasse, schreiben nur Geprüft-Haken und Kassenprüfung
 - Änderungsprotokoll, automatische Sicherungen (im Programm wiederherstellbar), Papierkorb statt sofortigem Löschen
 - Dateien werden nur für den Benutzer lesbar angelegt (Rechte 0600/0700; wirksam unter macOS und Linux, unter Windows
   schützt das Benutzerkonto bzw. die Festplattenverschlüsselung)
@@ -91,7 +198,8 @@ Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 
 - Admin-Passwort setzen; Rechner mit Windows-/macOS-Benutzerkonto schützen, Bildschirmsperre
 - **Festplatte verschlüsseln** (BitLocker, FileVault): die Datendatei ist nicht verschlüsselt
-- Sicherungsmedien (USB-Stick) verschlüsseln und sicher verwahren
+- Sicherungsmedien (USB-Stick) verschlüsseln und sicher verwahren – oder dafür die **verschlüsselte Sicherung** des
+  Programms verwenden (Import, Export, Sicherung → Verschlüsselt für den USB-Stick)
 - Wenige, namentlich bekannte Personen mit Zugang; Weitergabe des Passworts dokumentieren
 - Rechner nicht an Dritte weitergeben, ohne den Datenordner vorher sicher zu löschen
 
@@ -103,8 +211,8 @@ Aufnahme kurz informiert werden (Vorlage in Abschnitt 6 sinngemäß anpassen).
 | Datenschutzbeauftragter | [Name/Kontakt oder „nicht benannt, da weniger als 20 Personen ständig mit der Verarbeitung beschäftigt sind (§ 38 BDSG)“] |
 | Zweck | Verwaltung der Pachtverhältnisse, Abrechnung von Wasser, Strom, Pacht und Beiträgen, Zahlungsüberwachung, Kassenführung des Vereins |
 | Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Pacht-/Mitgliedschaftsvertrag), lit. c (steuerliche Aufbewahrungspflichten), lit. f (Vereinsverwaltung) |
-| Betroffene | Pächterinnen und Pächter, Mitglieder, Interessenten auf der Warteliste |
-| Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, bei Begehungen festgestellte Mängel, interne Notiz |
+| Betroffene | Pächterinnen und Pächter, Mitglieder, Interessenten auf der Warteliste, Spenderinnen und Spender |
+| Datenkategorien | Name, Anrede, Anschrift, E-Mail-Adresse und Telefonnummer (sofern angegeben), Mitgliedsnummer, Gartennummer und -größe, Zählernummern und -stände, Arbeitsstunden, Rechnungs- und Zahlungsdaten, Bankverbindung und Lastschriftmandate, bei Begehungen festgestellte Mängel, Spenden, interne Notiz |
 | Empfänger | Vorstand/Kassenwart; Kassenprüfer (Lesezugriff auf den Kassenbericht); Steuerberatung, Bank bei Zahlungsvorgängen; keine Auftragsverarbeiter |
 | Drittlandübermittlung | keine |
 | Löschfristen | Stammdaten: nach Ende der Mitgliedschaft bzw. des Pachtverhältnisses; Rechnungen, Jahresunterlagen und Übergabeprotokolle: [10] Jahre ab Ende des Ausstellungs- bzw. Übergabejahres; Warteliste: sobald kein Interesse mehr besteht (Nachfrage spätestens alle 2 Jahre) |

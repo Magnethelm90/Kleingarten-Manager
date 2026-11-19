@@ -98,7 +98,7 @@ func TestLangeAnschriftBleibtAufEinerSeite(t *testing.T) {
 			t.Errorf("Rechnung für %.20q...: %d Seiten", name, n)
 		}
 		rec := &Rechnung{Jahr: 2025, Nummer: invoiceNumber(s, p), Settings: s, Paechter: p, Ablesung: a, Result: r, Ausgestellt: "2026-01-10T10:00:00+01:00", Status: statusGueltig}
-		m, err := buildMahnung(s, p, rec)
+		m, err := buildMahnung(s, p, rec, 1, "")
 		if err != nil {
 			t.Fatalf("Mahnung für %.20q...: %v", name, err)
 		}
@@ -136,7 +136,7 @@ func TestMahnungGiroCodeNurMitGueltigerIBAN(t *testing.T) {
 		bilder int
 	}{{"DE89370400440532013000", 1}, {"DE00 0000 0000 0000 0000 00", 0}, {"", 0}} {
 		s.IBAN = c.iban
-		pdf, err := buildMahnung(s, p, rec)
+		pdf, err := buildMahnung(s, p, rec, 1, "")
 		if err != nil {
 			t.Fatal(err)
 		}

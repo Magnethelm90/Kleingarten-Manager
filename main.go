@@ -137,12 +137,21 @@ func main() {
 		}
 	}
 	actual := ln.Addr().(*net.TCPAddr).Port
+	st.sperrPort = actual
+	if err := st.sperreHolen(time.Now()); err != nil {
+		fail(err.Error())
+	}
+	go st.sperreAuffrischen()
+	if sub0, err := fs.Sub(webFS, "web"); err == nil {
+		st.selbsttestNachUpdate(sub0)
+	}
+	go st.probeAutomatisch()
 
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
 		panic(err)
 	}
-	static := http.FileServerFS(sub)
+	static := neuerStatischerServer(sub, http.FileServerFS(sub))
 	noCache := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 		static.ServeHTTP(w, r)
@@ -180,6 +189,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx)
+		st.sperreFreigeben()
 	}
 	// Läuft das Programm als eigenes Fenster, endet es, sobald das Fenster
 	// geschlossen wird. Sonst (Browser oder --no-browser) läuft der Server

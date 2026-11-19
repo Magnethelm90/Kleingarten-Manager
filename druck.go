@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // openPathFn öffnet eine Datei oder einen Ordner im Standardprogramm des Betriebssystems
@@ -121,6 +122,28 @@ func (a *App) druckPDF(r *http.Request) ([]byte, int, int, error) {
 		return nil, year, 0, bad(err.Error())
 	}
 	return pdf, year, len(items), nil
+}
+
+// handleDruckPostVermerken hält fest, dass der Postversand-Stapel gedruckt wurde (für den Jahres-Fahrplan).
+// Eigener Aufruf nach dem Drucken, damit das bloße Ansehen der Datei nichts verändert.
+func (a *App) handleDruckPostVermerken(w http.ResponseWriter, r *http.Request) {
+	year := a.yearParam(r)
+	jetzt := time.Now().Format(time.RFC3339)
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	n := 0
+	for _, x := range a.st.d.Rechnungen {
+		if x.Jahr == year && x.Status == statusGueltig && !x.Bereinigt && x.PostAm == "" &&
+			strings.EqualFold(strings.TrimSpace(x.Paechter.Versand), "Postversand") {
+			x.PostAm = jetzt
+			n++
+		}
+	}
+	if n == 0 {
+		writeJSON(w, 200, map[string]int{"vermerkt": 0})
+		return
+	}
+	a.speichernUndAntworten(w, map[string]int{"vermerkt": n})
 }
 
 // handleDruckPost liefert alle Postversand-Rechnungen eines Jahres als eine PDF-Datei zum Ausdrucken.

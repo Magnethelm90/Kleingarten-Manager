@@ -151,11 +151,8 @@ func layoutFit(s Settings, p Paechter, a Ablesung, r Result, wantPDF bool) (floa
 		if !wantPDF {
 			return squeeze, nil, nil
 		}
-		var buf bytes.Buffer
-		if err := pdf.Output(&buf); err != nil {
-			return 0, nil, err
-		}
-		return squeeze, buf.Bytes(), nil
+		out, err := pdfBytes(pdf)
+		return squeeze, out, err
 	}
 	return 0, nil, errors.New("Rechnung passt nicht auf eine Seite (Hinweistext zu lang?)")
 }
@@ -182,11 +179,7 @@ func buildInvoicesCombined(items []invoiceItem, title string) ([]byte, error) {
 		}
 		drawInvoicePage(pdf, it.S, it.P, it.A, it.R, sq)
 	}
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 func newInvoiceDoc(title string, s Settings) *fpdf.Fpdf {
@@ -325,8 +318,21 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 	}
 	block("1.1. Wasserverbrauch:", p.WasserzaehlerNr, a.WasserVJ, a.WasserAkt, r.WasserVerbrauch, "m³",
 		"Grundpreis:", "Preis je m³:", s.WasserGrundpreis, s.WasserPreis, r.KostenWasser, "Summe:")
-	block("1.2. Energieverbrauch:", p.StromzaehlerNr, a.StromVJ, a.StromAkt, r.EnergieVerbrauch, "kWh",
-		"Grundpreis:", "Preis je kWh:", s.EnergieGrundpreis, s.EnergiePreis, r.KostenEnergie, "Summe:")
+	if p.OhneStrom {
+		font("B", 10)
+		text(colX[0], colW[0], "1.2. Energieverbrauch:", "L")
+		font("", 10)
+		span(1, 4, "kein Stromanschluss", "L")
+		span(5, 5, "Summe:", "R")
+		font("B", 10)
+		span(6, 6, fmtEUR(0), "R")
+		next(rowH + 1.2)
+		hline(y-0.6, 0.2)
+		next(1.4)
+	} else {
+		block("1.2. Energieverbrauch:", p.StromzaehlerNr, a.StromVJ, a.StromAkt, r.EnergieVerbrauch, "kWh",
+			"Grundpreis:", "Preis je kWh:", s.EnergieGrundpreis, s.EnergiePreis, r.KostenEnergie, "Summe:")
+	}
 
 	// Arbeitsstunden
 	font("", 10)
@@ -490,7 +496,7 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 		next(rowH + 3)
 	}
 	font("", 10)
-	text(leftX, rightX-leftX, "Der Vorstand", "L")
+	text(leftX, rightX-leftX, s.Brieftexte.text("unterschrift", nil), "L")
 	next(rowH + 3)
 	font("", 8)
 	text(leftX, rightX-leftX, "Die Rechnung wird maschinell erstellt und ist ohne Unterschrift gültig.", "L")
@@ -501,7 +507,10 @@ func drawInvoicePage(pdf *fpdf.Fpdf, s Settings, p Paechter, a Ablesung, r Resul
 // buildMahnung erzeugt eine einfache Zahlungserinnerung für eine offene,
 // bereits ausgestellte Rechnung (nutzt dieselbe Kopfzeile und denselben
 // GiroCode wie die Rechnung selbst).
-func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
+func buildMahnung(s Settings, p Paechter, rec *Rechnung, stufe int, frist string) ([]byte, error) {
+	if stufe < 1 || stufe > 3 {
+		stufe = 1
+	}
 	offen := openAmount(rec)
 	if offen <= 0 {
 		return nil, errors.New("diese Rechnung ist bereits vollständig bezahlt")
@@ -512,7 +521,7 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	tr := func(s string) string { return s }
 	pdf.SetMargins(leftX, 12, 20)
 	pdf.SetAutoPageBreak(false, 0)
-	pdf.SetTitle(tr("Zahlungserinnerung "+invoiceNumber(s, p)), true)
+	pdf.SetTitle(tr(mahnTitel[stufe]+" "+invoiceNumber(s, p)), true)
 	pdf.SetAuthor(tr(s.VereinName), true)
 	pdf.SetCreator(appName, true)
 	pdf.AddPage()
@@ -552,7 +561,7 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 		{"Mitgliedsnr.:", p.Mitgliedsnr},
 		{"Rechnungsnr.:", invoiceNumber(s, p)},
 		{"Rechnungsdatum:", germanDate(s.Rechnungsdatum)},
-		{"Zahlungsziel war:", germanDate(s.Zahlungsziel)},
+		{"Zahlungsziel war:", germanDate(faelligAm(rec))},
 	}
 	for _, m := range meta {
 		font("", 10)
@@ -568,7 +577,7 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	font("B", 13)
 	pdf.SetTextColor(markenfarbe(s.Farbe))
 	pdf.SetXY(leftX, y)
-	pdf.CellFormat(rightX-leftX, 7, tr("Zahlungserinnerung"), "", 0, "L", false, 0, "")
+	pdf.CellFormat(rightX-leftX, 7, tr(mahnTitel[stufe]), "", 0, "L", false, 0, "")
 	pdf.SetTextColor(0, 0, 0)
 	next(9)
 	font("", 10)
@@ -580,6 +589,12 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	} else {
 		body = fmt.Sprintf("Für die Rechnung %s vom %s über %s ist bei uns noch kein Zahlungseingang zu verzeichnen.",
 			invoiceNumber(s, p), germanDate(s.Rechnungsdatum), fmtEUR(offen))
+	}
+	if len(rec.Ratenplan) > 0 {
+		body += fmt.Sprintf(" Wir hatten Ratenzahlung vereinbart; die fällige Rate war bis zum %s zu zahlen.", germanDate(faelligAm(rec)))
+	}
+	if zusatz := strings.TrimSpace(s.Brieftexte.text(fmt.Sprintf("mahnung%d", stufe), nil)); zusatz != "" {
+		body += " " + zusatz
 	}
 	pdf.SetXY(leftX, y)
 	pdf.MultiCell(rightX-leftX, 5.2, tr(body), "", "L", false)
@@ -599,9 +614,13 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 			textW = rightX - leftX - qrSize - 5
 		}
 	}
-	pay := fmt.Sprintf("Bitte den offenen Betrag von %s umgehend auf das Konto der %s, IBAN: %s; BIC: %s, Verwendungszweck: %s (*) überweisen. "+
-		"Sollte die Zahlung zwischenzeitlich bereits erfolgt sein, betrachten Sie dieses Schreiben als gegenstandslos.",
-		fmtEUR(offen), s.BankName, s.IBAN, s.BIC, invoiceNumber(s, p))
+	bis := "umgehend"
+	if frist != "" {
+		bis = "bis zum " + germanDate(frist)
+	}
+	pay := fmt.Sprintf("Bitte den offenen Betrag von %s %s auf das Konto der %s, IBAN: %s; BIC: %s, Verwendungszweck: %s (*) überweisen. "+
+		"%s",
+		fmtEUR(offen), bis, s.BankName, s.IBAN, s.BIC, invoiceNumber(s, p), s.Brieftexte.text("mahnungSchluss", nil))
 	qrTop := y
 	font("", 10)
 	pdf.SetXY(leftX, y)
@@ -622,19 +641,15 @@ func buildMahnung(s Settings, p Paechter, rec *Rechnung) ([]byte, error) {
 	text(leftX, rightX-leftX, "(*) Bei Zahlungsvorgängen bitte angeben!", "L")
 	next(rowH + 3)
 	font("", 10)
-	text(leftX, rightX-leftX, "Der Vorstand", "L")
+	text(leftX, rightX-leftX, s.Brieftexte.text("unterschrift", nil), "L")
 	next(rowH + 3)
 	font("", 8)
-	text(leftX, rightX-leftX, "Die Zahlungserinnerung wird maschinell erstellt und ist ohne Unterschrift gültig.", "L")
+	text(leftX, rightX-leftX, "Dieses Schreiben wird maschinell erstellt und ist ohne Unterschrift gültig.", "L")
 
 	if y > 290 {
 		return nil, errors.New("Mahnung passt nicht auf eine Seite")
 	}
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 // zeichneKopf setzt den Briefkopf von Rechnung und Mahnung (oberhalb der Absenderzeile bei 31 mm):

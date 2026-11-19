@@ -11,8 +11,11 @@ Wer das Programm nur nutzt, braucht nichts davon – die fertigen Dateien gibt e
 - **Oberfläche** in `web/` (HTML, CSS, JavaScript ohne Framework), wird ins Programm eingebettet und in einem eigenen
   Fenster angezeigt (Windows: WebView2, macOS: WebKit, Paket `webview/webview_go`).
 - Der eingebaute Webserver lauscht nur auf `127.0.0.1`.
-- Die Gartenillustration in `web/bilder/garten.webp` ist mit Blender gerendert; das Skript dazu liegt in
-  `docs/blender/garten.py`.
+- Die Illustrationen in `web/bilder/` (Garten, Laube, Gießkanne, Beet, Baum, Sonnenblumen) sind mit Blender
+  gerendert; das Skript dazu liegt in `docs/blender/szene.py`.
+- Der 3D-Lageplan (`web/lageplan3d.js`) nutzt three.js 0.170 (MIT-Lizenz), das unverändert unter
+  `web/vendor/three/` liegt; nur der Import in `OrbitControls.js` zeigt auf die lokale Datei. Es wird nichts aus
+  dem Internet geladen.
 
 ## Bauen
 
@@ -35,7 +38,7 @@ Konsolenfenster mit den Log-Ausgaben offen.
 **macOS** (der mitgelieferte `clang` baut Apple Silicon und Intel):
 
 ```
-VERSION=1.5
+VERSION=1.5.1
 CGO_ENABLED=1 GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-arm64 .
 CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64" go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION" -o Kleingarten-Manager-amd64 .
 ```
@@ -60,9 +63,11 @@ Lokal reicht meist `go vet ./... && go test ./...`. Für die Eingabeprüfung gib
 
 ## Neue Version veröffentlichen
 
+Versionsnummern werden fortlaufend vergeben (1.5, 1.5.1, 1.5.2, …); die Update-Prüfung vergleicht sie Stelle für Stelle.
+
 ```
-git tag v1.5
-git push origin v1.5
+git tag v1.5.1
+git push origin v1.5.1
 ```
 
 Alternativ auf der GitHub-Seite unter »Releases« einen neuen Release mit neuem Tag anlegen. In beiden Fällen
