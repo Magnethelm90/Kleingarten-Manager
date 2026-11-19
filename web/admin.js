@@ -1336,18 +1336,15 @@ function adminKassenbericht(pruefMode) {
       h('div', { class: 'tablewrap', style: 'max-height:360px' }, h('table', { class: 'data' },
         h('thead', null, h('tr', null, ['Datum', 'Beschreibung', 'Kategorie', 'Betrag', 'Beleg', 'Geprüft', ''].map((t) => h('th', null, t)))), tbody)),
       katTable),
-    h('h3', null, 'Vergleich mit dem Versorger'),
-    h('div', { class: 'card' },
+    klappKarte('kb-versorger', 'Vergleich mit dem Versorger', 'Hauptzähler und Versorgerrechnung', h('div', { class: 'card' },
       h('p', { class: 'hint' }, 'Trage hier die Werte der Hauptzähler bzw. der Versorgerrechnung ein, um sie mit der Summe der Pächterabrechnung zu vergleichen. Eine größere Abweichung kann auf einen Zählerfehler, Schwund oder eine falsche Ablesung hindeuten.'),
       h('div', { class: 'tablewrap' }, versorgerTable),
-      pruefMode ? null : h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: saveVersorger }, 'Werte speichern'))),
-    h('h3', null, 'Schwund über die Jahre'),
-    schwundKarte(),
+      pruefMode ? null : h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: saveVersorger }, 'Werte speichern')))),
+    klappKarte('kb-schwund', 'Schwund über die Jahre', 'Wasser, das in keinem Garten ankommt', schwundKarte()),
     h('div', { class: 'actions', style: 'margin-top:16px;margin-bottom:22px' },
       druckKnopf({ url: `/api/admin/jahresbericht?year=${S.kasseYear}`, oeffnenUrl: `/api/admin/jahresbericht/oeffnen?year=${S.kasseYear}`, titel: `Jahresbericht ${S.kasseYear}` }, { label: `Jahresbericht ${S.kasseYear}`, primary: true }),
       h('a', { class: 'btn', href: `/api/admin/export-kassenbericht?year=${S.kasseYear}` }, `Kassenbericht ${S.kasseYear} als Excel`)),
-    h('h3', null, 'Verlauf über die Jahre'),
-    kassenberichtVerlaufCard());
+    klappKarte('kb-verlauf', 'Verlauf über die Jahre', 'Summen des Vereins im Vergleich', kassenberichtVerlaufCard()));
 }
 
 // Nach einem Pächterwechsel: ausgeschiedene Pächter, bei denen noch eine Schlussrechnung, eine Zahlung oder ein Guthaben offen ist.
