@@ -1,6 +1,6 @@
 # Projektstand: Kleingarten-Manager
 
-Stand: 23.11.2026 · Branch `claude/github-improvements-pi59o5` · Sammel-PR [#15](https://github.com/Magnethelm90/Kleingarten-Manager/pull/15) (offen, **nicht mergen, bis der Nutzer es sagt**) · Version bleibt **1.5.1**
+Stand: 23.11.2026 · Version 1.6 · Branch `claude/github-improvements-pi59o5` · Sammel-PR [#15](https://github.com/Magnethelm90/Kleingarten-Manager/pull/15) (offen, **nicht mergen, bis der Nutzer es sagt**)
 
 ## Aktuelles Feature / Modul
 Feinschliff für den Vereinsvorstand: **einfacher, ruhiger, nicht überladen**. Es gibt keine angefangene Funktion; alles ist gepusht und geprüft.

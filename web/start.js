@@ -203,7 +203,7 @@ function seiteWiederherstellen() {
 
 // »Was hat sich geändert?«: einmal nach einem Update. Die letzte gesehene Version merkt sich der Browser.
 const NEUERUNGEN = [
-  { version: '1.5.1', punkte: [
+  { version: '1.6', punkte: [
     'Ratenplan, Gutschrift und Zahlung stehen in einem gemeinsamen Dialog.',
     'Mahn-Vorschlag auf der Seite »Zahlungen«: zeigt, wer jetzt eine Erinnerung oder Mahnung bekommen sollte.',
     'Pflegeplan für Gemeinschaftsflächen unter »Anlage«: Hecke, Wege, Spielplatz – mit Erinnerung im Cockpit.',

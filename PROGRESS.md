@@ -1,6 +1,6 @@
 # PROGRESS
 
-Stand: 23.11.2026 · Branch `claude/github-improvements-pi59o5` · PR #15 offen (nicht mergen, bis der Nutzer es sagt) · Version 1.5.1
+Stand: 23.11.2026 · Branch `claude/github-improvements-pi59o5` · PR #15 offen (nicht mergen, bis der Nutzer es sagt) · Version 1.6
 
 ## Aktuelles Feature / Modul
 - Vereinfachen und Feinschliff der Oberfläche für Vorstände (nur Frontend), Gesamtprüfung.

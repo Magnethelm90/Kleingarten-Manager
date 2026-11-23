@@ -4,7 +4,7 @@ Was alles gebaut wurde: `prozess.md` (Überblick), `PROGRESS.md` (aktueller Stan
 
 ## Arbeitsweise mit dem Nutzer
 - Deutsch, knapp. Programmtexte per **»du«**, in einfachen Worten (Kinder-Niveau), keine Emoji in der Oberfläche.
-- Branch `claude/github-improvements-pi59o5`, Sammel-PR Magnethelm90/Kleingarten-Manager#15 (MCP-Reponame `gartenabrechnung`). Version bleibt **1.5.1**.
+- Branch `claude/github-improvements-pi59o5`, Sammel-PR Magnethelm90/Kleingarten-Manager#15 (MCP-Reponame `gartenabrechnung`). Aktuelle Version: **1.6** (Release = Tag `v1.6`, siehe `ENTWICKLUNG.md`).
 - **Nicht mergen**, keine neue PR, bis der Nutzer es sagt. Nach jeder Arbeit committen und pushen.
 - Design: hochwertig, aber **professionell** für den Vereinsvorstand – sachliche Strichzeichnungen, gedeckte Farben, kein Spielzeug, keine Knet-/3D-Optik.
 - **Keine Funktion entfernen**; vereinfachen = zusammenlegen, einklappen, Doppeltes streichen. Neue Seiten als Reiter in bestehende `NAV`-Einträge hängen, Menü nicht verlängern.
