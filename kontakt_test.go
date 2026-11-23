@@ -88,9 +88,9 @@ func TestImportBehaeltNotizUndFuehrtGartenhistorie(t *testing.T) {
 	if len(bernd) != 1 || bernd[0].Name != "Bernd" {
 		t.Errorf("neu importierter Pächter fehlt in der Gartenhistorie: %+v", bernd)
 	}
-	// ohne Spalte Versandart gilt für neue Pächter dieselbe Vorgabe wie im Formular
+	// ohne Spalte Versandart und ohne E-Mail-Adresse gilt Postversand, wie im Formular
 	for _, q := range st.Paechter {
-		if q.Name == "Bernd" && q.Versand != "Emailsendung" {
+		if q.Name == "Bernd" && q.Versand != "Postversand" {
 			t.Errorf("Versandart neu importierter Pächter: %q", q.Versand)
 		}
 	}

@@ -41,7 +41,7 @@ func (s *Store) zaehlerFehlenLocked(year int) (erinnerungDaten, bool) {
 		}
 		a := v.Ablesungen[p.ID]
 		wasser := strings.TrimSpace(p.WasserzaehlerNr) != "" || a.WasserVJ != nil
-		strom := strings.TrimSpace(p.StromzaehlerNr) != "" || a.StromVJ != nil
+		strom := !p.OhneStrom && (strings.TrimSpace(p.StromzaehlerNr) != "" || a.StromVJ != nil)
 		if !wasser && !strom {
 			continue
 		}
@@ -167,7 +167,7 @@ func (a *App) handleZaehlerMail(w http.ResponseWriter, r *http.Request) {
 	frist := fristParam(r, 14)
 	betreff := fmt.Sprintf("Erinnerung: Zählerstände %d", year)
 	text := fmt.Sprintf("Liebe Gartenfreundin, lieber Gartenfreund,\n\nfür die Abrechnung %d fehlen uns noch die Zählerstände für Wasser (m³) und Strom (kWh) deines Gartens. "+
-		"Bitte teile sie uns bis spätestens %s mit.\n\nVielen Dank!\nDer Vorstand\n%s", year, germanDate(frist), verein)
+		"Bitte teile sie uns bis spätestens %s mit.\n\nVielen Dank!\n%s\n%s", year, germanDate(frist), a.st.d.Settings.Brieftexte.text("unterschrift", nil), verein)
 	basis := "mailto:?subject=" + mailtoEscape(betreff) + "&body=" + mailtoEscape(text) + "&bcc="
 	var adressen []string
 	laenge := len(basis)

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -111,8 +110,8 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if in.WasserStand == nil || in.StromStand == nil {
-		writeErr(w, bad("Bitte beide Zählerstände bei der Übergabe eintragen"))
+	if in.WasserStand == nil {
+		writeErr(w, bad("Bitte den Wasserzählerstand bei der Übergabe eintragen"))
 		return
 	}
 	if in.Stunden == nil {
@@ -141,6 +140,10 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, bad("Für "+alt.Name+" wurde der Garten schon am "+germanDate(alt.AusgeschiedenAm)+" übergeben"))
 		return
 	}
+	if !alt.OhneStrom && in.StromStand == nil {
+		writeErr(w, bad("Bitte auch den Stromzählerstand bei der Übergabe eintragen"))
+		return
+	}
 	jahr := d.Settings.Jahr
 	if a.st.validInvoiceLocked(jahr, alt.ID) != nil {
 		writeErr(w, bad(fmt.Sprintf("Für %s ist die Rechnung %d schon ausgestellt. Bitte zuerst den Jahreswechsel machen; "+
@@ -160,11 +163,13 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 		neu.StromzaehlerNr = alt.StromzaehlerNr
 	}
 	neu.Geloescht, neu.GeloeschtAm, neu.AusgeschiedenAm = false, "", ""
+	neu.OhneStrom = alt.OhneStrom // der Garten hat weiterhin (k)einen Stromanschluss
 	neu, err := cleanPaechter(neu)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
+	a.st.eichjahrUebernehmenLocked(&neu)
 	if a.st.nrTaken(neu.Mitgliedsnr, "") {
 		msg := "Die Mitgliedsnummer " + neu.Mitgliedsnr + " gibt es schon"
 		if strings.EqualFold(neu.Mitgliedsnr, alt.Mitgliedsnr) {
@@ -193,11 +198,15 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 	if ab.StromVJ == nil {
 		ab.StromVJ = in.StromVJ
 	}
-	if ab.WasserVJ == nil || ab.StromVJ == nil {
+	if alt.OhneStrom {
+		in.StromStand = nil
+	}
+	if ab.WasserVJ == nil || (!alt.OhneStrom && ab.StromVJ == nil) {
 		writeErr(w, bad("Für den bisherigen Pächter fehlt der Vorjahresstand. Bitte mit eintragen"))
 		return
 	}
 	ab.WasserAkt, ab.StromAkt, ab.Stunden, ab.Schluss = in.WasserStand, in.StromStand, in.Stunden, in.Datum
+	ab.Datum = in.Datum // abgelesen bei der Übergabe
 	if _, neg := verbrauch(ab.WasserVJ, ab.WasserAkt, ab.WasserWechsel); neg {
 		writeErr(w, bad("Der Wasserzählerstand bei der Übergabe ist kleiner als der Vorjahresstand"))
 		return
@@ -214,8 +223,13 @@ func (a *App) handlePaechterwechsel(w http.ResponseWriter, r *http.Request) {
 
 	neu.ID = newID()
 	d.Paechter = append(d.Paechter, neu)
-	wv, sv := *in.WasserStand, *in.StromStand
-	d.Jahre[yearKey(jahr)].Ablesungen[neu.ID] = Ablesung{WasserVJ: &wv, StromVJ: &sv}
+	wv := *in.WasserStand
+	neuAb := Ablesung{WasserVJ: &wv}
+	if in.StromStand != nil {
+		sv := *in.StromStand
+		neuAb.StromVJ = &sv
+	}
+	d.Jahre[yearKey(jahr)].Ablesungen[neu.ID] = neuAb
 	a.st.gartenVergeben(neu.ID, neu.Gartennr, neu.Mitgliedsnr, neu.Name, in.Datum)
 	if wi >= 0 {
 		d.Warteliste = append(d.Warteliste[:wi], d.Warteliste[wi+1:]...)
@@ -256,11 +270,15 @@ func (a *App) uebergabeprotokollPDF(id string) ([]byte, string, error) {
 		}
 	}
 	s := a.st.d.Settings
+	var offen []Mangel
+	if u != nil {
+		offen = maengelAmTag(a.st.d.Maengel, u.Gartennr, u.Datum)
+	}
 	a.st.mu.Unlock()
 	if u == nil {
 		return nil, "", notFound("Übergabe nicht gefunden")
 	}
-	pdf, err := buildUebergabeprotokoll(s, *u)
+	pdf, err := buildUebergabeprotokoll(s, *u, offen...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -296,7 +314,8 @@ func (a *App) handleUebergabeprotokollOeffnen(w http.ResponseWriter, r *http.Req
 
 // buildUebergabeprotokoll erzeugt das Übergabeprotokoll (A4 hoch) mit Zählerständen, Schlüsseln, Ablöse,
 // Bemerkungen, einer kurzen Checkliste und Unterschriftsfeldern für beide Pächter und den Vorstand.
-func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
+// offen: Mängel des Gartens, die am Übergabetag offen waren (für den Nachdruck alter Protokolle nach damaligem Stand).
+func buildUebergabeprotokoll(s Settings, u Uebergabe, offen ...Mangel) ([]byte, error) {
 	pdf := fpdf.New("P", "mm", "A4", "")
 	pdf.AddUTF8FontFromBytes("lib", "", fontRegular)
 	pdf.AddUTF8FontFromBytes("lib", "B", fontBold)
@@ -419,6 +438,37 @@ func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
 	}
 	y += 5
 
+	if len(offen) > 0 {
+		ueberschrift("Offene Mängel am Übergabetag (aus der Begehung)")
+		for _, m := range offen {
+			if y > 245 {
+				pdf.AddPage()
+				y = 30
+			}
+			txt := m.Art + ": " + m.Beschreibung + " (festgestellt " + germanDate(m.Datum)
+			if m.Frist != "" {
+				txt += ", Frist " + germanDate(m.Frist)
+			}
+			txt += ")"
+			pdf.SetDrawColor(80, 80, 80)
+			pdf.SetLineWidth(0.3)
+			pdf.Rect(leftX+1, y+1.3, 3.6, 3.6, "D")
+			font("", 9.5)
+			pdf.SetXY(leftX+7, y)
+			pdf.MultiCell(rightX-leftX-7, 5.2, txt, "", "L", false)
+			y = pdf.GetY() + 1.2
+		}
+		font("", 8.5)
+		pdf.SetTextColor(100, 100, 100)
+		zeile(leftX, rightX-leftX, 5, "Abhaken, was bei der Übergabe behoben ist; Offenes übernimmt der neue Pächter nur nach Vereinbarung.", "L")
+		pdf.SetTextColor(0, 0, 0)
+		y += 9
+		if y > 220 {
+			pdf.AddPage()
+			y = 30
+		}
+	}
+
 	ueberschrift("Zustand des Gartens, Bemerkungen")
 	font("", 10)
 	start := y
@@ -429,7 +479,11 @@ func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
 	}
 	// Platz für handschriftliche Ergänzungen, mindestens drei Linien
 	pdf.SetDrawColor(190, 194, 188)
-	for i := 0; i < 3 || y < start+20; i++ {
+	linien, platz := 3, 20.0
+	if len(offen) > 0 {
+		linien, platz = 2, 12 // Mängelliste braucht Platz, Unterschriften sollen möglichst auf Seite 1 bleiben
+	}
+	for i := 0; i < linien || y < start+platz; i++ {
 		y += 7
 		pdf.Line(leftX, y, rightX, y)
 	}
@@ -452,12 +506,12 @@ func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
 	}
 
 	// Unterschriften
-	if y+14 > 258 {
+	if y+8 > 260 {
 		// lange Bemerkungen: Unterschriften auf eine zweite Seite statt in den Seitenrand
 		pdf.AddPage()
 		y = 30
 	} else {
-		y = maxf(y+14, 255)
+		y = max(y+8, 255)
 	}
 	font("", 10)
 	zeile(leftX, rightX-leftX, 6, s.Ort+", den ______________________", "L")
@@ -476,16 +530,18 @@ func buildUebergabeprotokoll(s Settings, u Uebergabe) ([]byte, error) {
 	pdf.SetTextColor(110, 110, 110)
 	pdf.SetXY(leftX, 287)
 	pdf.CellFormat(rightX-leftX, 4, s.VereinName+" · Übergabeprotokoll · erstellt mit dem Kleingarten-Manager", "", 0, "C", false, 0, "")
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
-func maxf(a, b float64) float64 {
-	if a > b {
-		return a
+// maengelAmTag: Mängel eines Gartens, die am Stichtag festgestellt und noch nicht erledigt waren.
+func maengelAmTag(alle []Mangel, gartennr, tag string) []Mangel {
+	var out []Mangel
+	for _, m := range alle {
+		if m.Gartennr == gartennr && m.Datum <= tag && (m.ErledigtAm == "" || m.ErledigtAm > tag) {
+			m.FotoBytes = nil
+			out = append(out, m)
+		}
 	}
-	return b
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Datum < out[j].Datum })
+	return out
 }

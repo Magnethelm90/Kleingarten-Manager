@@ -53,8 +53,11 @@ jobs:
           path: Kleingarten-Manager.exe
           if-no-files-found: error
 
+  # Mac-Rechner sind bei GitHub knapp: Der Probebau läuft nur einmal je Commit (beim Pull Request bzw. von Hand),
+  # nicht zusätzlich beim Push – sonst wartet jeder Commit auf zwei Macs und Läufe werden wegen Wartezeit abgebrochen.
   build-macos:
     needs: test
+    if: github.event_name != 'push'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

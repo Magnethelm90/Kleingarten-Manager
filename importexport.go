@@ -304,8 +304,8 @@ func parseImport(table [][]string, raw bool, st Settings, existing []Paechter) (
 		} else if strings.HasPrefix(strings.ToLower(p.Versand), "p") {
 			p.Versand = "Postversand"
 		} else if p.Versand != "" {
-			row.Warnungen = append(row.Warnungen, "Versandart »"+p.Versand+"« unbekannt – es gilt Emailsendung")
-			p.Versand = "Emailsendung"
+			p.Versand = versandNachEmail(p.Email)
+			row.Warnungen = append(row.Warnungen, "Versandart unbekannt – es gilt "+p.Versand)
 		}
 
 		// Ablesungen (optional)
@@ -431,4 +431,12 @@ func exportOverview(v yearView) ([]byte, error) {
 	}
 	name := fmt.Sprintf("Jahresübersicht %d", v.Jahr)
 	return writeXLSX(name, widths, rows)
+}
+
+// versandNachEmail: Standard-Versandart – mit E-Mail-Adresse per E-Mail, sonst per Post.
+func versandNachEmail(email string) string {
+	if strings.TrimSpace(email) != "" {
+		return "Emailsendung"
+	}
+	return "Postversand"
 }

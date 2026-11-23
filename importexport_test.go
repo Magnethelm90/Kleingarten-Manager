@@ -17,7 +17,7 @@ func TestImportSynonymeUndWarnungen(t *testing.T) {
 	if rows[0].Paechter.Gartengroesse != 1.5 {
 		t.Errorf("Text-Zahl mit Komma im Excel-Rohmodus: %v", rows[0].Paechter.Gartengroesse)
 	}
-	if len(rows[0].Warnungen) != 1 || rows[0].Paechter.Versand != "Emailsendung" {
+	if len(rows[0].Warnungen) != 1 || rows[0].Paechter.Versand != "Postversand" {
 		t.Errorf("unbekannte Versandart: %v %q", rows[0].Warnungen, rows[0].Paechter.Versand)
 	}
 	if len(warn) != 1 || !strings.Contains(warn[0], "Bemerkung") {

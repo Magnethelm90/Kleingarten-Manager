@@ -1422,6 +1422,21 @@ func TestKassenpruferZugang(t *testing.T) {
 	if rec := do(h, "PUT", "/api/admin/settings", Settings{}, pruefCookie); rec.Code != http.StatusUnauthorized {
 		t.Errorf("Prüfer sollte keine Einstellungen ändern dürfen: %d", rec.Code)
 	}
+	// Prüfer führt die Kassenprüfung (Stichprobe, Ergebnis, Bericht), Ämter und Eichfristen bleiben Admin-only
+	if rec := do(h, "POST", "/api/admin/kassenpruefung/stichprobe?year=2025", nil, pruefCookie); rec.Code != 200 {
+		t.Errorf("Stichprobe durch Prüfer: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(h, "PUT", "/api/admin/kassenpruefung?year=2025", map[string]any{"pruefer": "P", "ergebnis": "ohne"}, pruefCookie); rec.Code != 200 {
+		t.Errorf("Kassenprüfung durch Prüfer: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(h, "GET", "/api/admin/kassenpruefung/bericht?year=2025", nil, pruefCookie); rec.Code != 200 {
+		t.Errorf("Prüfbericht für Prüfer: %d", rec.Code)
+	}
+	for _, u := range []string{"/api/admin/aemter", "/api/admin/eichung", "/api/admin/pachtgrenze"} {
+		if rec := do(h, "GET", u, nil, pruefCookie); rec.Code != http.StatusUnauthorized {
+			t.Errorf("Prüfer sollte %s nicht sehen: %d", u, rec.Code)
+		}
+	}
 	// Logout beendet den Lesezugriff wieder
 	do(h, "POST", "/api/pruef/logout", nil, pruefCookie)
 	if rec := do(h, "GET", "/api/admin/kassenbericht?year=2025", nil, pruefCookie); rec.Code != http.StatusUnauthorized {

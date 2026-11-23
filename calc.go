@@ -58,6 +58,9 @@ func calculate(s Settings, p Paechter, a Ablesung) Result {
 	}
 	// Energie
 	sv, sNeg := verbrauch(a.StromVJ, a.StromAkt, a.StromWechsel)
+	if p.OhneStrom {
+		sv, sNeg = nil, false
+	}
 	r.EnergieVerbrauch = sv
 	if sv != nil {
 		r.KostenEnergie = round2(s.EnergieGrundpreis + *sv*s.EnergiePreis)
@@ -97,7 +100,7 @@ func calculate(s Settings, p Paechter, a Ablesung) Result {
 
 	// Vollständigkeit prüfen
 	switch {
-	case a.WasserVJ == nil || a.WasserAkt == nil || a.StromVJ == nil || a.StromAkt == nil || a.Stunden == nil:
+	case a.WasserVJ == nil || a.WasserAkt == nil || (!p.OhneStrom && (a.StromVJ == nil || a.StromAkt == nil)) || a.Stunden == nil:
 		r.Status = StatusFehlt
 	case wNeg || sNeg:
 		r.Status = StatusZaehler

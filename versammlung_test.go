@@ -69,10 +69,10 @@ func TestEinladungLangeTagesordnung(t *testing.T) {
 }
 
 func TestSafeNameUnsichtbareZeichen(t *testing.T) {
-	for _, in := range []string{"Einladung_‮fdp.exe", "a\x7fb", "x/../y", "Ga\"rten\r\n1"} {
+	for _, in := range []string{"Einladung_\u202efdp.exe", "a\x7fb", "x/../y", "Ga\"rten\r\n1"} {
 		got := safeName(in, 80)
 		for _, r := range got {
-			if r < 0x20 || r == 0x7f || r == '‮' || strings.ContainsRune(`/\"`, r) {
+			if r < 0x20 || r == 0x7f || r == '\u202e' || strings.ContainsRune(`/\"`, r) {
 				t.Errorf("%q → %q enthält %U", in, got, r)
 			}
 		}

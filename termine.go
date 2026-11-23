@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -151,15 +150,21 @@ func (a *App) handleTerminDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	a.st.mu.Lock()
 	defer a.st.mu.Unlock()
+	if _, ok := a.st.d.Sitzungen[id]; ok {
+		writeErr(w, bad("Zu diesem Termin gibt es ein Protokoll – der Termin bleibt deshalb im Jahresplaner"))
+		return
+	}
 	for i, t := range a.st.d.Termine {
 		if t.ID == id {
+			pk := a.st.papierkorbLegeLocked("termin", t.Titel+" am "+germanDate(t.Datum), "", t)
 			a.st.d.Termine = append(a.st.d.Termine[:i], a.st.d.Termine[i+1:]...)
+			a.st.d.einsatzTerminGeloescht(t.ID)
 			a.st.audit("Termin gelöscht: %s am %s", t.Titel, germanDate(t.Datum))
 			if err := a.st.saveLocked(); err != nil {
 				writeErr(w, err)
 				return
 			}
-			writeJSON(w, 200, map[string]bool{"ok": true})
+			writeJSON(w, 200, map[string]any{"ok": true, "papierkorbId": pk})
 			return
 		}
 	}
@@ -266,7 +271,7 @@ func (a *App) handleTermineICS(w http.ResponseWriter, r *http.Request) {
 		}
 		tag := strings.ReplaceAll(t.Datum, "-", "")
 		b.WriteString("BEGIN:VEVENT\r\n")
-		fmt.Fprintf(&b, "UID:termin-%s@%s\r\n", t.ID, appID)
+		fmt.Fprintf(&b, "UID:termin-%s@%s\r\n", icsUID(t.ID), appID)
 		fmt.Fprintf(&b, "DTSTAMP:%s\r\n", stamp)
 		if t.Von == "" {
 			d, _ := parseDate(t.Datum)
@@ -404,11 +409,7 @@ func buildJahresplan(s Settings, jahr int, ts []Termin) ([]byte, error) {
 	pdf.SetTextColor(110, 110, 110)
 	pdf.SetXY(leftX, 287)
 	pdf.CellFormat(rightX-leftX, 4, fmt.Sprintf("%s · Stand %s", s.VereinName, time.Now().Format("02.01.2006")), "", 0, "C", false, 0, "")
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pdfBytes(pdf)
 }
 
 func (a *App) jahresplanPDF(r *http.Request) ([]byte, string, error) {
