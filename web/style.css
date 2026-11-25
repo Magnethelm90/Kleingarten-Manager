@@ -63,6 +63,14 @@ header.top .brand .logo {
 header.top .brand b { font-size: 16px; display: block; line-height: 1.15; letter-spacing: .1px; }
 header.top .brand span { font-size: 12px; opacity: .8; display: block; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .top .spacer { flex: 1; }
+header.top .brand.klick { cursor: pointer; border-radius: 8px; }
+header.top .brand.klick:hover b { text-decoration: underline; text-underline-offset: 3px; }
+header.top .brand.klick:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.top button.zurueck-knopf {
+  display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.12); color: #fff;
+  border: 1px solid rgba(255,255,255,.35); padding: 6px 12px; border-radius: 8px; font: inherit; cursor: pointer; transition: background-color .15s;
+}
+.top button.zurueck-knopf:hover { background: rgba(255,255,255,.24); }
 .globalsearch { position: relative; }
 .globalsearch .gs-input {
   width: 170px; padding: 7px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.25); font: inherit;
@@ -1102,6 +1110,8 @@ th[aria-sort="descending"]::after { content: " \25BC"; font-size: .7em; }
 @media (max-width: 760px) {
   header.top { gap: 8px 8px; padding: 8px 12px; }
   header.top .brand { padding: 0; flex: 1 0 calc(100% - 56px); min-width: 0; }
+  .top button.zurueck-knopf { padding: 6px 8px; }
+  .top button.zurueck-knopf span { display: none; }
   header.top .brand span { max-width: none; }
   .top .spacer { display: none; }
   .globalsearch { flex: 1 1 80px; min-width: 0; }

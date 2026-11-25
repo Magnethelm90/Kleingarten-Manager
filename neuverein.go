@@ -57,6 +57,20 @@ func (s *Store) startjahrAenderbarLocked() bool {
 	return true
 }
 
+// handleEinrichtungFertig merkt sich, dass die Einrichtung einmal gespeichert wurde.
+func (a *App) handleEinrichtungFertig(w http.ResponseWriter, r *http.Request) {
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	if !a.st.d.EinrichtungFertig {
+		a.st.d.EinrichtungFertig = true
+		if err := a.st.saveLocked(); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
 func (a *App) handleStartjahr(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Jahr int `json:"jahr"`

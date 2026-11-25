@@ -602,6 +602,8 @@ type stateResp struct {
 	// SicherungFehler: Hinweistext, falls die jüngste Sicherung beschädigt ist (leer = alles gut).
 	SicherungFehler string `json:"sicherungFehler,omitempty"`
 	TutorialGesehen bool   `json:"tutorialGesehen"`
+	// EinrichtungFertig: der Einrichtungs-Assistent wurde einmal bis zum Speichern durchlaufen.
+	EinrichtungFertig bool `json:"einrichtungFertig"`
 	// ZweiteSicherung: ob ein zweiter Sicherungsordner eingerichtet ist und wann er zuletzt erreicht wurde.
 	ZweiteSicherung zweiteSicherungStand `json:"zweiteSicherung"`
 	// Demo: Beispieldaten sind geladen; Leer: noch nichts eingegeben (Beispieldaten können geladen werden).
@@ -674,6 +676,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	}
 	res.SicherungFehler = a.st.pruefeSicherung()
 	res.TutorialGesehen = a.st.d.TutorialGesehen
+	res.EinrichtungFertig = a.st.d.EinrichtungFertig
 	res.ZweiteSicherung = a.st.zweiteSicherungLocked()
 	res.SperrHinweis = a.st.sperrHinweisLocked()
 	res.SepaAktiv = a.st.sepaAktivLocked()
@@ -1888,6 +1891,7 @@ func (a *App) routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/admin/aemter/{id}/wechsel", a.admin(a.handleAmtWechsel))
 	mux.HandleFunc("PUT /api/admin/aemter/{id}/checkliste", a.admin(a.handleAmtCheckliste))
 	mux.HandleFunc("PUT /api/admin/module", a.admin(a.handleModule))
+	mux.HandleFunc("POST /api/admin/einrichtung-fertig", a.admin(a.handleEinrichtungFertig))
 	mux.HandleFunc("PUT /api/admin/vollschutz", a.admin(a.handleVollschutz))
 	mux.HandleFunc("GET /api/admin/vereinsjahr", a.admin(a.handleVereinsjahr))
 	mux.HandleFunc("PUT /api/admin/vereinsjahr", a.admin(a.handleVereinsjahrHaken))

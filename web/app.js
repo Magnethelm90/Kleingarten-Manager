@@ -42,6 +42,7 @@ function svgEl(tag, attrs, ...kids) {
 // auskommen. Jedes Symbol ist eine Liste von Pfaden.
 const ICONS = {
   blatt: ['M5 19c0-9 5-14 15-14 0 10-5 15-14 15z', 'M5 20l9-9'],
+  zurueck: ['M10 6l-6 6 6 6', 'M4 12h16'],
   papierkorb: ['M4 7h16', 'M9 7V4h6v3', 'M6 7l1 13h10l1-13', 'M10 11v6', 'M14 11v6'],
   zaehler: ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M12 12l4-4', 'M7.5 15.5h9'],
   rechnung: ['M7 3h7l4 4v14H7z', 'M14 3v4h4', 'M9.5 12h6', 'M9.5 16h6'],
@@ -515,6 +516,33 @@ async function navGeh(x) {
   window.scrollTo(0, 0);
 }
 
+// Zurück-Knopf: merkt sich die zuletzt besuchten Seiten (nur im Speicher, höchstens 30) und springt zur vorherigen.
+function verlaufFuehren() {
+  const ansicht = S.tab === 'admin' ? 'admin/' + S.adminTab : S.tab;
+  if (ansicht === S.verlaufAnsicht) return;
+  if (S.verlaufSeite && !S.zurueckGeh) {
+    S.verlauf = S.verlauf || [];
+    S.verlauf.push(S.verlaufSeite);
+    if (S.verlauf.length > 30) S.verlauf.shift();
+  }
+  S.zurueckGeh = false;
+  S.verlaufAnsicht = ansicht;
+  S.verlaufSeite = { tab: S.tab, admin: S.tab === 'admin' ? S.adminTab : null };
+}
+
+async function seiteZurueck() {
+  const z = S.verlauf && S.verlauf.pop();
+  if (!z) return;
+  S.zurueckGeh = true;
+  if (z.admin) adminTabWaehlen(z.admin); else S.tab = z.tab;
+  if (z.tab === 'uebersicht') { S.dashWarteliste = null; S.aufgaben = null; S.vj = null; }
+  if ((S.tab === 'admin' || S.tab === 'uebersicht' || S.tab === 'termine') && S.year !== S.state.currentYear) S.year = S.state.currentYear;
+  S.menueOffen = false;
+  await reload();
+  S.zurueckGeh = false;
+  window.scrollTo(0, 0);
+}
+
 // Reiterleiste unter der Überschrift einer gebündelten Seite (nur, wenn mehr als ein Reiter sichtbar ist).
 function reiterKopf() {
   const e = navEintrag(S.tab, S.adminTab);
@@ -573,11 +601,15 @@ function render() {
     if (!st.tutorialGesehen) setTimeout(geschichteZeigen, 60);
   }
 
+  verlaufFuehren();
   app.append(
     h('a', { class: 'sprunglink', href: '#inhalt', onclick: (e) => { e.preventDefault(); document.getElementById('inhalt')?.focus(); } }, 'Zum Inhalt springen'),
     h('header', { class: 'top' },
       h('button', { class: 'menue-knopf', title: 'Menü', 'aria-label': 'Menü', onclick: () => { S.menueOffen = !S.menueOffen; render(); } }, icon('menue', 20)),
-      h('div', { class: 'brand' }, st.settings.logo ? h('span', { class: 'logo bild' }, h('img', { src: `/api/logo?v=${encodeURIComponent(st.settings.logo)}`, alt: '' })) : h('span', { class: 'logo' }, icon('blatt', 20)), h('div', null, h('b', null, 'Kleingarten-Manager'), h('span', { title: st.settings.vereinName }, st.settings.vereinName))),
+      S.verlauf && S.verlauf.length ? h('button', { class: 'zurueck-knopf', title: 'Zurück zur vorherigen Seite', 'aria-label': 'Zurück zur vorherigen Seite', onclick: seiteZurueck }, icon('zurueck', 18), h('span', null, 'Zurück')) : null,
+      h('div', { class: 'brand klick', role: 'link', tabindex: '0', title: 'Zur Übersicht', onclick: () => navGeh({ tab: 'uebersicht' }),
+        onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navGeh({ tab: 'uebersicht' }); } } },
+      st.settings.logo ? h('span', { class: 'logo bild' }, h('img', { src: `/api/logo?v=${encodeURIComponent(st.settings.logo)}`, alt: '' })) : h('span', { class: 'logo' }, icon('blatt', 20)), h('div', null, h('b', null, 'Kleingarten-Manager'), h('span', { title: st.settings.vereinName }, st.settings.vereinName))),
       h('div', { class: 'spacer' }),
       globalSearchBox(st),
       h('div', null, h('label', null, 'Jahr'), yearSel),

@@ -204,6 +204,8 @@ function seiteWiederherstellen() {
 // »Was hat sich geändert?«: einmal nach einem Update. Die letzte gesehene Version merkt sich der Browser.
 const NEUERUNGEN = [
   { version: '1.6', punkte: [
+    'Oben links gibt es einen Zurück-Knopf zur vorherigen Seite; ein Klick auf den Vereinsnamen führt zur Übersicht.',
+    'Wurde die Einrichtung einmal gespeichert, verschwindet der Knopf »Programm einrichten« von der Übersicht (in den Einstellungen bleibt der Assistent).',
     'Ratenplan, Gutschrift und Zahlung stehen in einem gemeinsamen Dialog.',
     'Mahn-Vorschlag auf der Seite »Zahlungen«: zeigt, wer jetzt eine Erinnerung oder Mahnung bekommen sollte.',
     'Pflegeplan für Gemeinschaftsflächen unter »Anlage«: Hecke, Wege, Spielplatz – mit Erinnerung im Cockpit.',

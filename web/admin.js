@@ -557,6 +557,8 @@ async function einrichtungsAssistent() {
         await api('PUT', '/api/admin/sepa/einstellungen', { ...d.einstellungen, aktiv: sepaCb.checked });
       }
     } catch (e) { handleErr(e); return false; }
+    // merken: die Übersicht bietet die Einrichtung danach nicht mehr an
+    try { await api('POST', '/api/admin/einrichtung-fertig'); st.einrichtungFertig = true; } catch (e) { /* nicht schlimm: der Knopf bleibt dann nur stehen */ }
     toast('Einrichtung gespeichert', 'ok');
     return true;
   };

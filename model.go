@@ -208,6 +208,9 @@ type Data struct {
 	// TutorialGesehen: der Einführungsrundgang wurde durchlaufen oder übersprungen
 	// und erscheint nicht mehr automatisch (über die Hilfe jederzeit abrufbar).
 	TutorialGesehen bool `json:"tutorialGesehen,omitempty"`
+	// EinrichtungFertig: der Einrichtungs-Assistent wurde einmal bis zum Speichern durchlaufen;
+	// danach bietet die Übersicht ihn nicht mehr an (in den Einstellungen bleibt er erreichbar).
+	EinrichtungFertig bool `json:"einrichtungFertig,omitempty"`
 	// Demo: der Datenbestand besteht aus Beispieldaten (erfundener Verein zum Ausprobieren).
 	Demo bool `json:"demo,omitempty"`
 	// Lageplan: Position jedes Gartens (Schlüssel Gartennummer) auf der Karte im Lageplan, in Bildpunkten.

@@ -94,7 +94,7 @@ function tourEnd() {
     api('POST', '/api/tutorial').catch(() => { /* beim nächsten Start erneut anbieten */ });
   }
   render();
-  if (ersterStart && S.state.leer) setTimeout(einrichtungsAssistent, 150);
+  if (ersterStart && S.state.leer && !S.state.einrichtungFertig) setTimeout(einrichtungsAssistent, 150);
 }
 
 function tourCard() {
@@ -390,7 +390,7 @@ async function probierDialog() {
 }
 
 function beispieldatenKarte(st, istAdmin) {
-  if (!st.leer || !istAdmin) return null;
+  if (!st.leer || !istAdmin || st.einrichtungFertig) return null; // nach der Einrichtung verschwindet die Karte
   return h('div', { class: 'card', style: 'margin-bottom:14px' },
     h('h3', { style: 'margin-top:0' }, 'Wie möchtest du anfangen?'),
     h('p', { class: 'hint' }, 'Der Einrichtungs-Assistent fragt in vier kurzen Schritten Verein, Preise und die gebrauchten Bereiche ab und hilft beim Eintragen der Pächter. Oder lade erst einen erfundenen Verein mit 12 Pächtern zum Ausprobieren – die Beispieldaten lassen sich danach mit einem Klick wieder entfernen.'),
